@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm turbo run build",
-  "outputDirectory": "apps/web/.next",
+  "buildCommand": "pnpm --filter @doloyal/landing run build",
+  "outputDirectory": "apps/landing/.next",
   "ignoreCommand": "exit 0"
 }
