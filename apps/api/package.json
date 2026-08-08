@@ -4,7 +4,7 @@
   "private": true,
   "description": "Doloyal — NestJS REST API",
   "scripts": {
-    "build": "tsc -b",
+    "build": "if [ \"$VERCEL\" = \"1\" ]; then echo 'Skipping API build on Vercel'; else tsc -b; fi",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
