@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "rootDirectory": "apps/landing",
   "installCommand": "pnpm --filter @doloyal/landing... install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @doloyal/landing run build",
-  "outputDirectory": "apps/landing/.next",
-  "ignoreCommand": "exit 0"
+  "buildCommand": "pnpm run build",
+  "outputDirectory": ".next"
 }
