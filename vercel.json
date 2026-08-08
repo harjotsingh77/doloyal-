@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "PRISMA_SKIP_POSTINSTALL_GENERATE=true pnpm install --no-frozen-lockfile",
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm turbo run build",
   "outputDirectory": "apps/web/.next",
   "ignoreCommand": "exit 0"
