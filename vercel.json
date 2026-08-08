@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npx turbo run build --filter=@doloyal/web...",
+  "outputDirectory": "apps/web/.next",
+  "installCommand": "pnpm install --no-frozen-lockfile"
+}
