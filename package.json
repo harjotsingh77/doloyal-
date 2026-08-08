@@ -11,7 +11,7 @@
     "schema": "apps/api/prisma/schema.prisma"
   },
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build --filter=@doloyal/landing...",
     "dev": "bash scripts/dev.sh",
     "dev:clean": "DOLOYAL_CLEAN=1 bash scripts/dev.sh",
     "lint": "turbo run lint",
