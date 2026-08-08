@@ -1,0 +1,167 @@
+/*
+ * Doloyal UI — brand stylesheet.
+ *
+ * Consuming apps import this once (e.g. in their root layout) via:
+ *   import "@doloyal/ui/styles.css";
+ *
+ * It defines:
+ *   - Tailwind theme mapping (@theme) so `bg-primary`, `text-accent`, etc. work
+ *   - CSS variables for light & dark mode
+ *   - Base typography, scrollbar, selection, focus-ring styles
+ *   - Keyframe animations reused across the app
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    /* Brand */
+    --color-primary: 23 97 253; /* #1761FD */
+    --color-primary-foreground: 255 255 255;
+    --color-accent: 59 130 246; /* #3B82F6 */
+    --color-accent-strong: 14 75 216; /* #0E4BD8 */
+    --color-brand-2: 23 97 253;
+    --color-brand-3: 59 130 246;
+    --color-success: 16 185 129; /* #10B981 */
+    --color-danger: 239 68 68; /* #EF4444 */
+    --color-warning: 245 158 11; /* #F59E0B */
+
+    /* Neutrals */
+    --color-background: 250 250 252; /* #FAFAFC */
+    --color-surface: 255 255 255;
+    --color-surface-2: 250 250 252;
+    --color-border: 229 228 236; /* ~ rgba(0,0,0,.06) */
+    --color-muted: 245 244 247; /* soft purple-grey */
+    --color-foreground: 17 17 17; /* #111111 */
+    --color-muted-foreground: 102 102 102; /* #666666 */
+    --color-subtle: 160 160 168;
+
+    /* Tokens */
+    --radius: 1rem;
+    --radius-sm: 0.625rem;
+    --radius-lg: 1.25rem;
+    --shadow-soft: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 28px -10px rgba(23, 97, 253, 0.1);
+    --shadow-lifted: 0 2px 4px rgba(17, 17, 17, 0.05), 0 22px 48px -16px rgba(23, 97, 253, 0.22);
+    --ring: 23 97 253;
+  }
+
+  .dark {
+    --color-background: 2 6 23; /* slate-950 */
+    --color-surface: 15 23 42; /* slate-900 */
+    --color-surface-2: 30 41 59; /* slate-800 */
+    --color-border: 51 65 85; /* slate-700 */
+    --color-muted: 30 41 59;
+    --color-foreground: 241 245 249;
+    --color-muted-foreground: 148 163 184;
+    --color-subtle: 100 116 139;
+    --color-primary: 59 130 246; /* blue-500, slightly brighter for dark */
+    --color-primary-foreground: 255 255 255;
+    --color-accent: 96 165 250;
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+    --shadow-lifted: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+    --ring: 59 130 246;
+  }
+
+  * {
+    border-color: rgb(var(--color-border));
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: rgb(var(--color-background));
+    color: rgb(var(--color-foreground));
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 32;
+  }
+
+  ::selection {
+    background-color: rgb(var(--color-primary) / 0.2);
+  }
+
+  /* Slim, premium scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-border)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--color-border));
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Accessible focus ring */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--color-background)), 0 0 0 4px rgb(var(--ring) / 0.6);
+    border-radius: calc(var(--radius-sm) + 2px);
+  }
+
+.glass {
+    background-color: rgb(var(--color-surface) / 0.7);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+  }
+  .glass-dark {
+    background-color: rgb(15 23 42 / 0.55);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+  }
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+  .shadow-lifted {
+    box-shadow: var(--shadow-lifted);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgb(var(--color-border) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--color-border) / 0.5) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .bg-dots {
+    background-image: radial-gradient(rgb(var(--color-border)) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+
+/* Animations ---------------------------------------------------------------- */
+@keyframes lf-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes lf-scale-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes lf-shimmer {
+  100% { transform: translateX(100%); }
+}
+@keyframes lf-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes lf-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.lf-fade-in { animation: lf-fade-in 0.4s ease both; }
+.lf-scale-in { animation: lf-scale-in 0.25s ease both; }
+.lf-pulse-soft { animation: lf-pulse-soft 2s ease-in-out infinite; }
+.lf-gradient {
+  background-size: 200% 200%;
+  animation: lf-gradient 6s ease infinite;
+}

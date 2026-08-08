@@ -1,0 +1,2028 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  RECEPTIONIST
+  STAFF
+  CUSTOMER
+}
+
+enum StaffStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum CustomerStatus {
+  ACTIVE
+  AT_RISK
+  CHURNED
+  INACTIVE
+}
+
+enum AppointmentStatus {
+  BOOKED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  REFUNDED
+  VOID
+}
+
+enum LoyaltyMode {
+  POINTS_PER_SPEND
+  VISIT_BASED
+  TIERED
+  HYBRID
+  SUBSCRIPTION
+}
+
+enum ChallengeStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum AutomationStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  REWARDED
+  EXPIRED
+}
+
+enum ReferralCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  EXPIRED
+}
+
+enum ReferralLifecycleStatus {
+  PENDING
+  VISITED
+  SIGNED_UP
+  BOOKED
+  CONVERTED
+  REJECTED
+  REWARD_SENT
+  EXPIRED
+}
+
+enum RewardStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  SCHEDULED
+}
+
+enum RedemptionStatus {
+  PENDING
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  FAILED
+}
+
+enum ActivityType {
+  CUSTOMER_CREATED
+  APPOINTMENT_BOOKED
+  INVOICE_PAID
+  POINTS_EARNED
+  POINTS_REDEEMED
+  TIER_UPGRADED
+  CAMPAIGN_SENT
+  NOTE_ADDED
+}
+
+model User {
+  id                String   @id @default(uuid())
+  clerkId           String?  @unique
+  email             String   @unique
+  firstName         String
+  lastName          String
+  phone             String?
+  avatarUrl         String?
+  password          String?  // hashed password for email/password auth
+  googleId          String?  @unique // Google OAuth subject ID
+  twoFactorEnabled  Boolean  @default(false)
+  tokenVersion      Int      @default(0)
+  sessions          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  memberships Membership[]
+  integrations Integration[]
+
+  staffProfiles     StaffProfile[]
+  invitationsSent   Invitation[]       @relation("InvitedBy")
+  staffActivities   StaffActivityLog[] @relation("StaffActivityActor")
+  authAuditLogs     AuditLog[]         @relation("AuditActor")
+  loginHistory      LoginHistory[]
+  notesWritten      EmployeeNote[]     @relation("NoteAuthor")
+  profileImages     ProfileImage[]
+}
+
+model Tenant {
+  id                 String   @id @default(uuid())
+  name               String
+  slug               String   @unique
+  category           String
+  phone              String?
+  email              String?
+  website            String?
+  logoUrl            String?
+  coverBannerUrl     String?
+  faviconUrl         String?
+  tagline            String?
+  description        String?
+  address            String?
+  city               String?
+  state              String?
+  zip                String?
+  country            String   @default("US")
+  currency           String   @default("USD")
+  timezone           String   @default("UTC")
+  language           String   @default("en")
+  dateFormat         String   @default("DD/MM/YYYY")
+  timeFormat         String   @default("12h")
+  businessHours      Json?
+  taxRate            Float    @default(0.0)
+  brandColor         String?  @default("#2563EB")
+  secondaryColor     String?  @default("#64748B")
+  accentColor        String?  @default("#F59E0B")
+  fontFamily         String?  @default("Inter")
+  gst                String?
+  registrationNumber String?
+  whatsapp           String?
+  mapsUrl            String?
+  socialLinks        Json?
+  legalPolicies      Json?
+  businessStatus     Json?
+  notificationPrefs  Json?
+  /// Whether the owner has completed the onboarding flow. Drives the
+  /// "skip onboarding and go straight to dashboard" client behavior.
+  onboardingComplete Boolean  @default(false)
+  maxDailyBookings   Int      @default(50)
+  minBookingNotice   Int      @default(60)
+  maxAdvanceBookingDays Int   @default(30)
+  bufferTime         Int      @default(15)
+  holidays           Json?
+  blockedDates       Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  memberships           Membership[]
+  branches              Branch[]
+  staff                 Staff[]
+  staffProfiles         StaffProfile[]
+  invitations           Invitation[]
+  staffActivityLogs     StaffActivityLog[]
+  staffAuditLogs        AuditLog[]
+  staffLoginHistory     LoginHistory[]
+  employeeNotes         EmployeeNote[]
+  customers             Customer[]
+  services              Service[]
+  appointments          Appointment[]
+  invoices              Invoice[]
+  loyaltyConfig         LoyaltyConfig?
+  pointsLedger          PointsLedger[]
+  rewards               Reward[]
+  redemptions           RewardRedemption[]
+  rewardPrograms        RewardProgramConfig[]
+  cashbackTransactions  CashbackTransaction[]
+  rewardClaims          RewardEngagementClaim[]
+  tiers                 MembershipTier[]
+  campaigns             Campaign[]
+  activities            Activity[]
+  loyaltyChallenges     LoyaltyChallenge[]
+  loyaltyBadges         LoyaltyBadge[]
+  loyaltyAutomations    LoyaltyAutomation[]
+  loyaltyReferrals      LoyaltyReferral[]
+  referralCampaigns     ReferralCampaign[]
+  referralLinks         ReferralLink[]
+  referralVisits        ReferralVisit[]
+  referralShares        ReferralShare[]
+  referralConversions   ReferralConversion[]
+  referralRewards       ReferralRewardRecord[]
+  referralEvents        ReferralEvent[]
+  referralRegistrations ReferralRegistration[]
+  referralSources       ReferralSource[]
+  referralLeaderboard   ReferralLeaderboard[]
+  surpriseRewards       SurpriseRewardRule[]
+  loyaltyConfigVersions LoyaltyConfigVersion[]
+  featureFlags          FeatureFlag[]
+  loyaltyFeatureEntities LoyaltyFeatureEntity[]
+  loyaltyAuditLogs      LoyaltyAuditLog[]
+  subscriptions         Subscription[]
+  bookingLinks          BookingLink[]
+  notifications         Notification[]
+  notificationTemplates NotificationTemplate[]
+  blockedDateEntries    BlockedDate[]
+  calendarEvents        CalendarEvent[]
+  widgetSettings        WidgetSettings?
+  availabilityConfig    AvailabilityConfig?
+  websites              Website[]
+  integrations          Integration[]
+  connectedWebsites     ConnectedWebsite[]
+  websiteApiKeys        WebsiteApiKey[]
+  websiteWebhooks       WebsiteWebhook[]
+  connectionLogs        ConnectionLog[]
+  sdkInstallations      SdkInstallation[]
+  aiConversations       AiConversation[]
+  aiUsage               AiUsage[]
+}
+
+model Membership {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  role      Role     @default(STAFF)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+}
+
+// ─── Team Management ────────────────────────────────────────────────────────
+
+/// Extended per-member profile for the Team Management module. One row per
+/// (user, tenant); mirrors Membership.role for fast, denormalized queries.
+model StaffProfile {
+  id                   String      @id @default(uuid())
+  userId               String
+  tenantId             String
+  role                 Role        @default(STAFF)
+  status               StaffStatus @default(PENDING)
+  department           String?
+  jobTitle             String?
+  notes                String?
+  /// string[] of granted permission keys (overrides role defaults).
+  permissions          Json?
+  requirePasswordReset Boolean     @default(false)
+  twoFactorRequired    Boolean     @default(false)
+  isOnline             Boolean     @default(false)
+  lastSeenAt           DateTime?
+  lastLoginAt          DateTime?
+  lastLogoutAt         DateTime?
+  lastLoginIp          String?
+  lastLoginDevice      String?
+  lastLoginBrowser     String?
+  lastLoginOs          String?
+  lastLoginLocation    String?
+  dateJoined           DateTime    @default(now())
+  createdBy            String?
+  updatedAt            DateTime    @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branches StaffBranch[]
+  employeeNotes EmployeeNote[]
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, role, status])
+  @@index([tenantId, isOnline])
+}
+
+/// Join table allowing a member to belong to one or many branches.
+model StaffBranch {
+  id             String   @id @default(uuid())
+  staffProfileId String
+  branchId       String
+  primary        Boolean  @default(false)
+  assignedAt     DateTime @default(now())
+
+  staff  StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  branch Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([staffProfileId, branchId])
+  @@index([branchId])
+}
+
+/// Member invitations with a secure token, expiry and full lifecycle tracking.
+model Invitation {
+  id            String           @id @default(uuid())
+  tenantId      String
+  email         String
+  firstName     String?
+  lastName      String?
+  phone         String?
+  role          Role             @default(STAFF)
+  branchIds     String[]         @default([])
+  department    String?
+  jobTitle      String?
+  permissions   Json?
+  notes         String?
+  status        InvitationStatus @default(PENDING)
+  token         String           @unique
+  invitationUrl String?
+  expiresAt     DateTime
+  sentAt        DateTime?
+  acceptedAt    DateTime?
+  resendCount   Int              @default(0)
+  invitedById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy User?  @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, email])
+}
+
+/// Activity timeline for staff management actions (who did what).
+model StaffActivityLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  actorId    String?
+  actorName  String?
+  targetId   String?
+  targetName String?
+  action     String
+  category   String?
+  message    String
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("StaffActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, actorId])
+  @@index([tenantId, targetId])
+}
+
+/// Immutable audit trail. Admins cannot modify these rows (no update endpoints).
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  actorId    String?
+  actorName  String?
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  reason     String?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+}
+
+/// Every login attempt (successful and failed) per user.
+model LoginHistory {
+  id         String   @id @default(uuid())
+  userId     String
+  tenantId   String?
+  successful Boolean  @default(true)
+  device     String?
+  browser    String?
+  os         String?
+  ip         String?
+  location   String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+/// Private notes visible only to admins (performance, warnings, promotions).
+model EmployeeNote {
+  id             String   @id @default(uuid())
+  tenantId       String
+  staffProfileId String
+  authorId       String?
+  authorName     String?
+  body           String
+  category       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff  StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  author User?        @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([staffProfileId])
+}
+
+/// Profile photo history for members.
+model ProfileImage {
+  id        String   @id @default(uuid())
+  userId    String
+  url       String
+  provider  String   @default("internal")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  phone     String?
+  address   String?
+  city      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff  Staff[]
+  staffAssignments StaffBranch[]
+}
+
+model Staff {
+  id          String   @id @default(uuid())
+  tenantId    String
+  branchId    String?
+  name        String
+  email       String?
+  phone       String?
+  roleTitle   String   @default("Specialist")
+  avatarUrl   String?
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch           Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  appointments     Appointment[]
+  blockedDateEntries BlockedDate[]
+  bookingLinks     BookingLink[]
+}
+
+model Customer {
+  id             String         @id @default(uuid())
+  tenantId       String
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String
+  dob            DateTime?
+  avatarUrl      String?
+  status         CustomerStatus @default(ACTIVE)
+  notes          String?
+  tags           String[]       @default([])
+  pointsBalance  Int            @default(0)
+  totalSpent     Float          @default(0.0)
+  totalVisits    Int            @default(0)
+  churnRiskScore Float          @default(0.0)
+  visitStreak    Int            @default(0)
+  longestStreak  Int            @default(0)
+  referralCode   String?
+  cashbackBalance Float         @default(0.0)
+  lastVisitAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  invoices     Invoice[]
+  pointsLedger PointsLedger[]
+  notifications Notification[]
+  redemptions  RewardRedemption[]
+  memberships  CustomerMembership[]
+  activities   Activity[]
+  challengeProgress ChallengeParticipant[]
+  badges       CustomerBadge[]
+  referralsMade    LoyaltyReferral[] @relation("Referrer")
+  referralReceived LoyaltyReferral?  @relation("Referred")
+  referralLinks    ReferralLink[]
+  referralsAsReferrer ReferralConversion[] @relation("ConversionReferrer")
+  referralsAsFriend   ReferralConversion[] @relation("ConversionFriend")
+  referralRewards  ReferralRewardRecord[]
+  registrationsAsReferrer ReferralRegistration[] @relation("RegistrationReferrer")
+  registrationsAsFriend   ReferralRegistration[] @relation("RegistrationFriend")
+  referralLeaderboardRows ReferralLeaderboard[]
+  cashbackTxns CashbackTransaction[]
+  rewardClaims RewardEngagementClaim[]
+
+  @@unique([tenantId, referralCode])
+  @@index([tenantId, phone])
+  @@index([tenantId, email])
+  @@index([tenantId, dob])
+}
+
+model Service {
+  id               String   @id @default(uuid())
+  tenantId         String
+  name             String
+  description      String?
+  durationMinutes  Int      @default(30)
+  price            Float
+  category         String   @default("General")
+  pointsMultiplier Float    @default(1.0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceItems InvoiceItem[]
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  tenantId        String
+  customerId      String
+  staffId         String?
+  serviceName     String
+  startTime       DateTime
+  endTime         DateTime
+  status          AppointmentStatus @default(BOOKED)
+  notes           String?
+  source          String            @default("DASHBOARD")
+  paymentStatus   String            @default("PENDING")
+  paymentAmount   Float?
+  bookingLinkId   String?
+  cancelledAt     DateTime?
+  rescheduledFrom String?
+  serviceId       String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  staff          Staff?           @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  bookingLink    BookingLink?     @relation(fields: [bookingLinkId], references: [id], onDelete: SetNull)
+  notifications  Notification[]
+  calendarEvents CalendarEvent[]
+
+  @@index([bookingLinkId])
+  @@index([tenantId, startTime])
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  tenantId      String
+  customerId    String
+  invoiceNumber String
+  subtotal      Float
+  discount      Float         @default(0.0)
+  tax           Float         @default(0.0)
+  total         Float
+  status        InvoiceStatus @default(PAID)
+  paymentMethod String        @default("CARD")
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  serviceId   String?
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Float
+  total       Float
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+}
+
+model LoyaltyConfig {
+  id             String      @id @default(uuid())
+  tenantId       String      @unique
+  mode           LoyaltyMode @default(POINTS_PER_SPEND)
+  pointsPerUnit  Int         @default(1)
+  currencyUnit   Float       @default(1.0)
+  expiryDays     Int         @default(365)
+  pointsPerVisit Int         @default(10)
+  signupBonus    Int         @default(50)
+  referralBonus  Int         @default(100)
+  /// Extended bonuses, toggles, redemption limits, etc.
+  settings       Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model PointsLedger {
+  id           String    @id @default(uuid())
+  tenantId     String
+  customerId   String
+  amount       Int
+  balanceAfter Int
+  reason       String
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model Reward {
+  id                  String       @id @default(uuid())
+  tenantId            String
+  name                String
+  description         String?
+  pointsCost          Int          @default(0)
+  discountVal         Float        @default(0.0)
+  rewardValue         Float        @default(0.0)
+  status              RewardStatus @default(DRAFT)
+  imageUrl            String?
+  /// STANDARD | BIRTHDAY | ANNIVERSARY | REVIEW | SOCIAL | WHATSAPP | CASHBACK
+  category            String       @default("STANDARD")
+  /// POINTS | COUPON | FREE_SERVICE | GIFT | GIFT_CARD | CASHBACK | CUSTOM | VIP
+  rewardType          String       @default("CUSTOM")
+  quantity            Int?         // null = unlimited
+  redeemedCount       Int          @default(0)
+  validityDays        Int          @default(90)
+  startsAt            DateTime?
+  expiresAt           DateTime?
+  branchIds           String[]     @default([])
+  tierRequired        String?
+  membershipRequired  String?
+  terms               String?
+  metadata            Json?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  redemptions RewardRedemption[]
+
+  @@index([tenantId, category, status])
+  @@index([tenantId, status])
+}
+
+model RewardRedemption {
+  id             String           @id @default(uuid())
+  tenantId       String
+  customerId     String
+  rewardId       String
+  code           String           @unique
+  status         RedemptionStatus @default(PENDING)
+  pointsUsed     Int              @default(0)
+  cashbackAmount Float            @default(0)
+  branchId       String?
+  branchName     String?
+  redeemedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  reward   Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+}
+
+/// Automated reward program settings (birthday, anniversary, review, social, whatsapp, cashback).
+model RewardProgramConfig {
+  id          String   @id @default(uuid())
+  tenantId    String
+  programType String
+  enabled     Boolean  @default(false)
+  config      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, programType])
+  @@index([tenantId, enabled])
+}
+
+model CashbackTransaction {
+  id          String   @id @default(uuid())
+  tenantId    String
+  customerId  String
+  pointsUsed  Int
+  cashbackAmount Float
+  balanceAfter Float
+  status      String   @default("COMPLETED")
+  note        String?
+  createdAt   DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, customerId])
+}
+
+model RewardEngagementClaim {
+  id           String   @id @default(uuid())
+  tenantId     String
+  customerId   String
+  programType  String   // REVIEW | SOCIAL | WHATSAPP
+  status       String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  evidence     Json?
+  rewardPoints Int      @default(0)
+  rewardId     String?
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, programType, status])
+  @@index([tenantId, customerId])
+}
+
+model MembershipTier {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  name               String
+  price              Float    @default(0.0)
+  validityDays       Int      @default(365)
+  discountPercent    Float    @default(0.0)
+  bonusPointsPercent Float    @default(0.0)
+  pointsMultiplier   Float    @default(1.0)
+  minPoints          Int      @default(0)
+  rank               Int      @default(0)
+  priorityBooking    Boolean  @default(false)
+  exclusiveRewards   String[] @default([])
+  benefits           String[] @default([])
+  badgeLabel         String?
+  color              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships CustomerMembership[]
+}
+
+model CustomerMembership {
+  id         String   @id @default(uuid())
+  customerId String
+  tierId     String
+  assignedAt DateTime @default(now())
+
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tier     MembershipTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, tierId])
+}
+
+model Campaign {
+  id         String         @id @default(uuid())
+  tenantId   String
+  name       String
+  subject    String
+  body       String
+  channel    String         @default("EMAIL")
+  status     CampaignStatus @default(DRAFT)
+  recipients Int            @default(0)
+  sentAt     DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Activity {
+  id         String       @id @default(uuid())
+  tenantId   String
+  customerId String?
+  type       ActivityType
+  message    String
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+}
+
+model LoyaltyChallenge {
+  id            String          @id @default(uuid())
+  tenantId      String
+  title         String
+  description   String?
+  type          String          @default("VISITS") // VISITS, SPEND, REFERRALS, PROFILE, REVIEW, CUSTOM
+  targetValue   Int             @default(1)
+  rewardPoints  Int             @default(100)
+  rewardLabel   String?
+  startsAt      DateTime        @default(now())
+  endsAt        DateTime?
+  status        ChallengeStatus @default(ACTIVE)
+  aiGenerated   Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  participants ChallengeParticipant[]
+
+  @@index([tenantId, status])
+}
+
+model ChallengeParticipant {
+  id          String    @id @default(uuid())
+  challengeId String
+  customerId  String
+  progress    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  challenge LoyaltyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  customer  Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, customerId])
+}
+
+model LoyaltyBadge {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  icon        String   @default("award")
+  color       String   @default("#2563EB")
+  criteria    Json?
+  aiSuggested Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unlocks CustomerBadge[]
+
+  @@index([tenantId])
+}
+
+model CustomerBadge {
+  id         String   @id @default(uuid())
+  badgeId    String
+  customerId String
+  unlockedAt DateTime @default(now())
+
+  badge    LoyaltyBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([badgeId, customerId])
+}
+
+model LoyaltyAutomation {
+  id         String           @id @default(uuid())
+  tenantId   String
+  name       String
+  trigger    String
+  conditions Json?
+  actions    Json
+  status     AutomationStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+}
+
+model LoyaltyReferral {
+  id           String         @id @default(uuid())
+  tenantId     String
+  referrerId   String
+  referredId   String?        @unique
+  code         String
+  status       ReferralStatus @default(PENDING)
+  rewardPoints Int            @default(0)
+  createdAt    DateTime       @default(now())
+  completedAt  DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  referrer Customer  @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred Customer? @relation("Referred", fields: [referredId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, code])
+}
+
+model ReferralCampaign {
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  name                 String
+  description          String?
+  campaignType         String                 @default("STANDARD")
+  rewardType           String                 @default("POINTS") // POINTS, CASHBACK, FLAT_DISCOUNT, PERCENT_DISCOUNT, COUPON, GIFT, FREE_SERVICE, MEMBERSHIP_UPGRADE
+  rewardValue          Float                  @default(100)
+  friendRewardType     String                 @default("POINTS")
+  friendRewardValue    Float                  @default(50)
+  minPurchase          Float                  @default(0)
+  minAppointmentValue  Float                  @default(0)
+  maxRewardLimit       Float?
+  startsAt             DateTime?
+  endsAt               DateTime?
+  status               ReferralCampaignStatus @default(DRAFT)
+  usageLimit           Int?
+  usageCount           Int                    @default(0)
+  referralExpiryDays   Int                    @default(30)
+  terms                String?
+  clickCount           Int                    @default(0)
+  shareCount           Int                    @default(0)
+  visitCount           Int                    @default(0)
+  conversionCount      Int                    @default(0)
+  revenueTotal         Float                  @default(0)
+  rewardsGiven         Int                    @default(0)
+  createdBy            String?
+  deletedAt            DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  links        ReferralLink[]
+  visits       ReferralVisit[]
+  conversions  ReferralConversion[]
+  events       ReferralEvent[]
+  registrations ReferralRegistration[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, deletedAt])
+}
+
+model ReferralLink {
+  id              String    @id @default(uuid())
+  tenantId        String
+  customerId      String?
+  campaignId      String?
+  name            String?
+  code            String    @unique
+  customSlug      String?   @unique
+  secureToken     String?
+  referralUrl     String?
+  shortUrl        String?
+  qrCode          String?
+  clickCount      Int       @default(0)
+  uniqueVisitors  Int       @default(0)
+  shareCount      Int       @default(0)
+  conversionCount Int       @default(0)
+  revenue         Float     @default(0)
+  status          String    @default("ACTIVE")
+  expiresAt       DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  campaign      ReferralCampaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  visits        ReferralVisit[]
+  shares        ReferralShare[]
+  conversions   ReferralConversion[]
+  events        ReferralEvent[]
+  sources       ReferralSource[]
+  registrations ReferralRegistration[]
+
+  @@index([tenantId, code])
+  @@index([tenantId, customerId])
+  @@index([tenantId, customSlug])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, status])
+}
+
+model ReferralVisit {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  linkId             String
+  campaignId         String?
+  referrerCustomerId String?
+  sessionId          String
+  ip                 String?
+  fingerprint        String?
+  browser            String?
+  os                 String?
+  deviceType         String?
+  country            String?
+  state              String?
+  city               String?
+  timezone           String?
+  language           String?
+  userAgent          String?
+  referrerUrl        String?
+  source             String   @default("direct")
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  utmContent         String?
+  landingPage        String?
+  isUnique           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  link     ReferralLink      @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  campaign ReferralCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, source])
+  @@index([linkId, fingerprint])
+  @@index([linkId, sessionId])
+}
+
+model ReferralShare {
+  id        String   @id @default(uuid())
+  tenantId  String
+  linkId    String
+  channel   String
+  createdAt DateTime @default(now())
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  link   ReferralLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, channel])
+  @@index([linkId])
+}
+
+model ReferralRegistration {
+  id            String   @id @default(uuid())
+  tenantId      String
+  campaignId    String?
+  linkId        String?
+  referrerId    String?
+  newCustomerId String
+  registeredAt  DateTime @default(now())
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign    ReferralCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  link        ReferralLink?     @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  referrer    Customer?         @relation("RegistrationReferrer", fields: [referrerId], references: [id], onDelete: SetNull)
+  newCustomer Customer          @relation("RegistrationFriend", fields: [newCustomerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, registeredAt])
+  @@index([linkId])
+  @@index([newCustomerId])
+}
+
+model ReferralConversion {
+  id                String                  @id @default(uuid())
+  tenantId          String
+  campaignId        String?
+  linkId            String?
+  referrerId        String?
+  friendId          String?
+  friendEmail       String?
+  friendPhone       String?
+  status            ReferralLifecycleStatus @default(PENDING)
+  source            String?
+  conversionType    String?
+  bookingValue      Float                   @default(0)
+  orderValue        Float                   @default(0)
+  appointmentId     String?
+  invoiceId         String?
+  rewardType        String?
+  rewardValue       Float                   @default(0)
+  friendRewardType  String?
+  friendRewardValue Float                   @default(0)
+  rewardStatus      String                  @default("PENDING")
+  rejectReason      String?
+  fraudFlags        Json?
+  suspicious        Boolean                 @default(false)
+  visitedAt         DateTime?
+  signedUpAt        DateTime?
+  bookedAt          DateTime?
+  convertedAt       DateTime?
+  rewardedAt        DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign ReferralCampaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  link     ReferralLink?          @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  referrer Customer?              @relation("ConversionReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  friend   Customer?              @relation("ConversionFriend", fields: [friendId], references: [id], onDelete: SetNull)
+  rewards  ReferralRewardRecord[]
+  events   ReferralEvent[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([referrerId])
+  @@index([friendId])
+  @@index([tenantId, rewardStatus])
+}
+
+model ReferralRewardRecord {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  conversionId        String
+  customerId          String
+  role                String // REFERRER | FRIEND
+  rewardType          String
+  amount              Float
+  status              String    @default("CREDITED")
+  walletTransactionId String?
+  couponId            String?
+  membershipId        String?
+  metadata            Json?
+  creditedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversion ReferralConversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  customer   Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([conversionId])
+}
+
+model ReferralEvent {
+  id           String   @id @default(uuid())
+  tenantId     String
+  campaignId   String?
+  linkId       String?
+  conversionId String?
+  customerId   String?
+  type         String
+  metadata     Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign   ReferralCampaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  link       ReferralLink?       @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  conversion ReferralConversion? @relation(fields: [conversionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, type])
+}
+
+model ReferralSource {
+  id            String   @id @default(uuid())
+  tenantId      String
+  linkId        String?
+  source        String
+  clicks        Int      @default(0)
+  registrations Int      @default(0)
+  conversions   Int      @default(0)
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  link   ReferralLink? @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, linkId, source])
+  @@index([tenantId, source])
+}
+
+model ReferralLeaderboard {
+  id               String   @id @default(uuid())
+  tenantId         String
+  customerId       String
+  referrals        Int      @default(0)
+  conversions      Int      @default(0)
+  revenueGenerated Float    @default(0)
+  rewardEarned     Float    @default(0)
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, customerId])
+  @@index([tenantId, revenueGenerated])
+  @@index([tenantId, referrals])
+}
+
+model SurpriseRewardRule {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  type      String   // RANDOM_POINTS, MYSTERY_GIFT, COUPON, BIRTHDAY, FESTIVAL, RAINY_DAY, WEEKEND, ANNIVERSARY
+  config    Json?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model LoyaltyConfigVersion {
+  id        String   @id @default(uuid())
+  tenantId  String
+  snapshot  Json
+  note      String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+/// Per-tenant feature toggles for modular Loyalty capabilities.
+model FeatureFlag {
+  id         String   @id @default(uuid())
+  tenantId   String
+  featureKey String
+  enabled    Boolean  @default(false)
+  config     Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, featureKey])
+  @@index([tenantId, enabled])
+}
+
+/// Generic persisted records for modular Loyalty features (spin prizes, QR codes, holidays, etc.).
+model LoyaltyFeatureEntity {
+  id         String   @id @default(uuid())
+  tenantId   String
+  featureKey String
+  name       String?
+  status     String   @default("ACTIVE")
+  data       Json
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, featureKey, status])
+  @@index([tenantId, featureKey, sortOrder])
+}
+
+/// Immutable loyalty admin / system audit trail.
+model LoyaltyAuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  featureKey String?
+  actorId    String?
+  action     String
+  entityType String?
+  entityId   String?
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, featureKey])
+}
+
+model Subscription {
+  id             String   @id @default(uuid())
+  tenantId       String
+  plan           String   @default("free")
+  status         String   @default("ACTIVE") // ACTIVE, PAST_DUE, CANCELED, EXPIRED, TRIALING
+  stripeId       String?
+  stripePriceId  String?
+  stripeSubId    String?
+  trialEndsAt    DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  canceledAt     DateTime?
+  paymentMethod  String?
+  autoRenew      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model SyncLog {
+  id             String   @id @default(uuid())
+  integrationId  String
+  status         String   @default("PENDING") // PENDING, RUNNING, SUCCESS, FAILED
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  recordsProcessed Int?
+  errorMessage   String?
+  metadata       Json?
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+}
+
+model WebhookEvent {
+  id             String   @id @default(uuid())
+  integrationId  String
+  eventType      String
+  payload        Json
+  status         String   @default("PENDING") // PENDING, PROCESSED, FAILED
+  processedAt    DateTime?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+}
+
+
+model BookingLink {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  staffId             String?
+  slug                String    @unique
+  type                String    @default("PERSONAL")
+  name                String?
+  description         String?
+  isActive            Boolean   @default(true)
+  isPaused            Boolean   @default(false)
+  allowCustomTime     Boolean   @default(true)
+  assignmentMode      String    @default("SINGLE") // SINGLE | MULTI | AUTO | ROUND_ROBIN
+  staffIds            Json?     // string[] for multi-staff
+  serviceIds          Json?     // string[] — empty/null = all active services
+  customerFields      Json?     // field config: { name: {enabled, required}, ... }
+  rules               Json?     // booking rules (buffers, notice, max, approval, etc.)
+  payment             Json?     // payment mode, deposit, methods
+  loyalty             Json?     // earn/redeem/birthday/referral/coupons
+  membershipAccess    Json?     // EVERYONE | MEMBERS_ONLY | tier ids | STAFF_ONLY
+  authMode            Json?     // guest/login/signup/google/otp/email
+  branding            Json?     // theme, logo, cover, confirmation, redirect, webhook, qr
+  automations         Json?     // confirmation, reminder, follow-up, review, loyalty, invoice, notify
+  pageConfig          Json?     // sections order/enabled + hero/about/faq/gallery content
+  seo                 Json?     // keywords, ogImage, favicon, schema extras
+  domain              Json?     // subdomain, customDomain, status PENDING|ACTIVE|FAILED
+  confirmationMessage String?
+  redirectUrl         String?
+  webhookUrl          String?
+  theme               Json?
+  expiresAt           DateTime?
+  visitCount          Int       @default(0)
+  bookingCount        Int       @default(0)
+  revenueGenerated    Float     @default(0)
+  lastBookingAt       DateTime?
+  roundRobinIndex     Int       @default(0)
+  metaTitle           String?
+  metaDescription     String?
+  status              String    @default("PUBLISHED") // DRAFT | PUBLISHED
+  publishedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff        Staff?            @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  visits       BookingLinkVisit[]
+  appointments Appointment[]
+
+  @@index([tenantId])
+  @@index([slug])
+}
+
+model BookingLinkVisit {
+  id            String   @id @default(uuid())
+  bookingLinkId String
+  tenantId      String
+  source        String?  // instagram, facebook, google, website, whatsapp, qr, direct
+  referrer      String?
+  userAgent     String?
+  ipHash        String?
+  sessionId     String?
+  createdAt     DateTime @default(now())
+
+  bookingLink BookingLink @relation(fields: [bookingLinkId], references: [id], onDelete: Cascade)
+
+  @@index([bookingLinkId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model Notification {
+  id              String   @id @default(uuid())
+  tenantId        String
+  appointmentId   String?
+  customerId      String?
+  type            String   // BOOKING_CONFIRMATION, REMINDER_24H, REMINDER_2H, RESCHEDULED, CANCELLED, THANK_YOU, ADMIN_NEW_BOOKING, ADMIN_CANCELLED, ADMIN_RESCHEDULED, ADMIN_NO_SHOW
+  channel         String   @default("EMAIL") // EMAIL, WHATSAPP, SMS
+  recipient       String?
+  subject         String?
+  body            String?
+  status          String   @default("PENDING") // PENDING, SENT, FAILED
+  sentAt          DateTime?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([appointmentId])
+}
+
+model NotificationTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  type      String   // matches Notification.type
+  channel   String   @default("EMAIL")
+  subject   String?
+  body      String   // supports {{variables}}
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, type, channel])
+}
+
+model BlockedDate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  staffId   String?
+  date      DateTime // date only (start of day)
+  reason    String?
+  isFullDay Boolean  @default(true)
+  startTime DateTime?
+  endTime   DateTime?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff  Staff? @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, date])
+}
+
+model CalendarEvent {
+  id             String   @id @default(uuid())
+  tenantId       String
+  appointmentId  String?
+  externalId     String?  // Google/Outlook event ID
+  provider       String   @default("GOOGLE") // GOOGLE, OUTLOOK, APPLE
+  eventType      String   @default("APPOINTMENT")
+  title          String
+  startTime      DateTime
+  endTime        DateTime
+  description    String?
+  location       String?
+  status         String   @default("ACTIVE") // ACTIVE, CANCELLED
+  lastSyncedAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, provider])
+  @@index([appointmentId])
+}
+
+model WidgetSettings {
+  id           String  @id @default(uuid())
+  tenantId     String  @unique
+  primaryColor String  @default("#2563EB")
+  fontFamily   String  @default("Inter")
+  borderRadius String  @default("8px")
+  showStaff    Boolean @default(true)
+  showServices Boolean @default(true)
+  showDuration Boolean @default(true)
+  showPrice    Boolean @default(true)
+  customCss    String?
+  greeting     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model AvailabilityConfig {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  monday              Json?
+  tuesday             Json?
+  wednesday           Json?
+  thursday            Json?
+  friday              Json?
+  saturday            Json?
+  sunday              Json?
+  slotIntervalMinutes Int      @default(30)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Website Builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum WebsiteStatus {
+  DRAFT
+  GENERATING
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WebsitePageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum WebsiteComponentType {
+  HERO
+  FEATURES
+  SERVICES
+  GALLERY
+  TEAM
+  PRICING
+  TESTIMONIALS
+  FAQ
+  ABOUT
+  CONTACT
+  FOOTER
+  HEADER
+  CTA
+  BLOG
+  NEWSLETTER
+  STATS
+  VIDEO
+  MAP
+  TIMELINE
+  CUSTOM
+}
+
+/// A business website generated and managed through the Website Builder.
+model Website {
+  id          String         @id @default(cuid())
+  tenantId    String
+  name        String
+  slug        String         @unique
+  description String?
+  status      WebsiteStatus  @default(DRAFT)
+  industry    String?
+  theme       Json?
+  brandData   Json?
+  publishedAt DateTime?
+  draftVersion Int           @default(0)
+  liveVersion  Int           @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  pages        WebsitePage[]
+  assets       WebsiteAsset[]
+  domains      WebsiteDomain[]
+  deployments  WebsiteDeployment[]
+  generations  AIWebsiteGeneration[]
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+  @@index([slug])
+}
+
+model WebsitePage {
+  id        String            @id @default(cuid())
+  websiteId String
+  title     String
+  slug      String
+  sortOrder Int               @default(0)
+  status    WebsitePageStatus @default(DRAFT)
+  isHome    Boolean           @default(false)
+  seo       Json?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  sections WebsiteSection[]
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  @@index([websiteId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integrations
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum IntegrationType {
+  GOOGLE_CALENDAR
+  STRIPE
+  RAZORPAY
+  RESEND
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  EXPIRED
+}
+
+/// A connected third-party service integration for a tenant.
+model Integration {
+  id         String            @id @default(uuid())
+  tenantId   String
+  userId     String?
+  type       IntegrationType
+  status     IntegrationStatus @default(DISCONNECTED)
+  label      String?           // user-facing name for the connection
+  metadata   Json?             // store non-sensitive config (e.g. connected email, account name)
+  errorLog   String?
+  lastSyncedAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tokens      IntegrationToken[]
+  syncLogs    SyncLog[]
+  webhookEvents WebhookEvent[]
+
+  @@unique([tenantId, type])
+  @@index([tenantId])
+}
+
+/// Encrypted OAuth tokens / API keys for an integration.
+model IntegrationToken {
+  id             String   @id @default(uuid())
+  integrationId  String
+  accessToken    String?  // encrypted
+  refreshToken   String?  // encrypted
+  tokenType      String   @default("Bearer")
+  scope          String?
+  expiresAt      DateTime?
+  apiKey         String?  // encrypted (for API-key-based integrations)
+  apiSecret      String?  // encrypted (for API-key-based integrations)
+  webhookSecret  String?  // encrypted
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+}
+
+model WebsiteSection {
+  id          String              @id @default(cuid())
+  pageId      String
+  component   WebsiteComponentType
+  sortOrder   Int                 @default(0)
+  content     Json
+  styles      Json?
+  isPublished Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  page WebsitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  @@index([pageId])
+}
+
+model WebsiteAsset {
+  id         String   @id @default(cuid())
+  websiteId  String
+  url        String
+  type       String
+  fileKey    String?
+  alt        String?
+  width      Int?
+  height     Int?
+  sizeBytes  Int?
+  isAi       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  @@index([websiteId])
+}
+
+model WebsiteDomain {
+  id              String   @id @default(cuid())
+  websiteId       String
+  domain          String   @unique
+  verified        Boolean  @default(false)
+  sslStatus       String   @default("PENDING")
+  dnsRecords      Json?
+  verifiedAt      DateTime?
+  provisionedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  @@index([websiteId])
+  @@index([domain])
+}
+
+model WebsiteDeployment {
+  id          String   @id @default(cuid())
+  websiteId   String
+  version     Int
+  status      String   @default("BUILDING")
+  errorLog    String?
+  buildTimeMs Int?
+  previewUrl  String?
+  liveUrl     String?
+  lighthouse  Json?
+  createdAt   DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  @@index([websiteId])
+}
+
+model AIWebsiteGeneration {
+  id           String   @id @default(cuid())
+  websiteId    String
+  prompt       String
+  mergedData   Json?
+  model        String   @default("gpt-4o")
+  status       String   @default("PENDING")
+  result       Json?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  @@index([websiteId])
+}
+
+// ─── Website Connections (external site sync backend) ─────────────────────
+
+enum WebsiteConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  PENDING
+}
+
+enum WebsiteFramework {
+  HTML
+  PHP
+  REACT
+  NEXTJS
+  VUE
+  LARAVEL
+  WORDPRESS
+  SHOPIFY
+  ANGULAR
+  NODE
+  EXPRESS
+  CUSTOM
+}
+
+enum ConnectionLogLevel {
+  INFO
+  WARN
+  ERROR
+  DEBUG
+}
+
+/// A third-party or builder website connected to a Doloyal business.
+model ConnectedWebsite {
+  id              String                  @id @default(uuid())
+  tenantId        String
+  /// Public business identifier used by the SDK (stable per tenant).
+  businessId      String
+  name            String
+  websiteUrl      String
+  framework       WebsiteFramework        @default(HTML)
+  status          WebsiteConnectionStatus @default(PENDING)
+  connectionToken String                  @unique
+  lastSyncAt      DateTime?
+  /// Aggregate counters: customers, appointments, memberships, rewards, forms
+  stats           Json?
+  settings        Json?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys          WebsiteApiKey[]
+  webhooks         WebsiteWebhook[]
+  logs             ConnectionLog[]
+  sdkInstallations SdkInstallation[]
+
+  @@index([tenantId])
+  @@index([businessId])
+  @@index([status])
+}
+
+/// API credentials for a connected website. Secret values are stored hashed.
+model WebsiteApiKey {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  connectedWebsiteId String
+  businessId         String
+  publicKey          String    @unique
+  secretKeyHash      String
+  secretKeyPrefix    String
+  webhookSecretHash  String
+  webhookSecretPrefix String
+  label              String?
+  isActive           Boolean   @default(true)
+  lastUsedAt         DateTime?
+  revokedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectedWebsite ConnectedWebsite @relation(fields: [connectedWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([connectedWebsiteId])
+  @@index([businessId])
+  @@index([publicKey])
+}
+
+/// Outbound webhook endpoints for website connection events.
+model WebsiteWebhook {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  connectedWebsiteId String
+  businessId         String
+  url                String
+  secretHash         String
+  secretPrefix       String
+  events             String[]
+  isActive           Boolean  @default(true)
+  failureCount       Int      @default(0)
+  lastDeliveryAt     DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectedWebsite ConnectedWebsite @relation(fields: [connectedWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([connectedWebsiteId])
+  @@index([businessId])
+}
+
+/// Audit / activity log for website connection events.
+model ConnectionLog {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  connectedWebsiteId String?
+  businessId         String
+  level              ConnectionLogLevel @default(INFO)
+  event              String
+  message            String
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectedWebsite ConnectedWebsite? @relation(fields: [connectedWebsiteId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([connectedWebsiteId, createdAt])
+  @@index([businessId])
+}
+
+/// Tracks SDK installs detected on connected domains.
+model SdkInstallation {
+  id                 String           @id @default(uuid())
+  tenantId           String
+  connectedWebsiteId String?
+  businessId         String
+  framework          WebsiteFramework @default(HTML)
+  version            String?
+  domain             String
+  status             String           @default("ACTIVE")
+  lastSeenAt         DateTime         @default(now())
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectedWebsite ConnectedWebsite? @relation(fields: [connectedWebsiteId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([connectedWebsiteId])
+  @@index([businessId])
+  @@index([domain])
+}
+
+// ─── Doloyal AI Assistant ────────────────────────────────────────────────────
+
+model AiConversation {
+  id        String    @id @default(uuid())
+  tenantId  String
+  userId    String
+  title     String    @default("New chat")
+  pinned    Boolean   @default(false)
+  archived  Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages    AiMessage[]
+  attachments AiAttachment[]
+  feedback    AiFeedback[]
+
+  @@index([tenantId, userId, updatedAt])
+  @@index([tenantId, pinned])
+}
+
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  tenantId       String
+  role           String // user | assistant | system
+  content        String
+  model          String?
+  provider       String?
+  tokensIn       Int?
+  tokensOut      Int?
+  latencyMs      Int?
+  toolCalls      Json?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  AiAttachment[]
+  feedback     AiFeedback[]
+
+  @@index([conversationId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model AiAttachment {
+  id             String   @id @default(uuid())
+  conversationId String?
+  messageId      String?
+  tenantId       String
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String?
+  textExtract    String?
+  previewUrl     String?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      AiMessage?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([messageId])
+  @@index([tenantId])
+}
+
+model AiFeedback {
+  id             String   @id @default(uuid())
+  conversationId String?
+  messageId      String
+  tenantId       String
+  userId         String
+  rating         String // like | dislike
+  comment        String?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      AiMessage       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([tenantId])
+}
+
+model AiUsage {
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String
+  conversationId String?
+  provider       String
+  model          String
+  tokensIn       Int      @default(0)
+  tokensOut      Int      @default(0)
+  latencyMs      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+}

@@ -1,0 +1,31 @@
+{
+  "name": "doloyal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Doloyal — AI-powered Customer Retention Operating System for local businesses.",
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "bash scripts/dev.sh",
+    "dev:clean": "DOLOYAL_CLEAN=1 bash scripts/dev.sh",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:up": "node scripts/ensure-postgres.mjs",
+    "db:generate": "pnpm --filter @doloyal/api exec prisma generate",
+    "db:migrate": "pnpm db:up && pnpm --filter @doloyal/api exec prisma migrate dev",
+    "db:deploy": "pnpm db:up && pnpm --filter @doloyal/api exec prisma migrate deploy",
+    "db:seed": "pnpm --filter @doloyal/api exec prisma db seed",
+    "db:studio": "pnpm --filter @doloyal/api exec prisma studio",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@embedded-postgres/darwin-arm64": "18.4.0-beta.17",
+    "embedded-postgres": "18.4.0-beta.17",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3"
+  }
+}
