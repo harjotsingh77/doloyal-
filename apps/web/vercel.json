@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd ../.. && npx turbo run build --filter=@doloyal/web...",
+  "installCommand": "cd ../.. && pnpm install",
+  "framework": "nextjs",
+  "ignoreCommand": "exit 0"
+}
