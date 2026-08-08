@@ -1,5 +1,13 @@
 import { Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import type { Website, WebsiteDeployment, WebsiteDomain, WebsitePage, WebsiteSection } from "@prisma/client";
 import { PrismaService } from "../../common/prisma.service";
+
+type WebsiteWithSummaryRelations = Website & {
+  pages: (WebsitePage & { sections: WebsiteSection[] })[];
+  domains: WebsiteDomain[];
+  deployments: WebsiteDeployment[];
+  _count: { pages: number; assets: number; domains: number };
+};
 
 @Injectable()
 export class WebsitesService {
@@ -16,7 +24,7 @@ export class WebsitesService {
       },
       orderBy: { updatedAt: "desc" },
     });
-    return sites.map((s) => ({
+    return sites.map((s: WebsiteWithSummaryRelations) => ({
       ...s,
       totalPages: s._count.pages,
       assetCount: s._count.assets,

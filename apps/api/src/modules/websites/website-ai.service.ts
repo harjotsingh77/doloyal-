@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import type { WebsitePage } from "@prisma/client";
 import { PrismaService } from "../../common/prisma.service";
 
 @Injectable()
@@ -181,7 +182,7 @@ export class WebsiteAIService {
       data: { theme: result.theme as any, status: "DRAFT", draftVersion: { increment: 1 } },
     });
     const existingPages = await this.prisma.websitePage.findMany({ where: { websiteId } });
-    const existingSlugs = new Set(existingPages.map((p) => p.slug));
+    const existingSlugs = new Set(existingPages.map((p: WebsitePage) => p.slug));
     for (const pageData of result.pages) {
       if (existingSlugs.has(pageData.slug)) continue;
       const page = await this.prisma.websitePage.create({

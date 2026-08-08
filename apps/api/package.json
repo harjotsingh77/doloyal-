@@ -4,7 +4,7 @@
   "private": true,
   "description": "Doloyal — NestJS REST API",
   "scripts": {
-    "build": "prisma generate && if [ \"$VERCEL\" = \"1\" ]; then echo 'Skipping API build on Vercel'; else tsc -b; fi",
+    "build": "prisma generate && tsc -b",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",

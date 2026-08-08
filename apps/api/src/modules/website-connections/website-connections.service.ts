@@ -11,8 +11,24 @@ import type {
   WebsiteConnectionStatus,
   WebsiteFramework,
   ConnectionLogLevel,
+  ConnectedWebsite,
+  WebsiteApiKey,
+  ConnectionLog,
+  WebsiteWebhook,
   Prisma,
 } from '@prisma/client';
+
+type ApiKeyWithWebsite = WebsiteApiKey & {
+  connectedWebsite: Pick<ConnectedWebsite, 'id' | 'name' | 'websiteUrl' | 'status'>;
+};
+
+type ConnectionLogWithWebsite = ConnectionLog & {
+  connectedWebsite: Pick<ConnectedWebsite, 'id' | 'name'> | null;
+};
+
+type WebhookWithWebsite = WebsiteWebhook & {
+  connectedWebsite: Pick<ConnectedWebsite, 'id' | 'name' | 'websiteUrl'>;
+};
 
 const DEFAULT_STATS = {
   customers: 0,
@@ -119,7 +135,7 @@ export class WebsiteConnectionsService {
     const secretKey = generateKey('lf_sk_');
     const webhookSecret = generateKey('lf_whsec_');
 
-    const created = await this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const website = await tx.connectedWebsite.create({
         data: {
           tenantId,
@@ -254,7 +270,7 @@ export class WebsiteConnectionsService {
       include: { connectedWebsite: { select: { id: true, name: true, websiteUrl: true, status: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    return keys.map((k) => ({
+    return keys.map((k: ApiKeyWithWebsite) => ({
       id: k.id,
       businessId: k.businessId,
       publicKey: k.publicKey,
@@ -279,7 +295,7 @@ export class WebsiteConnectionsService {
       take: Math.min(limit, 200),
       include: { connectedWebsite: { select: { id: true, name: true } } },
     });
-    return logs.map((l) => ({
+    return logs.map((l: ConnectionLogWithWebsite) => ({
       id: l.id,
       businessId: l.businessId,
       connectedWebsiteId: l.connectedWebsiteId,
@@ -298,7 +314,7 @@ export class WebsiteConnectionsService {
       include: { connectedWebsite: { select: { id: true, name: true, websiteUrl: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((w) => ({
+    return rows.map((w: WebhookWithWebsite) => ({
       id: w.id,
       businessId: w.businessId,
       url: w.url,
@@ -359,7 +375,7 @@ export class WebsiteConnectionsService {
     const website = await this.requireWebsite(tenantId, id);
 
     try {
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await tx.websiteApiKey.deleteMany({
           where: { connectedWebsiteId: website.id, tenantId },
         });
