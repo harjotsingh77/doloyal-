@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence, useMotionValueEvent, useScroll } from "framer-motion";
 import { ArrowRight, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@doloyal/ui";
 import { TextRoll } from "../landing/ui";
 import { useWaitlistModal } from "./waitlist-modal";
 
@@ -82,7 +83,7 @@ export function SiteHeader() {
         >
           {/* Doloyal Full Logo */}
           <Link href="/" className="flex items-center group" aria-label="Doloyal home">
-            <img src="/logo.png" alt="Doloyal" className="h-9 sm:h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+            <Logo size={36} className="transition-transform duration-300 group-hover:scale-105" />
           </Link>
 
           {/* Navigation Links */}

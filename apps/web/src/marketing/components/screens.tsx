@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { LogoMark } from "@doloyal/ui";
 import {
   LayoutDashboard,
   Users,
@@ -97,7 +98,7 @@ export function ScreenSidebar({ active, className }: { active?: string; classNam
       )}
     >
       <div className="mb-3 flex items-center gap-2 px-2 pt-1">
-        <img src="/logo-symbol.png" alt="" className="h-5 w-5 object-contain" />
+        <LogoMark size={20} />
         <span className="text-[13px] font-bold tracking-tight">Doloyal</span>
       </div>
       {NAV_ITEMS.map((item) => (

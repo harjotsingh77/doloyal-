@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Facebook, Linkedin, Instagram, Send } from "lucide-react";
 import { site } from "../lib/site";
+import { Logo } from "@doloyal/ui";
 
 const COLUMNS = [
   {
@@ -70,8 +71,8 @@ export function SiteFooter() {
         <div className="grid grid-cols-1 gap-10 md:grid-cols-5 lg:gap-12">
           {/* Left Brand Area */}
           <div className="md:col-span-2">
-            <Link href="/" className="inline-block">
-              <img src="/logo.png" alt="Doloyal" className="h-9 sm:h-10 w-auto object-contain" />
+            <Link href="/" className="inline-block" aria-label="Doloyal home">
+              <Logo size={36} />
             </Link>
             <p className="mt-4 max-w-sm text-[14px] leading-relaxed text-slate-500 font-normal">
               Doloyal helps local businesses build stronger customer relationships, increase repeat visits, and manage customer retention from one simple platform.

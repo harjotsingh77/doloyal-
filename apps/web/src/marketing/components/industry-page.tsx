@@ -6,6 +6,7 @@ import { SectionHeading, Reveal, ButtonPrimary, ButtonGhost, TextLink, CheckItem
 import { FinalCta } from "./cta";
 import { FaqList } from "./faq";
 import { INDUSTRIES, getIndustry, type Industry } from "../data/industries";
+import { LogoMark } from "@doloyal/ui";
 import { TestimonialGrid } from "./testimonials";
 import { cn } from "@/lib/utils";
 
@@ -94,7 +95,7 @@ export function IndustryWhy({ industry }: { industry: Industry }) {
           <Reveal delay={0.1}>
             <div className="rounded-[2rem] border border-[rgb(var(--color-border))] bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_32px_64px_-24px_rgba(15,23,42,0.2)] sm:p-8">
               <div className="mb-4 flex items-center gap-2">
-                <img src="/logo-symbol.png" alt="Doloyal" className="h-6 w-6 object-contain" />
+                <LogoMark size={24} />
                 <span className="text-[13px] font-bold">AI retention plan · 7 days</span>
               </div>
               {industry.features.map((f, i) => (
