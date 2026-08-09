@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sparkles, CheckCircle2, ArrowRight, Loader2, ShieldCheck, Gift } from "lucide-react";
 import { FinalCta } from "@/marketing/landing/FinalCta";
 import { TextRoll } from "@/marketing/landing/ui";
+import { sendWeb3Form } from "@/lib/web3forms";
 
 export default function WaitlistPage() {
   const [formState, setFormState] = React.useState<"idle" | "loading" | "success" | "error">("idle");
@@ -23,32 +24,19 @@ export default function WaitlistPage() {
     }
 
     setFormState("loading");
-    try {
-      const res = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
-          subject: "New Waitlist Signup — Doloyal Page",
-          from_name: "Doloyal Waitlist Page",
-          name: formData.name || formData.businessName || formData.email,
-          email: formData.email,
-          businessName: formData.businessName || "N/A",
-          businessType: formData.businessType,
-          message: `Waitlist Page Submission:\nName: ${formData.name || "N/A"}\nEmail: ${formData.email}\nBusiness Name: ${formData.businessName || "N/A"}\nBusiness Type: ${formData.businessType}`,
-        }),
-      });
+    const ok = await sendWeb3Form({
+      subject: "New Waitlist Signup — Doloyal Page",
+      from_name: "Doloyal Waitlist Page",
+      name: formData.name || formData.businessName || formData.email,
+      email: formData.email,
+      business_name: formData.businessName || "N/A",
+      business_type: formData.businessType,
+      message: `Waitlist Page Submission:\nName: ${formData.name || "N/A"}\nEmail: ${formData.email}\nBusiness Name: ${formData.businessName || "N/A"}\nBusiness Type: ${formData.businessType}`,
+    });
 
-      const data = await res.json();
-      if (data.success) {
-        setFormState("success");
-      } else {
-        setFormState("error");
-      }
-    } catch {
+    if (ok) {
+      setFormState("success");
+    } else {
       setFormState("error");
     }
   };

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Sparkles, CheckCircle2, ArrowRight, Loader2, CalendarDays, Clock, ShieldCheck } from "lucide-react";
 import { FinalCta } from "@/marketing/landing/FinalCta";
 import { TextRoll } from "@/marketing/landing/ui";
+import { sendWeb3Form } from "@/lib/web3forms";
 
 export default function BookDemoPage() {
   const [formState, setFormState] = React.useState<"idle" | "loading" | "success" | "error">("idle");
@@ -27,36 +28,23 @@ export default function BookDemoPage() {
     }
 
     setFormState("loading");
-    try {
-      const res = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
-          subject: `New Demo Request from ${formData.name} (${formData.businessName})`,
-          from_name: "Doloyal Demo Booking",
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone || "N/A",
-          businessName: formData.businessName,
-          businessType: formData.businessType,
-          locations: formData.locations,
-          preferredDate: formData.preferredDate || "N/A",
-          preferredTime: formData.preferredTime || "N/A",
-          message: `Demo Booking Request:\nName: ${formData.name}\nEmail: ${formData.email}\nPhone: ${formData.phone || "N/A"}\nBusiness Name: ${formData.businessName}\nBusiness Type: ${formData.businessType}\nLocations: ${formData.locations}\nPreferred Date: ${formData.preferredDate || "N/A"}\nPreferred Time: ${formData.preferredTime || "N/A"}\nMessage: ${formData.message || "N/A"}`,
-        }),
-      });
+    const ok = await sendWeb3Form({
+      subject: `New Demo Request from ${formData.name} (${formData.businessName})`,
+      from_name: "Doloyal Demo Booking",
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone || "N/A",
+      business_name: formData.businessName,
+      business_type: formData.businessType,
+      locations: formData.locations,
+      preferred_date: formData.preferredDate || "N/A",
+      preferred_time: formData.preferredTime || "N/A",
+      message: formData.message || `Demo request for ${formData.businessName} (${formData.businessType}, ${formData.locations})`,
+    });
 
-      const data = await res.json();
-      if (data.success) {
-        setFormState("success");
-      } else {
-        setFormState("error");
-      }
-    } catch {
+    if (ok) {
+      setFormState("success");
+    } else {
       setFormState("error");
     }
   };

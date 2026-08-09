@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, CheckCircle2, ArrowRight, Loader2, Mail } from "lucide-react";
 import { TextRoll } from "../landing/ui";
 
+import { sendWeb3Form } from "@/lib/web3forms";
+
 interface WaitlistContextType {
   isOpen: boolean;
   openWaitlistModal: () => void;
@@ -48,31 +50,18 @@ export function WaitlistModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     }
 
     setStatus("loading");
-    try {
-      const res = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
-          subject: "New Waitlist Signup — Doloyal Modal",
-          from_name: "Doloyal Waitlist",
-          email: email,
-          name: businessName || email,
-          businessName: businessName || "N/A",
-          message: `Waitlist Modal Submission:\nEmail: ${email}\nBusiness Name: ${businessName || "N/A"}`,
-        }),
-      });
+    const ok = await sendWeb3Form({
+      subject: "New Waitlist Signup — Doloyal Modal",
+      from_name: "Doloyal Waitlist Modal",
+      name: businessName || email,
+      email: email,
+      business_name: businessName || "N/A",
+      message: `Waitlist Modal Submission:\nEmail: ${email}\nBusiness Name: ${businessName || "N/A"}`,
+    });
 
-      const data = await res.json();
-      if (data.success) {
-        setStatus("success");
-      } else {
-        setStatus("error");
-      }
-    } catch {
+    if (ok) {
+      setStatus("success");
+    } else {
       setStatus("error");
     }
   };

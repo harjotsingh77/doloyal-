@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sparkles, Mail, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 import { FinalCta } from "@/marketing/landing/FinalCta";
 import { TextRoll } from "@/marketing/landing/ui";
+import { sendWeb3Form } from "@/lib/web3forms";
 
 export default function ContactPage() {
   const [formState, setFormState] = React.useState<"idle" | "loading" | "success" | "error">("idle");
@@ -24,32 +25,19 @@ export default function ContactPage() {
     }
 
     setFormState("loading");
-    try {
-      const res = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
-          subject: `New Contact Inquiry from ${formData.name}`,
-          from_name: "Doloyal Contact Form",
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone || "N/A",
-          businessName: formData.businessName || "N/A",
-          message: `Contact Inquiry:\nName: ${formData.name}\nEmail: ${formData.email}\nPhone: ${formData.phone || "N/A"}\nBusiness Name: ${formData.businessName || "N/A"}\nMessage: ${formData.message}`,
-        }),
-      });
+    const ok = await sendWeb3Form({
+      subject: `New Contact Inquiry from ${formData.name}`,
+      from_name: "Doloyal Contact Form",
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone || "N/A",
+      business_name: formData.businessName || "N/A",
+      message: formData.message,
+    });
 
-      const data = await res.json();
-      if (data.success) {
-        setFormState("success");
-      } else {
-        setFormState("error");
-      }
-    } catch {
+    if (ok) {
+      setFormState("success");
+    } else {
       setFormState("error");
     }
   };
