@@ -19,7 +19,7 @@ export default function BookDemoPage() {
     message: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.businessName) {
       setFormState("error");
@@ -27,9 +27,38 @@ export default function BookDemoPage() {
     }
 
     setFormState("loading");
-    setTimeout(() => {
-      setFormState("success");
-    }, 1000);
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
+          subject: `New Demo Request from ${formData.name} (${formData.businessName})`,
+          from_name: "Doloyal Demo Booking",
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone || "N/A",
+          businessName: formData.businessName,
+          businessType: formData.businessType,
+          locations: formData.locations,
+          preferredDate: formData.preferredDate || "N/A",
+          preferredTime: formData.preferredTime || "N/A",
+          message: `Demo Booking Request:\nName: ${formData.name}\nEmail: ${formData.email}\nPhone: ${formData.phone || "N/A"}\nBusiness Name: ${formData.businessName}\nBusiness Type: ${formData.businessType}\nLocations: ${formData.locations}\nPreferred Date: ${formData.preferredDate || "N/A"}\nPreferred Time: ${formData.preferredTime || "N/A"}\nMessage: ${formData.message || "N/A"}`,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setFormState("success");
+      } else {
+        setFormState("error");
+      }
+    } catch {
+      setFormState("error");
+    }
   };
 
   return (

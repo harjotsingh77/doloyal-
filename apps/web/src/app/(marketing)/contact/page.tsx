@@ -16,7 +16,7 @@ export default function ContactPage() {
     message: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) {
       setFormState("error");
@@ -24,9 +24,34 @@ export default function ContactPage() {
     }
 
     setFormState("loading");
-    setTimeout(() => {
-      setFormState("success");
-    }, 1000);
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
+          subject: `New Contact Inquiry from ${formData.name}`,
+          from_name: "Doloyal Contact Form",
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone || "N/A",
+          businessName: formData.businessName || "N/A",
+          message: `Contact Inquiry:\nName: ${formData.name}\nEmail: ${formData.email}\nPhone: ${formData.phone || "N/A"}\nBusiness Name: ${formData.businessName || "N/A"}\nMessage: ${formData.message}`,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setFormState("success");
+      } else {
+        setFormState("error");
+      }
+    } catch {
+      setFormState("error");
+    }
   };
 
   return (

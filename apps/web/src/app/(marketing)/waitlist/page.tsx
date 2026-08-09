@@ -15,7 +15,7 @@ export default function WaitlistPage() {
     businessType: "Salon / Spa",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email) {
       setFormState("error");
@@ -23,9 +23,34 @@ export default function WaitlistPage() {
     }
 
     setFormState("loading");
-    setTimeout(() => {
-      setFormState("success");
-    }, 800);
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
+          subject: "New Waitlist Signup — Doloyal Page",
+          from_name: "Doloyal Waitlist Page",
+          name: formData.name || formData.businessName || formData.email,
+          email: formData.email,
+          businessName: formData.businessName || "N/A",
+          businessType: formData.businessType,
+          message: `Waitlist Page Submission:\nName: ${formData.name || "N/A"}\nEmail: ${formData.email}\nBusiness Name: ${formData.businessName || "N/A"}\nBusiness Type: ${formData.businessType}`,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setFormState("success");
+      } else {
+        setFormState("error");
+      }
+    } catch {
+      setFormState("error");
+    }
   };
 
   return (

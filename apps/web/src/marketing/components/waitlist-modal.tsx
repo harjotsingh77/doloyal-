@@ -40,7 +40,7 @@ export function WaitlistModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const [businessName, setBusinessName] = React.useState("");
   const [status, setStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
       setStatus("error");
@@ -48,9 +48,33 @@ export function WaitlistModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     }
 
     setStatus("loading");
-    setTimeout(() => {
-      setStatus("success");
-    }, 800);
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: "e1da9865-e94c-4392-a2a1-a1dfc16e0cd1",
+          subject: "New Waitlist Signup — Doloyal Modal",
+          from_name: "Doloyal Waitlist",
+          email: email,
+          name: businessName || email,
+          businessName: businessName || "N/A",
+          message: `Waitlist Modal Submission:\nEmail: ${email}\nBusiness Name: ${businessName || "N/A"}`,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setStatus("success");
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    }
   };
 
   const handleReset = () => {
