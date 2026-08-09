@@ -49,6 +49,22 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`light ${inter.variable}`}>
       <head>
+        {/* CookieHub Consent Banner */}
+        <Script
+          src="https://cdn.cookiehub.eu/c2/845e0a11.js"
+          strategy="afterInteractive"
+        />
+        <Script id="cookiehub-init" strategy="afterInteractive">
+          {`
+            document.addEventListener("DOMContentLoaded", function(event) {
+              var cpm = {};
+              if (window.cookiehub) {
+                window.cookiehub.load(cpm);
+              }
+            });
+          `}
+        </Script>
+
         {/* Google Analytics (gtag.js) */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-CHEX55XDZD"
