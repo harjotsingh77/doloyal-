@@ -122,6 +122,9 @@ workspace from the repo lockfile.
 
 - **Project settings** → set **Root Directory** to the app folder (`apps/landing` / `apps/web`).
 - Framework is auto-detected as Next.js; install/build commands come from the app's `vercel.json`.
+- Prisma Client is generated deterministically on install via the root `postinstall`
+  script (`prisma generate --schema=apps/api/prisma/schema.prisma`), so no deployment
+  ever needs schema auto-discovery — the `@prisma/client` schema warning cannot occur.
 
 **Landing (`apps/landing/vercel.json`)**
 - Build: `pnpm turbo run build --filter=@doloyal/landing...`
@@ -140,7 +143,12 @@ workspace from the repo lockfile.
 
 The API is a long-running NestJS + Fastify server with SSE streaming and file uploads —
 it is **not** Vercel-serverless compatible. Deploy it as a container (Railway, Render,
-Fly.io, ECS, or any Docker host):
+Fly.io, ECS, or any Docker host). A `vercel.json` also lives in `apps/api/` for teams
+that still build the API on Vercel (root directory `apps/api`): it installs with
+`--frozen-lockfile` (which runs the root `postinstall` Prisma generation) and builds
+only `@doloyal/api` and its workspace dependencies.
+
+To build the container image:
 
 ```bash
 docker build -t doloyal-api -f apps/api/Dockerfile .

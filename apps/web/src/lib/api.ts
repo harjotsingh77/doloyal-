@@ -23,6 +23,9 @@ import { MOCK } from "./mock-data";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+const APP_BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 
 class ApiError extends Error {
   code: string;
@@ -1384,10 +1387,10 @@ export const api = {
     request<any[]>(`/integrations/${type}/webhook-events`),
 
   getOAuthUrl: (type: string, redirectUri?: string) =>
-    request<{ url: string; state: string }>(`/integrations/oauth/${type}/url?redirect_uri=${encodeURIComponent(redirectUri || 'http://localhost:3000/app/integrations/callback')}`, { method: "POST" }),
+    request<{ url: string; state: string }>(`/integrations/oauth/${type}/url?redirect_uri=${encodeURIComponent(redirectUri || `${APP_BASE_URL}/app/integrations/callback`)}`, { method: "POST" }),
 
   handleOAuthCallback: (type: string, code: string, redirectUri?: string) =>
-    request<any>(`/integrations/oauth/${type}/callback`, { method: "POST", body: JSON.stringify({ code, redirect_uri: redirectUri || 'http://localhost:3000/app/integrations/callback' }) }),
+    request<any>(`/integrations/oauth/${type}/callback`, { method: "POST", body: JSON.stringify({ code, redirect_uri: redirectUri || `${APP_BASE_URL}/app/integrations/callback` }) }),
 
   // ─── Website Connections ─────────────────────────────────────────────────
 
