@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Providers } from "./providers";
 import "@doloyal/ui/styles.css";
 import "./globals.css";
+import Script from "next/script";
 import { site } from "@/marketing/lib/site";
 
 const inter = Inter({
@@ -47,6 +48,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning className={`light ${inter.variable}`}>
+      <head>
+        {/* Google Analytics (gtag.js) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-CHEX55XDZD"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-CHEX55XDZD');
+          `}
+        </Script>
+      </head>
       <body className="min-h-screen bg-[rgb(var(--color-background))] font-sans antialiased">
         <Providers>{children}</Providers>
       </body>
