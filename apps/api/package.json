@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Doloyal — NestJS REST API",
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "pnpm run prisma:generate && tsc -b",
     "dev": "nest start --watch",

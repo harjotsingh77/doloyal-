@@ -28,8 +28,9 @@ This repository contains a **deep vertical slice**: a production-grade architect
 
 ```
 apps/
-  web/      Next.js frontend (landing + app)
-  api/      NestJS REST API
+  web/      Next.js SaaS app (login + dashboard + all modules) → app.doloyal.com
+  landing/  Next.js public marketing site → doloyal.com
+  api/      NestJS REST API → api.doloyal.com
 packages/
   shared/   Zod schemas, TS types, enums, constants
   ui/       Brand design system (shadcn-based)
@@ -101,6 +102,72 @@ With the seed loaded, you'll land on a dashboard pre-populated with 90 days of r
 - **Immutable loyalty ledger.** Points are an append-only ledger (`PointsLedger`) with running balances and per-entry expiry — auditable and correct by construction.
 - **Real KPIs.** Every dashboard metric is computed from real data, not cached counts. Aggregations run on indexed columns.
 - **Env-gated everything.** Missing API keys never break the app. The backend runs deterministic dev auth when `CLERK_SECRET_KEY` is unset; the AI module returns structured, data-backed templated responses when `OPENAI_API_KEY` is unset.
+
+## Production deployment
+
+The monorepo deploys as **three isolated applications**. Each Vercel project uses its own
+**Root Directory** so builds never pull unrelated workspaces into scope.
+
+| Application | Path            | Package          | Domain            | Host          |
+| ----------- | --------------- | ---------------- | ----------------- | ------------- |
+| Landing     | `apps/landing`  | `@doloyal/landing` | `doloyal.com`     | Vercel        |
+| SaaS app    | `apps/web`      | `@doloyal/web`   | `app.doloyal.com` | Vercel        |
+| API         | `apps/api`      | `@doloyal/api`   | `api.doloyal.com` | Node container |
+
+### Vercel (landing + SaaS)
+
+Each Vercel project reads its own `vercel.json` inside the app folder. No root-level
+`vercel.json` build is used, and `pnpm install --frozen-lockfile` resolves the whole
+workspace from the repo lockfile.
+
+- **Project settings** → set **Root Directory** to the app folder (`apps/landing` / `apps/web`).
+- Framework is auto-detected as Next.js; install/build commands come from the app's `vercel.json`.
+
+**Landing (`apps/landing/vercel.json`)**
+- Build: `pnpm turbo run build --filter=@doloyal/landing...`
+- Output: `.next`
+- No environment variables required (static marketing site).
+
+**SaaS (`apps/web/vercel.json`)**
+- Build: `pnpm turbo run build --filter=@doloyal/web...` (builds `@doloyal/shared` + `@doloyal/ui` first)
+- Output: `.next`
+- Required env vars:
+  - `NEXT_PUBLIC_API_BASE_URL` → `https://api.doloyal.com`
+  - `NEXT_PUBLIC_APP_URL` → `https://app.doloyal.com`
+  - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` → Google OAuth client id (for Google sign-in)
+
+### API (Node container)
+
+The API is a long-running NestJS + Fastify server with SSE streaming and file uploads —
+it is **not** Vercel-serverless compatible. Deploy it as a container (Railway, Render,
+Fly.io, ECS, or any Docker host):
+
+```bash
+docker build -t doloyal-api -f apps/api/Dockerfile .
+docker run -p 4000:4000 --env-file .env doloyal-api
+```
+
+Required env vars:
+
+- `DATABASE_URL` — Postgres connection string
+- `JWT_SECRET` — long random string shared with all auth tokens
+- `CORS_ORIGIN` — comma-separated frontend origins: `https://app.doloyal.com,https://doloyal.com`
+- `API_PORT` — `4000`
+- `WEB_BASE_URL` / `PUBLIC_APP_URL` — `https://app.doloyal.com`
+- Optional: `CLERK_SECRET_KEY`, `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
+  `RESEND_API_KEY`, `RESEND_FROM`
+
+Apply migrations before starting:
+
+```bash
+pnpm db:deploy   # prisma migrate deploy (safe for production — never reset)
+```
+
+### CI
+
+`.github/workflows/ci.yml` installs with `--frozen-lockfile`, generates the Prisma client,
+typechecks, and runs the full workspace build on every push/PR.
 
 ## Scripts
 
