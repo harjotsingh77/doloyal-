@@ -23,8 +23,8 @@ node "$ROOT/scripts/ensure-postgres.mjs" || {
 # Always purge stale Next.js server chunks to prevent MODULE_NOT_FOUND errors.
 # Webpack chunk IDs (e.g. 3867.js) can drift between restarts; removing the
 # server cache forces a clean recompile and costs only ~1-2s on startup.
-echo "[doloyal] clearing stale .next/server cache"
-rm -rf "$ROOT/apps/web/.next/server"
+echo "[doloyal] clearing stale .next cache"
+rm -rf "$ROOT/apps/web/.next"
 
 if [[ "${DOLOYAL_CLEAN:-}" == "1" ]]; then
   echo "[doloyal] full clean: clearing .next and apps/api/dist"
