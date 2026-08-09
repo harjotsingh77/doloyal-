@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Sparkles,
   TrendingUp,
   Users,
   Target,
@@ -13,7 +12,7 @@ import {
   HeartHandshake,
   Layers,
   CheckCircle2,
-  GraduationCap,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalCta } from "@/marketing/landing/FinalCta";
@@ -208,19 +207,12 @@ export default function AboutPage() {
                     alt="Harjot Singh - Founder of Doloyal"
                     className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                   />
-                  {/* Subtle Founder Badge Overlay */}
-                  <div className="absolute bottom-3.5 left-3.5">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-[#2563EB]/90 px-3.5 py-1 text-[12px] font-semibold text-white backdrop-blur-md shadow-md">
-                      <Sparkles className="h-3 w-3 text-white" />
-                      Founder
-                    </span>
-                  </div>
                 </div>
 
                 {/* Card Content */}
                 <div className="mt-6 text-center">
                   <h3 className="text-2xl font-extrabold text-[#282628]">Harjot Singh</h3>
-                  <p className="mt-1 text-sm font-semibold text-[#2563EB]">Founder & Builder</p>
+                  <p className="mt-1 text-sm font-semibold text-[#2563EB]">Founder</p>
                 </div>
               </div>
             </motion.div>
@@ -233,16 +225,8 @@ export default function AboutPage() {
               transition={{ duration: 0.6, ease: EASE }}
               className="lg:col-span-7 flex flex-col justify-center"
             >
-              {/* Blue Outlined Badge */}
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#2563EB]/30 bg-[#2563EB]/5 px-4 py-1.5 text-[13px] font-semibold text-[#2563EB]">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Founder Story</span>
-                </span>
-              </div>
-
               {/* Main Heading */}
-              <h2 className="mt-5 text-3xl font-extrabold tracking-tight text-[#282628] sm:text-5xl lg:leading-[1.15]">
+              <h2 className="text-3xl font-extrabold tracking-tight text-[#282628] sm:text-5xl lg:leading-[1.15]">
                 Building Doloyal to Help Local Businesses Grow
               </h2>
 
