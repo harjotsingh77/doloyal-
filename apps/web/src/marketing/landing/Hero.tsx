@@ -211,9 +211,9 @@ export function HeroContent() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
-          className="mt-7 text-center max-w-4xl mx-auto"
+          className="mt-6 sm:mt-7 text-center max-w-4xl mx-auto px-2 sm:px-0"
         >
-          <h1 className="text-4xl font-extrabold tracking-tight text-[#111111] sm:text-6xl lg:text-[4.75rem] lg:leading-[1.08]">
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#111111] xs:text-4xl sm:text-6xl lg:text-[4.75rem] leading-[1.15] sm:leading-[1.08]">
             Turn First-Time Visitors
             <br className="hidden sm:inline" />
             {" "}Into Loyal Customers.
@@ -225,7 +225,7 @@ export function HeroContent() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="mx-auto mt-6 max-w-2xl text-center text-base sm:text-lg leading-relaxed text-slate-600 font-normal"
+          className="mx-auto mt-4 sm:mt-6 max-w-2xl text-center text-sm sm:text-lg leading-relaxed text-slate-600 font-normal px-2 sm:px-0"
         >
           Everything you need to manage customers, boost repeat visits, and grow your local business — from one simple platform.
         </motion.p>
@@ -235,18 +235,18 @@ export function HeroContent() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.3 }}
-          className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6"
+          className="mt-8 sm:mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 w-full max-w-xs sm:max-w-none mx-auto"
         >
           <button
             onClick={openWaitlistModal}
-            className="group flex items-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5"
+            className="group flex w-full sm:w-auto items-center justify-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text.5 sm:text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5 active:scale-95"
           >
             <TextRoll>Start 1 Month Free</TextRoll>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#232529] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:rotate-45 group-hover:translate-x-0.5">
               <ArrowRight className="h-4 w-4 stroke-[2.5]" />
             </div>
           </button>
-          <a href="/book-demo" className="group flex items-center gap-2 px-3 py-3 text-[15px] font-semibold text-[#1F242B] hover:text-[#2563EB] transition-colors">
+          <a href="/book-demo" className="group flex items-center justify-center gap-2 px-4 py-3 text-sm sm:text-[15px] font-semibold text-[#1F242B] hover:text-[#2563EB] transition-colors">
             <TextRoll>Book a Demo</TextRoll>
             <ArrowRight className="h-4 w-4 stroke-[2.5] transition-transform duration-300 group-hover:translate-x-1" />
           </a>

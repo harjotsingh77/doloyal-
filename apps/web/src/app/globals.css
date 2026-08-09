@@ -4,11 +4,20 @@
 
 html {
   scroll-behavior: smooth;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 body {
   background-color: #fafafc;
   color: #111111;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* Ensure no page-level horizontal scroll on small devices */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 /* ---------------------------------------------------------------- texture */

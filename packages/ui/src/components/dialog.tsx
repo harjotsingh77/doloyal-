@@ -35,9 +35,9 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4",
+        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-2rem)] sm:w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4",
         "rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6 shadow-[var(--shadow-lifted)]",
-        "max-h-[90vh] overflow-y-auto",
+        "max-h-[88vh] overflow-y-auto",
         "data-[state=open]:animate-[lf-scale-in_0.2s_ease]",
         className,
       )}

@@ -177,98 +177,107 @@ export function SiteHeader() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setOpen(!open)}
-            aria-label="Toggle menu"
-            className="flex h-10 w-10 items-center justify-center rounded-full text-[#111827] md:hidden"
+            aria-label="Toggle navigation menu"
+            aria-expanded={open}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[#111827] hover:bg-gray-100/80 transition-colors md:hidden"
           >
             {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
 
-        {/* Mobile Navigation */}
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="border-b border-black/10 bg-white/95 backdrop-blur-xl md:hidden"
-          >
-            <nav className="flex flex-col gap-2 px-6 py-5">
-              <Link
-                href="/"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Homepage
-              </Link>
-              <Link
-                href="/about"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                About
-              </Link>
-              <Link
-                href="/features"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Features
-              </Link>
-              <Link
-                href="/pricing"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Pricing
-              </Link>
-              <Link
-                href="/blog"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Blog
-              </Link>
-              <Link
-                href="/contact"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Contact
-              </Link>
-              <Link
-                href="/book-demo"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Book a Demo
-              </Link>
-              <Link
-                href="/integrations"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Integrations
-              </Link>
-              <Link
-                href="/sign-in"
-                onClick={() => setOpen(false)}
-                className="mt-1 flex items-center justify-center rounded-xl py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100"
-              >
-                Log in
-              </Link>
-              <Link
-                href="/sign-up"
-                onClick={() => setOpen(false)}
-                className="group mt-2 flex items-center justify-between rounded-full bg-[#1F242B] px-6 py-3 text-base font-semibold text-white"
-              >
-                <TextRoll>Get Started</TextRoll>
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#1F242B]">
-                  <ArrowRight className="h-4 w-4 stroke-[2.5]" />
-                </div>
-              </Link>
-            </nav>
-          </motion.div>
-        )}
+        {/* Mobile Navigation Drawer */}
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-hidden border-b border-black/10 bg-white/95 backdrop-blur-xl md:hidden shadow-xl"
+            >
+              <nav className="flex flex-col gap-1 px-5 py-4 max-h-[calc(100vh-80px)] overflow-y-auto">
+                <Link
+                  href="/"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Homepage
+                </Link>
+                <Link
+                  href="/about"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  About
+                </Link>
+                <Link
+                  href="/features"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Features
+                </Link>
+                <Link
+                  href="/pricing"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Pricing
+                </Link>
+                <Link
+                  href="/blog"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Blog
+                </Link>
+                <Link
+                  href="/contact"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Contact
+                </Link>
+                <Link
+                  href="/book-demo"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Book a Demo
+                </Link>
+                <Link
+                  href="/integrations"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                >
+                  Integrations
+                </Link>
+                <div className="my-2 border-t border-gray-100" />
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    openWaitlistModal();
+                  }}
+                  className="flex w-full items-center justify-center rounded-xl py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors"
+                >
+                  Log in
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    openWaitlistModal();
+                  }}
+                  className="group flex w-full items-center justify-between rounded-full bg-[#1F242B] px-6 py-3 text-base font-semibold text-white shadow-md active:scale-[0.98] transition-all"
+                >
+                  <TextRoll>Get Started</TextRoll>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#1F242B]">
+                    <ArrowRight className="h-4 w-4 stroke-[2.5]" />
+                  </div>
+                </button>
+              </nav>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.header>
     </>
   );

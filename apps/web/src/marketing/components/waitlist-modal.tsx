@@ -92,7 +92,7 @@ export function WaitlistModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 16 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-lg overflow-hidden rounded-[2.5rem] border border-black/10 bg-white p-8 sm:p-10 shadow-2xl z-10 text-[#282628]"
+            className="relative w-full max-w-lg max-h-[88vh] overflow-y-auto rounded-[2rem] sm:rounded-[2.5rem] border border-black/10 bg-white p-6 sm:p-10 shadow-2xl z-10 text-[#282628]"
           >
             {/* Close Button */}
             <button
