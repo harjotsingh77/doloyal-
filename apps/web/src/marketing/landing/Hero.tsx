@@ -158,12 +158,12 @@ export function HeroContent() {
     offset: ["start start", "end start"],
   });
 
-  const dashboardY = useTransform(scrollYProgress, [0, 0.5], [120, 0]);
-  const dashboardOpacity = useTransform(scrollYProgress, [0, 0.35], [0.6, 1]);
-  const dashboardScale = useTransform(scrollYProgress, [0, 0.5], [0.92, 1]);
+  const dashboardY = useTransform(scrollYProgress, [0, 0.5], [12, 0]);
+  const dashboardOpacity = useTransform(scrollYProgress, [0, 0.35], [0.95, 1]);
+  const dashboardScale = useTransform(scrollYProgress, [0, 0.5], [0.98, 1]);
 
   return (
-    <div ref={containerRef} className="relative isolate pt-32 pb-16 sm:pt-40 sm:pb-24 w-full bg-[#FAFAFC] overflow-hidden">
+    <div ref={containerRef} className="relative isolate pt-24 pb-12 sm:pt-28 sm:pb-16 w-full bg-[#FAFAFC] overflow-hidden">
       {/* Top Ambient Blue Glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-0 flex justify-center">
         <div className="h-[520px] w-[860px] rounded-full bg-gradient-to-r from-[#2563EB]/14 via-[#3B82F6]/12 to-[#06B6D4]/14 blur-3xl" />
@@ -255,7 +255,7 @@ export function HeroContent() {
         {/* ═══ SCROLL-ANIMATED DASHBOARD PREVIEW ═══ */}
         <motion.div
           style={{ y: dashboardY, opacity: dashboardOpacity, scale: dashboardScale }}
-          className="relative mx-auto mt-16 max-w-[1080px]"
+          className="relative mx-auto mt-6 sm:mt-8 max-w-[1080px]"
         >
           {/* Gradient Drop Shadow Glow behind Dashboard */}
           <div className="pointer-events-none absolute -inset-2 -z-10 rounded-[2.5rem] bg-gradient-to-r from-[#2563EB] via-[#3B82F6] to-[#06B6D4] opacity-35 blur-2xl transition-all duration-500" />

@@ -88,6 +88,7 @@ export class MockAuthGuard implements CanActivate {
       firstName: user.firstName,
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,
+      isAdmin: user.isAdmin === true || user.email === 'demo@doloyal.ai',
       memberships: memberships.map((m: any) => ({
         id: m.id, userId: m.userId, tenantId: m.tenantId, role: m.role,
         createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : m.createdAt,
@@ -157,6 +158,7 @@ export class MockAuthGuard implements CanActivate {
         firstName: user.firstName,
         lastName: user.lastName,
         avatarUrl: user.avatarUrl,
+        isAdmin: user.isAdmin === true,
         memberships: memberships.map((m: any) => ({
           id: m.id, userId: m.userId, tenantId: m.tenantId, role: m.role,
           createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : m.createdAt,

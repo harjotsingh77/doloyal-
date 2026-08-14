@@ -10,7 +10,7 @@ import type {
   WebsiteConnectionWebhook, ConnectionLogEntry, CreateConnectedWebsiteInput,
   WebsiteFramework,
 } from "@doloyal/shared";
-import { LOYALTY_FEATURE_CATALOG, isCoreLoyaltyFeature } from "@doloyal/shared";
+import { LOYALTY_FEATURE_CATALOG, isCoreLoyaltyFeature, getPlan } from "@doloyal/shared";
 import { loadStore, saveStore } from "./persistent-store";
 
 const NOW = new Date();
@@ -361,6 +361,8 @@ const DEFAULT_BOOKING_LINKS: BookingLink[] = [
     url: "http://localhost:3000/book/rohan", createdAt: D(10), updatedAt: D(10),
   }),
 ];
+
+let currentMockPlan = "growth";
 
 export const MOCK: Record<string, (...args: any[]) => any> = {
   getMe: (): AuthUser => ({
@@ -960,6 +962,57 @@ export const MOCK: Record<string, (...args: any[]) => any> = {
     id: `cm${Date.now()}`, customerId, tierId, tierName: "GOLD",
     startDate: NOW.toISOString(), endDate: D(-365), active: true,
   }),
+
+  getSubscription: (): any => {
+    const plan = getPlan(currentMockPlan) ?? getPlan("growth");
+    const planId = plan?.id ?? "growth";
+    return {
+      id: "sub-mock-1",
+      tenantId: "t1",
+      plan: planId,
+      status: "ACTIVE",
+      rawStatus: "ACTIVE",
+      trialEndsAt: null,
+      currentPeriodStart: D(30),
+      currentPeriodEnd: new Date(NOW.getTime() + 30 * 24 * 3600 * 1000).toISOString(),
+      nextBillingDate: new Date(NOW.getTime() + 30 * 24 * 3600 * 1000).toISOString(),
+      autoRenew: true,
+      canceledAt: null,
+      billingCycle: "monthly",
+      paymentMethod: { brand: "Visa", last4: "4242", expMonth: "12", expYear: "28", isDefault: true, addedAt: D(60) },
+      provider: "doloyal",
+      hasPaymentFailed: false,
+      createdAt: D(30),
+      updatedAt: D(1),
+      planDetails: plan,
+      usage: {
+        customers: { used: 320, limit: plan?.limits.customers ?? 5000 },
+        branches: { used: 1, limit: plan?.limits.branches ?? 2 },
+        staff: { used: 3, limit: plan?.limits.staff ?? 20 },
+        aiQueries: { used: 180, limit: plan?.limits.aiQueries ?? 5000 },
+        campaigns: { used: 12, limit: null },
+      },
+    };
+  },
+
+  getBillingHistory: (): any[] => [
+    { id: "be-1", type: "PAYMENT_SUCCEEDED", description: "Growth plan — monthly", plan: "growth", amount: 3499, currency: "INR", status: "PAID", createdAt: D(30) },
+    { id: "be-2", type: "PLAN_CHANGED", description: "Plan changed to Growth", plan: "growth", amount: null, currency: "INR", status: "PAID", createdAt: D(32) },
+    { id: "be-3", type: "PAYMENT_SUCCEEDED", description: "Starter plan — monthly", plan: "starter", amount: 1499, currency: "INR", status: "PAID", createdAt: D(62) },
+    { id: "be-4", type: "PAYMENT_METHOD_UPDATED", description: "Payment method updated (Visa •••• 4242)", plan: null, amount: null, currency: "INR", status: null, createdAt: D(60) },
+    { id: "be-5", type: "TRIAL_STARTED", description: "1 Month Free Trial started", plan: "free", amount: null, currency: "INR", status: null, createdAt: D(90) },
+  ],
+
+  changePlan: (plan: string): any => {
+    currentMockPlan = (plan || "growth").toLowerCase();
+    return { plan: currentMockPlan, message: `Switched to ${currentMockPlan} plan` };
+  },
+
+  cancelSubscription: (): any => ({ message: "Subscription scheduled to cancel", status: "CANCELING" }),
+
+  restartSubscription: (): any => ({ message: "Subscription restarted", status: "ACTIVE" }),
+
+  updatePaymentMethod: (data: any): any => ({ brand: data.brand ?? "Card", last4: data.last4 ?? "4242", expMonth: data.expMonth ?? "12", expYear: data.expYear ?? "28", isDefault: true, addedAt: NOW.toISOString() }),
 
   listAppointments: (): Appointment[] => [
     { id: "ap1", customerId: "c1", customerName: "Priya Sharma", serviceName: "Haircut + Blow Dry", staffName: "Meera", branchName: "Main Branch", startsAt: new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate(), 9, 30).toISOString(), endsAt: new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate(), 10, 30).toISOString(), status: "CONFIRMED", source: "BOOKING_LINK" } as any,

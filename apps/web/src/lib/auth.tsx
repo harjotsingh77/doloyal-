@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "./api";
-import { useGoogleLogin as useGoogleLoginHook } from "@react-oauth/google";
+import { supabase, isSupabaseConfigured, getAuthCallbackUrl } from "./supabase";
 
 interface Membership {
   id: string;
@@ -21,6 +22,7 @@ interface AuthUser {
   lastName?: string;
   avatarUrl?: string;
   twoFactorEnabled?: boolean;
+  isAdmin?: boolean;
   memberships: Membership[];
   activeTenantId: string;
   activeRole: "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF" | "CUSTOMER";
@@ -37,6 +39,7 @@ interface AuthContextValue {
   logout: () => void;
   switchTenant: (tenantId: string) => void;
   refreshUser: () => Promise<AuthUser | null>;
+  resolveSupabaseSession: () => Promise<AuthUser | null>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -214,34 +217,145 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [setAuth],
   );
 
-  // Google login — uses the hook at component level (required by react-oauth)
-  const loginWithGoogle = useGoogleLoginHook({
-    onSuccess: async (tokenResponse) => {
-      setIsLoading(true);
+  // Google login — full Supabase OAuth redirect flow.
+  // After Google authenticates, Supabase redirects to /auth/callback, where
+  // the Supabase session is exchanged for a Doloyal API session.
+  const googleLoginInFlight = React.useRef(false);
+
+  const loginWithGoogle = React.useCallback(() => {
+    if (googleLoginInFlight.current) return;
+    if (!isSupabaseConfigured()) {
+      toast.error("Google sign-in is not configured yet. Please try again later.");
+      return;
+    }
+    googleLoginInFlight.current = true;
+    setIsLoading(true);
+    void supabase.auth
+      .signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: getAuthCallbackUrl() },
+      })
+      .then(({ error }) => {
+        if (error) {
+          googleLoginInFlight.current = false;
+          setIsLoading(false);
+          toast.error("Unable to start Google sign-in. Please try again.");
+        }
+        // On success the browser is redirected away from this page.
+      })
+      .catch(() => {
+        googleLoginInFlight.current = false;
+        setIsLoading(false);
+        toast.error("Unable to reach the sign-in service. Check your connection and try again.");
+      });
+  }, [setIsLoading]);
+
+function buildAuthUserFromSupabase(sbUser: any): AuthUser {
+  const meta = sbUser.user_metadata || {};
+  const fullName = meta.full_name || meta.name || "";
+  const nameParts = fullName.trim().split(" ");
+  const firstName = meta.given_name || nameParts[0] || sbUser.email?.split("@")[0] || "User";
+  const lastName = meta.family_name || nameParts.slice(1).join(" ") || "";
+  const avatarUrl = meta.avatar_url || meta.picture || undefined;
+
+  return {
+    id: sbUser.id,
+    externalId: sbUser.id,
+    email: sbUser.email || "",
+    firstName,
+    lastName,
+    avatarUrl,
+    memberships: [
+      {
+        id: `m-${sbUser.id}`,
+        userId: sbUser.id,
+        tenantId: "demo-tenant-id",
+        role: "OWNER",
+        createdAt: sbUser.created_at || new Date().toISOString(),
+      },
+    ],
+    activeTenantId: "demo-tenant-id",
+    activeRole: "OWNER",
+  };
+}
+
+  /**
+   * Bridge the current Supabase session into a Doloyal API session
+   * (`doloyal_token` + user cache). Used by the OAuth callback page so the
+   * dashboard never mounts with a stale/mock identity, and by the
+   * onAuthStateChange listener after a refresh.
+   */
+  const resolveSupabaseSession = React.useCallback(async (): Promise<AuthUser | null> => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+      if (!session?.user) return null;
       try {
-        const result = await api.googleLoginFromAccessToken(
-          tokenResponse.access_token,
-        );
+        const result = await api.supabaseExchange(session.access_token);
         if (result?.token && result?.user) {
           setAuth(result.token, result.user);
-          window.location.href = "/app/dashboard";
-          return;
+          return result.user;
         }
-      } catch (err) {
-        console.warn("Google login failed, falling back to demo:", err);
-        const r = await api.demoLogin();
-        if (r) {
-          setAuth(r.token, r.user);
-          window.location.href = "/app/dashboard";
-          return;
-        }
-      } finally {
-        setIsLoading(false);
+      } catch {
+        // Fallback to client-constructed AuthUser if backend exchange API is unavailable
       }
-    },
-    onError: () => setIsLoading(false),
-    flow: "implicit",
-  });
+      const fallbackUser = buildAuthUserFromSupabase(session.user);
+      setAuth(session.access_token, fallbackUser);
+      return fallbackUser;
+    } catch {
+      const s = getSavedUser();
+      if (s) return s;
+    }
+    return null;
+  }, [setAuth]);
+
+  // Keep the Doloyal session in sync with the Supabase session:
+  // - restore the API session after a refresh / return visit (INITIAL_SESSION,
+  //   TOKEN_REFRESHED) without showing the login page again
+  // - clear local auth state when Supabase signs the session out
+  // Only re-bridge when the Supabase user differs from the cached one, so an
+  // existing email/password session is never hijacked by a stale Google session.
+  React.useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    let cancelled = false;
+
+    const syncSupabaseSession = async (accessToken: string) => {
+      if (cancelled) return;
+      const cached = getSavedUser();
+      const { data } = await supabase.auth.getUser(accessToken);
+      const sbUser = data.user;
+      if (!sbUser || !sbUser.email) return;
+      if (cached && cached.email !== "demo@doloyal.ai" && cached.email === sbUser.email) {
+        return; // already bridged to this Supabase user
+      }
+      try {
+        const result = await api.supabaseExchange(accessToken);
+        if (!cancelled && result?.token && result?.user) {
+          setAuth(result.token, result.user);
+          return;
+        }
+      } catch {
+        // Keep cached user or fallback to client-constructed AuthUser
+      }
+      if (!cancelled) {
+        const fallbackUser = buildAuthUserFromSupabase(sbUser);
+        setAuth(accessToken, fallbackUser);
+      }
+    };
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        clearAuth();
+      } else if (session) {
+        void syncSupabaseSession(session.access_token);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.subscription.unsubscribe();
+    };
+  }, [setAuth, clearAuth]);
 
   const demoLogin = React.useCallback(async () => {
     setIsLoading(true);
@@ -311,8 +425,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = React.useCallback(() => {
-    clearAuth();
-    window.location.href = "/sign-in";
+    void (async () => {
+      try {
+        if (isSupabaseConfigured()) {
+          await supabase.auth.signOut();
+        }
+      } catch {
+        // Local session is still cleared below even if signOut fails
+      }
+      clearAuth();
+      window.location.href = "/sign-in";
+    })();
   }, [clearAuth]);
 
   const switchTenant = React.useCallback(
@@ -340,8 +463,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       switchTenant,
       refreshUser,
+      resolveSupabaseSession,
     }),
-    [user, isLoading, login, loginWithGoogle, demoLogin, signUp, logout, switchTenant, refreshUser],
+    [user, isLoading, login, loginWithGoogle, demoLogin, signUp, logout, switchTenant, refreshUser, resolveSupabaseSession],
   );
 
   return (

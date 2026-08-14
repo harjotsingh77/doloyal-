@@ -138,6 +138,7 @@ export interface AuthUser {
   lastName?: string;
   avatarUrl?: string;
   twoFactorEnabled?: boolean;
+  isAdmin?: boolean;
   memberships: Membership[];
   activeTenantId: string;
   activeRole: Role;
@@ -1587,23 +1588,11 @@ export interface WebhookEvent {
   createdAt: string;
 }
 
-export interface SubscriptionPlan {
-  id: string;
-  name: string;
-  description: string;
-  priceMonthly: number;
-  priceYearly: number;
-  features: string[];
-  limits: {
-    customers: number;
-    staff: number;
-    branches: number;
-    aiQueries: number;
-    storage: number;
-    apiLimits: number;
-    automationLimits: number;
-  };
-}
+/**
+ * Subscription plan details as returned by the billing API. This matches the
+ * shared `Plan` definition (the single source of truth for pricing/limits).
+ */
+export type SubscriptionPlan = import("./plans").Plan;
 
 export interface TenantSubscription {
   id: string;
@@ -1615,7 +1604,82 @@ export interface TenantSubscription {
   autoRenew: boolean;
   createdAt: string;
   updatedAt: string;
-  planDetails?: SubscriptionPlan;
+  planDetails?: SubscriptionPlan | null;
+}
+
+// ─── Billing Center ──────────────────────────────────────────────────────────
+
+export type BillingStatus =
+  | 'TRIAL'
+  | 'ACTIVE'
+  | 'PAST_DUE'
+  | 'PAUSED'
+  | 'CANCELING'
+  | 'CANCELED'
+  | 'PAYMENT_FAILED';
+
+export interface SubscriptionPaymentMethod {
+  brand?: string;
+  last4?: string;
+  expMonth?: string;
+  expYear?: string;
+  isDefault?: boolean;
+  addedAt?: string;
+}
+
+export interface SubscriptionUsageMetric {
+  used: number;
+  limit: number | null;
+}
+
+export interface SubscriptionUsage {
+  customers: SubscriptionUsageMetric;
+  branches: SubscriptionUsageMetric;
+  staff: SubscriptionUsageMetric;
+  aiQueries: SubscriptionUsageMetric;
+  campaigns: SubscriptionUsageMetric;
+}
+
+export interface BillingSubscription {
+  id: string;
+  tenantId: string;
+  plan: string;
+  status: BillingStatus;
+  rawStatus?: string;
+  trialEndsAt?: string | null;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  nextBillingDate?: string;
+  autoRenew: boolean;
+  canceledAt?: string | null;
+  billingCycle: 'monthly' | 'yearly';
+  paymentMethod?: SubscriptionPaymentMethod | null;
+  provider: string;
+  hasPaymentFailed?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  planDetails?: SubscriptionPlan | null;
+  usage?: SubscriptionUsage;
+}
+
+export type BillingHistoryType =
+  | 'TRIAL_STARTED'
+  | 'PLAN_CHANGED'
+  | 'PAYMENT_METHOD_UPDATED'
+  | 'SUBSCRIPTION_CANCELED'
+  | 'SUBSCRIPTION_RESTARTED'
+  | 'PAYMENT_SUCCEEDED'
+  | 'PAYMENT_FAILED';
+
+export interface BillingHistoryEntry {
+  id: string;
+  type: BillingHistoryType;
+  description?: string | null;
+  plan?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  status?: string | null;
+  createdAt: string;
 }
 
 export interface ConnectedWebsiteStats {
@@ -1708,4 +1772,172 @@ export interface CreateConnectedWebsiteInput {
   websiteUrl: string;
   framework: WebsiteFramework;
   businessName?: string;
+}
+
+// ─── Website Services (requests + chat) ─────────────────────────────────────
+
+export interface WebsiteProjectRequirement {
+  id: string;
+  projectId: string;
+  businessName: string;
+  businessType: string;
+  businessLocation?: string | null;
+  businessPhone?: string | null;
+  businessEmail?: string | null;
+  existingWebsiteUrl?: string | null;
+  websiteTypes: string[];
+  designStyle: string[];
+  designPreference: string;
+  referenceUrl?: string | null;
+  hasLogo: boolean;
+  logoUrl?: string | null;
+  pageCount: string;
+  requiredFeatures: string[];
+  additionalRequirements?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebsiteProjectFile {
+  id: string;
+  projectId: string;
+  uploadedByUserId: string;
+  uploadedByRole: string;
+  category: string;
+  fileName: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  url: string;
+  createdAt: string;
+}
+
+export interface WebsiteProjectStatusHistory {
+  id: string;
+  projectId: string;
+  oldStatus?: string | null;
+  newStatus: string;
+  changedById?: string | null;
+  changedByName?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface WebsiteConversationRef {
+  id: string;
+  projectId: string;
+  assignedAdminId?: string | null;
+  assignedAdminName?: string | null;
+  status: string;
+  lastMessageAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    messages: number;
+  };
+}
+
+export interface WebsiteMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderRole: string;
+  message: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentMimeType?: string | null;
+  isLink: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface WebsiteConversationNote {
+  id: string;
+  conversationId: string;
+  authorId?: string | null;
+  authorName?: string | null;
+  note: string;
+  createdAt: string;
+}
+
+export interface WebsiteProject {
+  id: string;
+  tenantId: string;
+  customerUserId: string;
+  name: string;
+  websiteType: string;
+  goal?: string | null;
+  status: string;
+  liveUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  requirements?: WebsiteProjectRequirement | null;
+  files?: WebsiteProjectFile[];
+  conversation?: WebsiteConversationRef | null;
+  statusHistory?: WebsiteProjectStatusHistory[];
+  customerUser?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email: string;
+    avatarUrl?: string | null;
+  } | null;
+  tenant?: { id: string; name: string; slug?: string | null } | null;
+}
+
+export interface WebsiteProjectDetail extends WebsiteProject {
+  requirements: WebsiteProjectRequirement | null;
+  files: WebsiteProjectFile[];
+  conversation: WebsiteConversationRef | null;
+  statusHistory: WebsiteProjectStatusHistory[];
+}
+
+export interface WebsiteProjectConversation {
+  conversation: WebsiteConversationRef;
+  messages: WebsiteMessage[];
+}
+
+export interface WebsiteProjectCreateInput {
+  name: string;
+  websiteType: string;
+  goal?: string;
+  requirements?: {
+    businessName?: string;
+    businessType?: string;
+    businessLocation?: string;
+    businessPhone?: string;
+    businessEmail?: string;
+    existingWebsiteUrl?: string;
+    websiteTypes?: string[];
+    designStyle?: string[];
+    designPreference?: string;
+    referenceUrl?: string;
+    hasLogo?: boolean;
+    logoUrl?: string;
+    pageCount?: string;
+    requiredFeatures?: string[];
+    additionalRequirements?: string;
+  };
+}
+
+export interface WebsiteProjectUpdateInput {
+  name?: string;
+  websiteType?: string;
+  goal?: string;
+  requirements?: Partial<WebsiteProjectCreateInput["requirements"]>;
+}
+
+export interface WebsiteMessageInput {
+  message: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentMimeType?: string;
+  isLink?: boolean;
+}
+
+export interface AdminWebsiteProjectList {
+  items: WebsiteProject[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }

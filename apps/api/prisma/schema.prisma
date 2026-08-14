@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -146,11 +147,17 @@ model User {
   twoFactorEnabled  Boolean  @default(false)
   tokenVersion      Int      @default(0)
   sessions          Json?
+  /// Whether this user is part of the Doloyal team and may access the
+  /// internal Website Services admin panel.
+  isAdmin           Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   memberships Membership[]
   integrations Integration[]
+  websiteProjects  WebsiteProject[]            @relation("CustomerWebsiteProjects")
+  adminConversations WebsiteConversation[]      @relation("AssignedAdmin")
+  adminStatusChanges WebsiteProjectStatusHistory[] @relation("StatusChangedBy")
 
   staffProfiles     StaffProfile[]
   invitationsSent   Invitation[]       @relation("InvitedBy")
@@ -253,6 +260,7 @@ model Tenant {
   loyaltyFeatureEntities LoyaltyFeatureEntity[]
   loyaltyAuditLogs      LoyaltyAuditLog[]
   subscriptions         Subscription[]
+  subscriptionEvents    SubscriptionEvent[]
   bookingLinks          BookingLink[]
   notifications         Notification[]
   notificationTemplates NotificationTemplate[]
@@ -261,6 +269,9 @@ model Tenant {
   widgetSettings        WidgetSettings?
   availabilityConfig    AvailabilityConfig?
   websites              Website[]
+  websiteProjects       WebsiteProject[]
+  websiteConversations  WebsiteConversation[]
+  websiteMessages       WebsiteMessage[]
   integrations          Integration[]
   connectedWebsites     ConnectedWebsite[]
   websiteApiKeys        WebsiteApiKey[]
@@ -1330,6 +1341,26 @@ model Subscription {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
+/// Immutable billing event log powering the Billing Center history.
+/// One row per subscription lifecycle event (trial start, plan change,
+/// payment update, cancel, restart, payment outcome).
+model SubscriptionEvent {
+  id          String   @id @default(uuid())
+  tenantId    String
+  type        String   // TRIAL_STARTED | PLAN_CHANGED | PAYMENT_METHOD_UPDATED | SUBSCRIPTION_CANCELED | SUBSCRIPTION_RESTARTED | PAYMENT_SUCCEEDED | PAYMENT_FAILED
+  plan        String?
+  description String?
+  amount      Float?
+  currency    String?
+  status      String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
 model SyncLog {
   id             String   @id @default(uuid())
   integrationId  String
@@ -2025,4 +2056,178 @@ model AiUsage {
 
   @@index([tenantId, createdAt])
   @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Website Services — customer requests + admin chat
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum WebsiteProjectStatus {
+  REQUESTED
+  REVIEWING
+  IN_DISCUSSION
+  IN_PROGRESS
+  DESIGN_REVIEW
+  DEVELOPMENT
+  READY_FOR_REVIEW
+  PUBLISHED
+  COMPLETED
+}
+
+enum WebsiteConversationStatus {
+  OPEN
+  CLOSED
+}
+
+/// A professional website request submitted by a Doloyal customer. The Doloyal
+/// team (admins) review it and build the site, while the customer discusses and
+/// tracks the project through the built-in chat.
+model WebsiteProject {
+  id             String                @id @default(cuid())
+  tenantId       String
+  customerUserId String
+  name           String
+  websiteType    String
+  goal           String?
+  status         WebsiteProjectStatus  @default(REQUESTED)
+  liveUrl        String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  tenant        Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerUser  User                        @relation("CustomerWebsiteProjects", fields: [customerUserId], references: [id], onDelete: Cascade)
+  requirements  WebsiteProjectRequirement?
+  files         WebsiteProjectFile[]
+  conversation  WebsiteConversation?
+  statusHistory WebsiteProjectStatusHistory[]
+
+  @@index([tenantId, status])
+  @@index([customerUserId])
+  @@index([status, updatedAt])
+}
+
+/// Structured answers captured by the Website Services request form.
+model WebsiteProjectRequirement {
+  id                     String   @id @default(cuid())
+  projectId              String   @unique
+  businessName           String
+  businessType           String
+  businessLocation       String?
+  businessPhone          String?
+  businessEmail          String?
+  existingWebsiteUrl     String?
+  /// One or more website types (Business, Booking, Landing Page, E-commerce…)
+  websiteTypes           String[] @default([])
+  /// Preferred design styles (Minimal, Modern, Premium, Bold…)
+  designStyle            String[] @default([])
+  /// REFERENCE (customer provided a reference) | SUGGEST (Doloyal decides)
+  designPreference       String
+  referenceUrl           String?
+  hasLogo                Boolean  @default(false)
+  logoUrl                String?
+  pageCount              String
+  requiredFeatures       String[] @default([])
+  additionalRequirements String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  project WebsiteProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// Files uploaded to a website project (reference images, logo, brand assets,
+/// chat attachments). URLs are stored as data-URLs matching the tenant upload
+/// flow so they stay fully persistent without external storage credentials.
+model WebsiteProjectFile {
+  id                String   @id @default(cuid())
+  projectId         String
+  uploadedByUserId  String
+  uploadedByRole    String   @default("CUSTOMER") // CUSTOMER | ADMIN
+  /// REFERENCE | LOGO | BRAND_ASSET | CHAT_ATTACHMENT
+  category          String
+  fileName          String
+  mimeType          String?
+  sizeBytes         Int?
+  url               String
+  createdAt         DateTime @default(now())
+
+  project WebsiteProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// One conversation per website project, linking the customer with the
+/// Doloyal team. `assignedAdminId` is set when an admin picks up the request.
+model WebsiteConversation {
+  id                String                   @id @default(cuid())
+  projectId         String                   @unique
+  tenantId          String
+  assignedAdminId   String?
+  assignedAdminName String?
+  status            WebsiteConversationStatus @default(OPEN)
+  lastMessageAt     DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  project  WebsiteProject          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  admin    User?                   @relation("AssignedAdmin", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  messages WebsiteMessage[]
+  notes    WebsiteConversationNote[]
+
+  @@index([tenantId, status])
+}
+
+/// Chat messages exchanged between the customer and the Doloyal team.
+model WebsiteMessage {
+  id                 String   @id @default(cuid())
+  conversationId     String
+  tenantId           String
+  senderId           String
+  /// CUSTOMER | ADMIN | SYSTEM
+  senderRole         String
+  message            String
+  attachmentUrl      String?
+  attachmentName     String?
+  attachmentMimeType String?
+  /// Inline-rendered confirmation that a URL was shared.
+  isLink             Boolean  @default(false)
+  readAt             DateTime?
+  createdAt          DateTime @default(now())
+
+  conversation WebsiteConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+/// Immutable record of every project status transition.
+model WebsiteProjectStatusHistory {
+  id            String   @id @default(cuid())
+  projectId     String
+  oldStatus     String?
+  newStatus     String
+  changedById   String?
+  changedByName String?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  project   WebsiteProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changedBy User?          @relation("StatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+}
+
+/// Private notes admins attach to a project's conversation (internal only).
+model WebsiteConversationNote {
+  id             String   @id @default(cuid())
+  conversationId String
+  authorId       String?
+  authorName     String?
+  note           String
+  createdAt      DateTime @default(now())
+
+  conversation WebsiteConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
 }

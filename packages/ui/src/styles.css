@@ -16,11 +16,11 @@
 
 :root {
     /* Brand */
-    --color-primary: 23 97 253; /* #1761FD */
+    --color-primary: 16 94 246; /* #105EF6 */
     --color-primary-foreground: 255 255 255;
-    --color-accent: 59 130 246; /* #3B82F6 */
-    --color-accent-strong: 14 75 216; /* #0E4BD8 */
-    --color-brand-2: 23 97 253;
+    --color-accent: 16 94 246; /* #105EF6 */
+    --color-accent-strong: 13 79 210; /* #0D4FD2 */
+    --color-brand-2: 16 94 246;
     --color-brand-3: 59 130 246;
     --color-success: 16 185 129; /* #10B981 */
     --color-danger: 239 68 68; /* #EF4444 */
@@ -40,9 +40,9 @@
     --radius: 1rem;
     --radius-sm: 0.625rem;
     --radius-lg: 1.25rem;
-    --shadow-soft: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 28px -10px rgba(23, 97, 253, 0.1);
-    --shadow-lifted: 0 2px 4px rgba(17, 17, 17, 0.05), 0 22px 48px -16px rgba(23, 97, 253, 0.22);
-    --ring: 23 97 253;
+    --shadow-soft: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 28px -10px rgba(16, 94, 246, 0.1);
+    --shadow-lifted: 0 2px 4px rgba(17, 17, 17, 0.05), 0 22px 48px -16px rgba(16, 94, 246, 0.22);
+    --ring: 16 94 246;
   }
 
   .dark {

@@ -185,6 +185,57 @@ export class AuthService {
     };
   }
 
+  /**
+   * Verifies a Supabase access token against GoTrue (server-side) and maps the
+   * verified Supabase user to the shape expected by `googleLogin`.
+   *
+   * The Google identity id (Supabase `identities[].id`) is preferred as the
+   * profile id so that accounts created via the legacy direct-Google flow
+   * (stored under `User.googleId`) are matched instead of duplicated.
+   */
+  async resolveSupabaseUser(accessToken: string): Promise<{ id: string; email: string; firstName: string; lastName: string; avatarUrl?: string }> {
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey || !supabaseUrl.includes('supabase.co')) {
+      throw new UnauthorizedException('Supabase authentication is not configured.');
+    }
+
+    let userInfo: any;
+    try {
+      const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error(`GoTrue returned ${res.status}`);
+      userInfo = await res.json();
+    } catch {
+      throw new UnauthorizedException('Invalid Supabase session token.');
+    }
+
+    const email = userInfo?.email;
+    if (!email) throw new UnauthorizedException('Supabase session is missing an email.');
+
+    const identity = (userInfo?.identities ?? []).find((i: any) => i?.provider === 'google');
+    const meta = userInfo?.user_metadata ?? {};
+    const fullName =
+      meta.full_name ||
+      identity?.user_metadata?.full_name ||
+      identity?.claims?.full_name ||
+      meta.name ||
+      '';
+    const nameParts = String(fullName).trim().split(/\s+/).filter(Boolean);
+    const avatarUrl =
+      meta.avatar_url || meta.picture || identity?.user_metadata?.avatar_url || undefined;
+
+    return {
+      id: identity?.id || userInfo.id,
+      email,
+      firstName: nameParts[0] || 'User',
+      lastName: nameParts.slice(1).join(' ') || '',
+      avatarUrl,
+    };
+  }
+
   async getMe(user: any): Promise<AuthUser> {
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
@@ -291,6 +342,7 @@ export class AuthService {
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: Boolean(user.twoFactorEnabled),
+      isAdmin: Boolean(user.isAdmin),
       memberships: (user.memberships || []).map((m: any) => ({
         id: m.id,
         userId: m.userId,

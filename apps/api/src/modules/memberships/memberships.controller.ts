@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, 
 import { MembershipsService } from './memberships.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Roles } from '../../common/roles.decorator';
-import { IsString, IsNumber, IsArray, IsOptional, IsNotEmpty, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsArray, IsOptional, IsNotEmpty, IsIn, Matches, MaxLength } from 'class-validator';
 import { PLANS, getPlan } from './plan-definitions';
 
 class CreateTierDto {
@@ -81,6 +81,28 @@ class AssignCustomerDto {
   tierId: string;
 }
 
+class PaymentMethodDto {
+  @IsString()
+  @IsOptional()
+  @MaxLength(30)
+  brand?: string;
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{4}$/, { message: 'last4 must be exactly 4 digits' })
+  last4?: string;
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^(0[1-9]|1[0-2])$/, { message: 'expMonth must be MM' })
+  expMonth?: string;
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{2}$|^\d{4}$/, { message: 'expYear must be YY or YYYY' })
+  expYear?: string;
+}
+
 @Controller('memberships')
 export class MembershipsController {
   constructor(private readonly membershipsService: MembershipsService) {}
@@ -149,10 +171,17 @@ export class MembershipsController {
   }
 
   @Get('subscription')
+  @Roles('OWNER', 'MANAGER')
   async getSubscription(@CurrentUser() user: any) {
     const sub = await this.membershipsService.getSubscription(user.activeTenantId);
     if (!sub) throw new NotFoundException('No subscription found');
     return sub;
+  }
+
+  @Get('subscription/history')
+  @Roles('OWNER', 'MANAGER')
+  async getBillingHistory(@CurrentUser() user: any) {
+    return this.membershipsService.getBillingHistory(user.activeTenantId);
   }
 
   @Put('plan')
@@ -165,5 +194,25 @@ export class MembershipsController {
       throw new NotFoundException('Invalid plan');
     }
     return this.membershipsService.changePlan(user.activeTenantId, plan);
+  }
+
+  @Post('subscription/cancel')
+  @Roles('OWNER')
+  @HttpCode(HttpStatus.OK)
+  async cancelSubscription(@CurrentUser() user: any) {
+    return this.membershipsService.cancelSubscription(user.activeTenantId);
+  }
+
+  @Post('subscription/restart')
+  @Roles('OWNER')
+  @HttpCode(HttpStatus.OK)
+  async restartSubscription(@CurrentUser() user: any) {
+    return this.membershipsService.restartSubscription(user.activeTenantId);
+  }
+
+  @Put('subscription/payment-method')
+  @Roles('OWNER')
+  async updatePaymentMethod(@Body() dto: PaymentMethodDto, @CurrentUser() user: any) {
+    return this.membershipsService.updatePaymentMethod(user.activeTenantId, dto);
   }
 }

@@ -105,7 +105,7 @@ export class TenantsService {
     await this.prisma.subscription.create({
       data: {
         tenantId: tenant.id,
-        plan: 'professional',
+        plan: 'growth',
         status: 'ACTIVE',
       },
     });

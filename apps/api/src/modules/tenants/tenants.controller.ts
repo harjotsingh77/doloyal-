@@ -145,6 +145,10 @@ class UpdateTenantDto {
   @IsString() @IsOptional() email?: string;
   @IsString() @IsOptional() website?: string;
   @IsString() @IsOptional() @MaxLength(500) address?: string;
+  @IsString() @IsOptional() @MaxLength(120) city?: string;
+  @IsString() @IsOptional() @MaxLength(120) state?: string;
+  @IsString() @IsOptional() @MaxLength(20) zip?: string;
+  @IsString() @IsOptional() @MaxLength(60) country?: string;
   @IsString() @IsOptional() currency?: string;
   @IsString() @IsOptional() timezone?: string;
   @IsString() @IsOptional() language?: string;

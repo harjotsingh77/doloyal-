@@ -83,6 +83,15 @@ export function relativeTime(iso: string | Date): string {
   return rtf.format(diffMins, "minute");
 }
 
+/** Format a timestamp as a short time + date (e.g. "2:34 PM · Aug 5"). */
+export function formatTime(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "";
+  const time = date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
+  const day = date.toLocaleDateString("en", { month: "short", day: "numeric" });
+  return `${time} · ${day}`;
+}
+
 export function initials(name: string): string {
   return name
     .split(" ")

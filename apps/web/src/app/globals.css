@@ -38,14 +38,14 @@ body {
 
 /* Brand gradient text */
 .gradient-text {
-  background-image: linear-gradient(100deg, #1761fd 0%, #3b82f6 55%, #0e4bd8 100%);
+  background-image: linear-gradient(100deg, #105EF6 0%, #3b82f6 55%, #0d4fd2 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 .gradient-text-animate {
-  background-image: linear-gradient(100deg, #1761fd, #3b82f6, #0e4bd8, #1761fd);
+  background-image: linear-gradient(100deg, #105EF6, #3b82f6, #0d4fd2, #105EF6);
   background-size: 240% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -54,7 +54,7 @@ body {
 }
 
 .gradient-bg {
-  background-image: linear-gradient(100deg, #1761fd 0%, #3b82f6 100%);
+  background-image: linear-gradient(100deg, #105EF6 0%, #3b82f6 100%);
 }
 
 @keyframes gradient-move {

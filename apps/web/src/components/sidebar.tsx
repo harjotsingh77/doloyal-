@@ -9,6 +9,7 @@ import { APP_NAV } from "@doloyal/shared";
 import { cn } from "@doloyal/ui";
 import { Badge, Logo } from "@doloyal/ui";
 import { useBranch } from "@/lib/branch-context";
+import { useAuth } from "@/lib/auth";
 
 function DynamicIcon({ name, className }: { name: string; className?: string }) {
   const iconName = name as keyof typeof Lucide;
@@ -55,6 +56,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { mode, workspaceBase, selectedBranch } = useBranch();
+  const { user } = useAuth();
 
   const resolveHref = (href: string) => {
     if (mode === "branch" && selectedBranch) {
@@ -156,6 +158,27 @@ export function Sidebar({
               </li>
             );
           })}
+
+          {user?.isAdmin ? (
+            <li>
+              <Link
+                href="/admin/website-requests"
+                onClick={() => onMobileClose?.()}
+                className={cn(
+                  "group relative mt-2 flex items-center gap-3 rounded-[0.625rem] border-t border-[rgb(var(--color-border))] px-3 py-2.5 pt-3 text-sm font-medium transition-all duration-200",
+                  pathname.startsWith("/admin")
+                    ? "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
+                    : "text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]",
+                  collapsed && "justify-center px-2",
+                )}
+              >
+                <span className="relative z-10">
+                  <Lucide.ShieldCheck className={cn("h-4.5 w-4.5 shrink-0", collapsed && "h-5 w-5")} />
+                </span>
+                {!collapsed && <span className="relative z-10 truncate">Admin · Website Requests</span>}
+              </Link>
+            </li>
+          ) : null}
         </ul>
       </nav>
 

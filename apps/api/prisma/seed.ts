@@ -31,7 +31,11 @@ const REWARDS_DATA = [
 async function main() {
   console.log('Seeding Doloyal database...');
 
-  const existingUser = await prisma.user.findUnique({ where: { clerkId: 'dev-user' } });
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ clerkId: 'dev-user' }, { email: 'demo@doloyal.ai' }],
+    },
+  });
   if (existingUser) {
     console.log('Seed data already exists. Skipping...');
     return;
@@ -96,7 +100,7 @@ async function main() {
   });
 
   await prisma.subscription.create({
-    data: { tenantId: tenant.id, plan: 'PROFESSIONAL', status: 'ACTIVE' },
+    data: { tenantId: tenant.id, plan: 'GROWTH', status: 'ACTIVE' },
   });
 
   const branch = await prisma.branch.create({

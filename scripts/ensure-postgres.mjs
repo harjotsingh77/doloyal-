@@ -111,9 +111,23 @@ async function main() {
   const url = process.env.DATABASE_URL || env.DATABASE_URL || DEFAULT_URL;
   const cfg = parseUrl(url);
 
-  if (await portOpen(cfg.host, cfg.port)) {
-    console.log(`[doloyal] PostgreSQL already reachable at ${cfg.host}:${cfg.port}`);
-    process.exit(0);
+  const isRemote = cfg.host !== "localhost" && cfg.host !== "127.0.0.1" && cfg.host !== "0.0.0.0";
+  const attempts = isRemote ? 10 : 1;
+  const timeout = isRemote ? 3000 : 1500;
+
+  for (let i = 0; i < attempts; i++) {
+    if (await portOpen(cfg.host, cfg.port, timeout)) {
+      console.log(`[doloyal] PostgreSQL reachable at ${cfg.host}:${cfg.port}`);
+      process.exit(0);
+    }
+    if (isRemote && i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+
+  if (isRemote) {
+    console.error(`[doloyal] Remote database at ${cfg.host}:${cfg.port} is not reachable. Check network connection or Supabase status.`);
+    process.exit(1);
   }
 
   console.log(`[doloyal] No PostgreSQL on ${cfg.host}:${cfg.port}`);

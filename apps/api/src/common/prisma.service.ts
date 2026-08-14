@@ -31,6 +31,9 @@ const ALL_MODELS = [
   'referralConversion', 'referralRewardRecord', 'referralEvent',
   'referralRegistration', 'referralSource', 'referralLeaderboard',
   'aiConversation', 'aiMessage', 'aiAttachment', 'aiFeedback', 'aiUsage',
+  'websiteProject', 'websiteProjectRequirement', 'websiteProjectFile',
+  'websiteConversation', 'websiteMessage', 'websiteProjectStatusHistory',
+  'websiteConversationNote',
 ];
 
 function uid() {
@@ -286,7 +289,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const subscriptionRecord = {
       id: subscriptionId,
       tenantId,
-      plan: 'professional',
+      plan: 'growth',
       status: 'ACTIVE',
       stripeId: null,
       stripePriceId: null,

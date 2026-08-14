@@ -9,6 +9,7 @@ import type {
   PublicStaff, BookingSlot, AppointmentDetail,
   ConnectedWebsite, ConnectedWebsiteCreateResult, WebsiteConnectionApiKey,
   WebsiteConnectionWebhook, ConnectionLogEntry, CreateConnectedWebsiteInput,
+  BillingSubscription, BillingHistoryEntry, SubscriptionPaymentMethod,
 } from "@doloyal/shared";
 import type {
   CustomerQuery, CreateCustomerInput, UpdateCustomerInput,
@@ -543,6 +544,165 @@ export const api = {
       body: JSON.stringify(meta || {}),
     }),
 
+  // ─── Website Services (requests + chat) ────────────────────────────────────
+
+  listWebsiteProjects: () =>
+    request<import("@doloyal/shared").WebsiteProject[]>("/website-projects"),
+
+  getWebsiteProject: (projectId: string) =>
+    request<import("@doloyal/shared").WebsiteProjectDetail>(`/website-projects/${projectId}`),
+
+  createWebsiteProject: (data: import("@doloyal/shared").WebsiteProjectCreateInput) =>
+    request<import("@doloyal/shared").WebsiteProjectDetail>("/website-projects", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateWebsiteProject: (projectId: string, data: import("@doloyal/shared").WebsiteProjectUpdateInput) =>
+    request<import("@doloyal/shared").WebsiteProjectDetail>(`/website-projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  getWebsiteProjectMessages: (projectId: string) =>
+    request<import("@doloyal/shared").WebsiteProjectConversation>(`/website-projects/${projectId}/messages`),
+
+  sendWebsiteProjectMessage: (projectId: string, data: import("@doloyal/shared").WebsiteMessageInput) =>
+    request<import("@doloyal/shared").WebsiteMessage>(`/website-projects/${projectId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  markWebsiteProjectRead: (projectId: string) =>
+    request<{ updated: number }>(`/website-projects/${projectId}/messages/read`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getWebsiteProjectStatusHistory: (projectId: string) =>
+    request<import("@doloyal/shared").WebsiteProjectStatusHistory[]>(`/website-projects/${projectId}/status-history`),
+
+  deleteWebsiteProjectFile: (projectId: string, fileId: string) =>
+    request<{ id: string; deleted: boolean }>(`/website-projects/${projectId}/files/${fileId}`, {
+      method: "DELETE",
+    }),
+
+  /** Upload a project file as multipart → stored as a data-URL in the DB. */
+  uploadWebsiteProjectFile: async (projectId: string, file: File, category = "CHAT_ATTACHMENT") => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(
+      `${BASE_URL}/website-projects/${projectId}/upload?category=${encodeURIComponent(category)}`,
+      { method: "POST", headers, body: form },
+    );
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let body: { error?: { message?: string } } = {};
+      if (ct.includes("json")) { try { body = await res.json(); } catch {} }
+      throw new ApiError(res.status, "UPLOAD_FAILED", body.error?.message ?? "Upload failed");
+    }
+    const envelope = (await res.json()) as ApiResponse<import("@doloyal/shared").WebsiteProjectFile>;
+    if ("error" in envelope) throw new ApiError(res.status, envelope.error.code, envelope.error.message);
+    return envelope.data;
+  },
+
+  /** Subscribe to website-services realtime events (SSE). */
+  subscribeWebsiteProjectEvents: () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const withAuth = token
+      ? `${base}/website-projects/events?access_token=${encodeURIComponent(token)}`
+      : `${base}/website-projects/events`;
+    return new EventSource(withAuth);
+  },
+
+  // ─── Admin: Website Services ───────────────────────────────────────────────
+
+  adminListWebsiteProjects: (params?: { status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminWebsiteProjectList>(
+      `/admin/website-projects${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminGetWebsiteProject: (projectId: string) =>
+    request<import("@doloyal/shared").WebsiteProjectDetail>(`/admin/website-projects/${projectId}`),
+
+  adminUpdateWebsiteProject: (projectId: string, data: { name?: string; websiteType?: string; goal?: string; liveUrl?: string }) =>
+    request<import("@doloyal/shared").WebsiteProjectDetail>(`/admin/website-projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateWebsiteProjectStatus: (projectId: string, status: string, note?: string) =>
+    request<import("@doloyal/shared").WebsiteProject>(
+      `/admin/website-projects/${projectId}/status`,
+      { method: "PATCH", body: JSON.stringify({ status, note }) },
+    ),
+
+  adminAssignWebsiteProject: (projectId: string, adminId?: string) =>
+    request<import("@doloyal/shared").WebsiteProjectDetail>(
+      `/admin/website-projects/${projectId}/assign`,
+      { method: "POST", body: JSON.stringify({ adminId }) },
+    ),
+
+  adminGetWebsiteProjectMessages: (projectId: string) =>
+    request<import("@doloyal/shared").WebsiteProjectConversation>(`/admin/website-projects/${projectId}/messages`),
+
+  adminSendWebsiteProjectMessage: (projectId: string, data: import("@doloyal/shared").WebsiteMessageInput) =>
+    request<import("@doloyal/shared").WebsiteMessage>(`/admin/website-projects/${projectId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adminListWebsiteProjectNotes: (projectId: string) =>
+    request<import("@doloyal/shared").WebsiteConversationNote[]>(`/admin/website-projects/${projectId}/notes`),
+
+  adminAddWebsiteProjectNote: (projectId: string, note: string) =>
+    request<import("@doloyal/shared").WebsiteConversationNote>(`/admin/website-projects/${projectId}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+
+  adminUploadWebsiteProjectFile: async (projectId: string, file: File, category = "REFERENCE") => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(
+      `${BASE_URL}/admin/website-projects/${projectId}/upload?category=${encodeURIComponent(category)}`,
+      { method: "POST", headers, body: form },
+    );
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let body: { error?: { message?: string } } = {};
+      if (ct.includes("json")) { try { body = await res.json(); } catch {} }
+      throw new ApiError(res.status, "UPLOAD_FAILED", body.error?.message ?? "Upload failed");
+    }
+    const envelope = (await res.json()) as ApiResponse<import("@doloyal/shared").WebsiteProjectFile>;
+    if ("error" in envelope) throw new ApiError(res.status, envelope.error.code, envelope.error.message);
+    return envelope.data;
+  },
+
+  /** Subscribe to admin website-services realtime events (SSE). */
+  subscribeAdminWebsiteProjectEvents: () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const withAuth = token
+      ? `${base}/admin/website-projects/events?access_token=${encodeURIComponent(token)}`
+      : `${base}/admin/website-projects/events`;
+    return new EventSource(withAuth);
+  },
+
   claimReferral: (data: Record<string, unknown>) =>
     request<any>("/referrals/public/claim", { method: "POST", body: JSON.stringify(data) }),
 
@@ -740,10 +900,22 @@ export const api = {
     withFallback(() => request<any[]>("/memberships/plans"), "listSubscriptionPlans"),
 
   getSubscription: () =>
-    withFallback(() => request<any>("/memberships/subscription"), "getSubscription"),
+    withFallback(() => request<BillingSubscription>("/memberships/subscription"), "getSubscription"),
+
+  getBillingHistory: () =>
+    withFallback(() => request<BillingHistoryEntry[]>("/memberships/subscription/history"), "getBillingHistory"),
 
   changePlan: (plan: string) =>
-    withFallback(() => request<{ plan: string; message: string }>("/memberships/plan", { method: "PUT", body: JSON.stringify({ plan }) }), "changePlan", plan),
+    withFallback(() => request<{ plan: string; message: string; alreadyOnPlan?: boolean }>("/memberships/plan", { method: "PUT", body: JSON.stringify({ plan }) }), "changePlan", plan),
+
+  cancelSubscription: () =>
+    withFallback(() => request<{ message: string; status: string }>("/memberships/subscription/cancel", { method: "POST", body: JSON.stringify({}) }), "cancelSubscription"),
+
+  restartSubscription: () =>
+    withFallback(() => request<{ message: string; status: string }>("/memberships/subscription/restart", { method: "POST", body: JSON.stringify({}) }), "restartSubscription"),
+
+  updatePaymentMethod: (data: SubscriptionPaymentMethod) =>
+    withFallback(() => request<SubscriptionPaymentMethod>("/memberships/subscription/payment-method", { method: "PUT", body: JSON.stringify(data) }), "updatePaymentMethod", data),
 
   // ─── Doloyal AI Assistant (live) ────────────────────────────────────────────
   chatWithAssistant: (data: AssistantMessageInput) =>
@@ -1319,11 +1491,11 @@ export const api = {
   signUp: (data: { firstName: string; lastName: string; email: string; password: string; phone?: string }) =>
     request<{ token: string; user: any }>("/auth/signup", { method: "POST", body: JSON.stringify(data) }),
 
-  googleLogin: (idToken: string) =>
-    request<{ token: string; user: any }>("/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
-
-  googleLoginFromAccessToken: (accessToken: string) =>
-    request<{ token: string; user: any }>("/auth/google", { method: "POST", body: JSON.stringify({ accessToken }) }),
+  supabaseExchange: (accessToken: string) =>
+    request<{ token: string; user: any }>("/auth/supabase/exchange", {
+      method: "POST",
+      body: JSON.stringify({ accessToken }),
+    }),
 
   demoLogin: (): Promise<{ token: string; user: any }> =>
     Promise.resolve({

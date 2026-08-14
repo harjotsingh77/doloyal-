@@ -614,3 +614,119 @@ export const WEBSITE_FRAMEWORK_LABELS: Record<WebsiteFramework, string> = {
 
 export const CONNECTION_LOG_LEVELS = ["INFO", "WARN", "ERROR", "DEBUG"] as const;
 export type ConnectionLogLevel = (typeof CONNECTION_LOG_LEVELS)[number];
+
+// ─── Website Services (requests + chat) ─────────────────────────────────────
+
+export const WEBSITE_PROJECT_STATUSES = [
+  "REQUESTED",
+  "REVIEWING",
+  "IN_DISCUSSION",
+  "IN_PROGRESS",
+  "DESIGN_REVIEW",
+  "DEVELOPMENT",
+  "READY_FOR_REVIEW",
+  "PUBLISHED",
+  "COMPLETED",
+] as const;
+export type WebsiteProjectStatus = (typeof WEBSITE_PROJECT_STATUSES)[number];
+
+export const WEBSITE_PROJECT_STATUS_LABELS: Record<WebsiteProjectStatus, string> = {
+  REQUESTED: "Requested",
+  REVIEWING: "Reviewing",
+  IN_DISCUSSION: "In Discussion",
+  IN_PROGRESS: "In Progress",
+  DESIGN_REVIEW: "Design Review",
+  DEVELOPMENT: "Development",
+  READY_FOR_REVIEW: "Ready for Review",
+  PUBLISHED: "Published",
+  COMPLETED: "Completed",
+};
+
+export const WEBSITE_CONVERSATION_STATUSES = ["OPEN", "CLOSED"] as const;
+export type WebsiteConversationStatus = (typeof WEBSITE_CONVERSATION_STATUSES)[number];
+
+/** Website types offered by the Website Services flow. */
+export const WEBSITE_TYPES = [
+  "BUSINESS",
+  "BOOKING",
+  "E_COMMERCE",
+  "PORTFOLIO",
+  "LANDING_PAGE",
+  "BLOG",
+] as const;
+export type WebsiteType = (typeof WEBSITE_TYPES)[number];
+
+export const WEBSITE_TYPE_LABELS: Record<WebsiteType, string> = {
+  BUSINESS: "Business Website",
+  BOOKING: "Booking & Appointment",
+  E_COMMERCE: "E-commerce / Store",
+  PORTFOLIO: "Portfolio",
+  LANDING_PAGE: "Landing Page",
+  BLOG: "Blog / Content",
+};
+
+/** Design style directions customers can pick. */
+export const DESIGN_STYLES = [
+  "MINIMAL",
+  "MODERN",
+  "PREMIUM",
+  "BOLD",
+  "ELEGANT",
+  "FRIENDLY",
+  "TECH",
+  "LUXURY",
+] as const;
+export type DesignStyle = (typeof DESIGN_STYLES)[number];
+
+export const DESIGN_STYLE_LABELS: Record<DesignStyle, string> = {
+  MINIMAL: "Minimal & Clean",
+  MODERN: "Modern & Sleek",
+  PREMIUM: "Premium & Polished",
+  BOLD: "Bold & Edgy",
+  ELEGANT: "Elegant & Refined",
+  FRIENDLY: "Warm & Friendly",
+  TECH: "Tech & Futuristic",
+  LUXURY: "Luxury & Exclusive",
+};
+
+/** Feature add-ons a customer can request for their website. */
+export const WEBSITE_FEATURES = [
+  "CONTACT_FORM",
+  "ONLINE_BOOKING",
+  "WHATSAPP_BUTTON",
+  "GOOGLE_MAPS",
+  "INSTAGRAM_FEED",
+  "MULTI_LANGUAGE",
+  "BLOG",
+  "TESTIMONIALS",
+  "GALLERY",
+  "SEO",
+  "PAYMENTS",
+  "REVIEWS",
+] as const;
+export type WebsiteFeature = (typeof WEBSITE_FEATURES)[number];
+
+export const WEBSITE_FEATURE_LABELS: Record<WebsiteFeature, string> = {
+  CONTACT_FORM: "Contact form",
+  ONLINE_BOOKING: "Online booking",
+  WHATSAPP_BUTTON: "WhatsApp button",
+  GOOGLE_MAPS: "Google Maps",
+  INSTAGRAM_FEED: "Instagram feed",
+  MULTI_LANGUAGE: "Multi-language",
+  BLOG: "Blog",
+  TESTIMONIALS: "Testimonials",
+  GALLERY: "Photo gallery",
+  SEO: "SEO basics",
+  PAYMENTS: "Online payments",
+  REVIEWS: "Google reviews",
+};
+
+export const PAGE_COUNT_OPTIONS = ["1-3", "4-6", "7-10", "10+"] as const;
+
+export const PROJECT_FILE_CATEGORIES = [
+  "REFERENCE",
+  "LOGO",
+  "BRAND_ASSET",
+  "CHAT_ATTACHMENT",
+] as const;
+export type ProjectFileCategory = (typeof PROJECT_FILE_CATEGORIES)[number];

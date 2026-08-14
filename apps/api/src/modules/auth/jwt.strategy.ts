@@ -39,6 +39,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: user.twoFactorEnabled,
+      isAdmin: Boolean(user.isAdmin),
       memberships: user.memberships,
       activeTenantId: activeMembership?.tenantId || '',
       activeRole: activeMembership?.role || 'OWNER',

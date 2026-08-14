@@ -46,6 +46,19 @@ export default function SignInPage() {
     }
   };
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error") || params.get("auth");
+    if (err) {
+      const messages: Record<string, string> = {
+        access_denied: "Google sign-in was cancelled or declined.",
+        auth_failed: "Google sign-in could not be completed. Please try again.",
+        error: "Google sign-in could not be completed. Please try again.",
+      };
+      setError(messages[err] || "Google sign-in could not be completed. Please try again.");
+    }
+  }, []);
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[rgb(var(--color-background))] px-4">
       <motion.div

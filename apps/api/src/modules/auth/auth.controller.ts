@@ -24,6 +24,10 @@ class GoogleLoginDto {
   @IsString() @IsOptional() accessToken?: string;
 }
 
+class SupabaseLoginDto {
+  @IsString() @IsNotEmpty() accessToken: string;
+}
+
 class SwitchTenantDto {
   @IsString() @IsNotEmpty() tenantId: string;
 }
@@ -116,6 +120,16 @@ export class AuthController {
         },
         this.requestMeta(req),
       ),
+    };
+  }
+
+  @Public()
+  @Post('supabase/exchange')
+  @HttpCode(HttpStatus.OK)
+  async supabaseLogin(@Body() dto: SupabaseLoginDto, @Req() req: FastifyRequest) {
+    const profile = await this.authService.resolveSupabaseUser(dto.accessToken);
+    return {
+      data: await this.authService.googleLogin(profile, this.requestMeta(req)),
     };
   }
 
