@@ -204,10 +204,7 @@ export class MembershipsService {
   }
 
   async getSubscription(tenantId: string) {
-    const [sub, tenant] = await Promise.all([
-      this.prisma.subscription.findFirst({ where: { tenantId } }),
-      this.prisma.tenant.findUnique({ where: { id: tenantId } }),
-    ]);
+    const sub = await this.prisma.subscription.findFirst({ where: { tenantId } });
     if (!sub) return null;
 
     const planId = this.normalizePlan(sub.plan);

@@ -420,9 +420,9 @@ export function PermChips({ permissions }: { permissions: string[] }) {
   const grouped = new Map<string, string[]>();
   for (const key of permissions) {
     const info = permissionModuleFor(key);
-    const module = info?.module ?? "Other";
-    if (!grouped.has(module)) grouped.set(module, []);
-    grouped.get(module)!.push(info?.label ?? key);
+    const moduleName = info?.module ?? "Other";
+    if (!grouped.has(moduleName)) grouped.set(moduleName, []);
+    grouped.get(moduleName)!.push(info?.label ?? key);
   }
   return (
     <div className="flex flex-wrap gap-1.5">

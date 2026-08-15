@@ -59,7 +59,7 @@ export class BookingNotificationsService {
     return this.send(appointment.id, 'CONFIRMATION', 'SMS');
   }
 
-  async sendReminder(appointment: any, hoursBefore: number) {
+  async sendReminder(appointment: any) {
     return this.send(appointment.id, 'REMINDER', 'SMS');
   }
 

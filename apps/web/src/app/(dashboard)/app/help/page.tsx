@@ -1,309 +1,453 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  CircleHelp,
-  Search,
-  Mail,
+  ArrowRight,
   BookOpen,
-  MessageSquare,
   ChevronDown,
-  ExternalLink,
-  FileText,
-  LifeBuoy,
-  Sparkles,
-  CircleDollarSign,
+  Mail,
+  MessageCircle,
+  MessageSquare,
+  Search,
+  Ticket,
+  X,
 } from "lucide-react";
 import {
+  Badge,
   Button,
-  Input,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   CardDescription,
+  CardTitle,
+  Input,
   PageHeader,
-  Badge,
+  Skeleton,
 } from "@doloyal/ui";
+import { SUPPORT_STATUS_LABELS, SUPPORT_EMAIL } from "@doloyal/shared";
+import { api } from "@/lib/api";
+import { CreateTicketDialog } from "@/components/support/create-ticket-dialog";
 
-const FAQS = [
-  {
-    q: "What is doloyal AI and how does it work?",
-    a: "doloyal AI is an AI-powered customer retention platform designed for salons, spas, and clinics. It tracks customer visits, manages loyalty points, automates campaigns, and uses AI to predict churn — all from one dashboard.",
-  },
-  {
-    q: "How do I set up a loyalty program for my business?",
-    a: "Navigate to the Loyalty section in your dashboard. You can define earning rules (e.g., points per visit or spend), set reward tiers, and activate memberships. Customers will automatically start earning points on their next visit.",
-  },
-  {
-    q: "Can I send automated messages to my customers?",
-    a: "Yes. doloyal AI supports automated birthday messages, win-back campaigns for inactive customers, and appointment reminders via WhatsApp, SMS, and Email. Configure these under the Campaigns section.",
-  },
-  {
-    q: "How does the AI retention engine work?",
-    a: "The AI engine analyzes customer behavior patterns — visit frequency, average spend, redemption history — to predict which customers are at risk of churning. It then recommends targeted campaigns to re-engage them.",
-  },
-  {
-    q: "What payment methods do you accept?",
-    a: "We accept all major credit and debit cards (Visa, Mastercard, RuPay, Amex), UPI, and net banking. Enterprise plans can also pay via invoice. All payments are processed securely through Stripe.",
-  },
-  {
-    q: "Can I integrate doloyal AI with my existing tools?",
-    a: "doloyal AI offers integrations with Google Calendar, WhatsApp Business, Stripe, Shopify, Mailchimp, Google Analytics, Zapier, and QuickBooks. Visit the Integrations page to connect them.",
-  },
-  {
-    q: "How do I add staff members to my account?",
-    a: "Go to Settings > Staff Management. You can invite team members via email, assign roles (Admin, Manager, Staff), and set permissions for each role.",
-  },
-  {
-    q: "What happens when I exceed my plan limits?",
-    a: "You will receive a notification when you reach 80% of your plan limit. If you exceed it, features may be restricted until you upgrade. You can upgrade at any time from the Billing page.",
-  },
-];
+const OPEN_STATUSES = ["OPEN", "IN_PROGRESS", "WAITING_FOR_CUSTOMER"] as const;
 
-const HELP_CATEGORIES = [
-  {
-    title: "Getting Started",
-    description: "Set up your account, configure your business, and launch your loyalty program.",
-    icon: <Sparkles className="h-5 w-5" />,
-    articles: 12,
-  },
-  {
-    title: "Account & Billing",
-    description: "Manage your subscription, payment methods, and billing history.",
-    icon: <CircleDollarSign className="h-5 w-5" />,
-    articles: 8,
-  },
-  {
-    title: "Features",
-    description: "Learn about loyalty, campaigns, appointments, and rewards.",
-    icon: <FileText className="h-5 w-5" />,
-    articles: 24,
-  },
-  {
-    title: "API & Integrations",
-    description: "Developer docs, API reference, and integration guides.",
-    icon: <ExternalLink className="h-5 w-5" />,
-    articles: 16,
-  },
-  {
-    title: "Troubleshooting",
-    description: "Fix common issues, error codes, and known limitations.",
-    icon: <LifeBuoy className="h-5 w-5" />,
-    articles: 10,
-  },
-];
+const STATUS_DOT: Record<string, string> = {
+  OPEN: "bg-[rgb(var(--color-warning))]",
+  IN_PROGRESS: "bg-[rgb(var(--color-primary))]",
+  WAITING_FOR_CUSTOMER: "bg-[rgb(var(--color-accent))]",
+  RESOLVED: "bg-[rgb(var(--color-success))]",
+  CLOSED: "bg-[rgb(var(--color-muted-foreground))]",
+};
 
-const QUICK_LINKS = [
-  { label: "API Documentation", href: "#" },
-  { label: "Integration Guides", href: "#" },
-  { label: "Video Tutorials", href: "#" },
-  { label: "Community Forum", href: "#" },
-  { label: "System Status", href: "#" },
-  { label: "Release Notes", href: "#" },
-];
-
-function HelpSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-8 w-48 rounded bg-[rgb(var(--color-muted))] animate-pulse" />
-      <div className="h-4 w-72 rounded bg-[rgb(var(--color-muted))] animate-pulse" />
-      <div className="h-12 w-full max-w-md rounded-lg bg-[rgb(var(--color-muted))] animate-pulse" />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-40 rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6">
-            <div className="h-5 w-32 rounded bg-[rgb(var(--color-muted))] animate-pulse" />
-            <div className="mt-2 h-4 w-full rounded bg-[rgb(var(--color-muted))] animate-pulse" />
-            <div className="mt-1 h-4 w-3/4 rounded bg-[rgb(var(--color-muted))] animate-pulse" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+type SearchResult = Awaited<ReturnType<typeof api.listHelpArticles>>["articles"][number];
 
 export default function HelpPage() {
-  const [openFaq, setOpenFaq] = React.useState<number | null>(0);
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const router = useRouter();
+
+  // Live search
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState<SearchResult[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  const [searchFocused, setSearchFocused] = React.useState(false);
+  const searchRef = React.useRef<HTMLDivElement>(null);
+
+  // Data
+  const [faqs, setFaqs] = React.useState<SearchResult[]>([]);
+  const [tickets, setTickets] = React.useState<
+    Awaited<ReturnType<typeof api.listSupportTickets>>
+  >([]);
   const [loading, setLoading] = React.useState(true);
 
+  // Dialog
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+
+  // FAQ accordion
+  const [openFaq, setOpenFaq] = React.useState<number | null>(0);
+
   React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
+    let active = true;
+    (async () => {
+      try {
+        const [faqRes, ticketRes] = await Promise.all([
+          api.listHelpArticles({ faq: true }),
+          api.listSupportTickets(),
+        ]);
+        if (!active) return;
+        setFaqs(faqRes.articles);
+        setTickets(ticketRes);
+      } catch {
+        // FAQ/tickets are best-effort; the page still works.
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const faqFiltered = FAQS.filter(
-    (faq) =>
-      faq.q.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.a.toLowerCase().includes(searchQuery.toLowerCase()),
+  // Debounced live search
+  React.useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.listHelpArticles({ search: q, limit: 6 });
+        setResults(res.articles);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  const openTicket = tickets.find((t) =>
+    OPEN_STATUSES.includes(t.status as (typeof OPEN_STATUSES)[number]),
   );
 
-  if (loading) return <HelpSkeleton />;
+  const openChat = () => {
+    if (openTicket) {
+      router.push(`/app/help/tickets/${openTicket.id}`);
+    } else {
+      setDialogOpen(true);
+    }
+  };
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Help & Support"
-        description="Find answers, explore guides, or get in touch with our team."
+        description="Find answers or get help from the Doloyal team."
       />
 
-      <div className="relative mx-auto max-w-md">
-        <Search className="absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-[rgb(var(--color-muted-foreground))]" />
-        <Input
-          placeholder="Search help articles..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-12 w-full pl-10 text-base"
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {HELP_CATEGORIES.map((cat) => (
-          <Card key={cat.title} interactive className="group cursor-pointer">
-            <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgb(var(--color-primary)/0.08)] text-[rgb(var(--color-primary))] transition-colors group-hover:bg-[rgb(var(--color-primary)/0.14)]">
-                {cat.icon}
-              </div>
-              <CardTitle className="text-sm">{cat.title}</CardTitle>
-              <CardDescription className="text-xs leading-relaxed">
-                {cat.description}
-              </CardDescription>
-              <Badge variant="default">
-                {cat.articles} articles
-              </Badge>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CircleHelp className="h-5 w-5 text-[rgb(var(--color-primary))]" />
-                <CardTitle>Frequently Asked Questions</CardTitle>
-              </div>
-              <CardDescription>
-                Quick answers to the most common questions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {faqFiltered.length === 0 ? (
-                <p className="py-8 text-center text-sm text-[rgb(var(--color-muted-foreground))]">
-                  No matching questions found. Try a different search term.
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {faqFiltered.map((faq, i) => {
-                    const isOpen = openFaq === i;
-                    return (
-                      <div
-                        key={i}
-                        className="overflow-hidden rounded-xl border border-[rgb(var(--color-border))]"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setOpenFaq(isOpen ? null : i)}
-                          className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left text-sm font-medium transition-colors hover:bg-[rgb(var(--color-muted))]"
-                        >
-                          <span>{faq.q}</span>
-                          <ChevronDown
-                            className={`h-4 w-4 shrink-0 text-[rgb(var(--color-muted-foreground))] transition-transform duration-200 ${
-                              isOpen ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                        <div
-                          className={`overflow-hidden transition-all duration-200 ${
-                            isOpen ? "max-h-96" : "max-h-0"
-                          }`}
-                        >
-                          <p className="border-t border-[rgb(var(--color-border))] px-5 py-4 text-sm leading-relaxed text-[rgb(var(--color-muted-foreground))]">
-                            {faq.a}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {/* ─── Search ─────────────────────────────────────────────────────── */}
+      <div ref={searchRef} className="relative mx-auto max-w-2xl">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[rgb(var(--color-muted-foreground))]" />
+          <Input
+            placeholder="Search help articles..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            className="h-13 w-full pl-12 pr-10 text-base"
+          />
+          {query ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => {
+                setQuery("");
+                setResults([]);
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-[rgb(var(--color-accent))]" />
-                <CardTitle>Contact Support</CardTitle>
+        {searchFocused && query.trim().length >= 2 ? (
+          <div className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-[var(--shadow-lifted)]">
+            {searching ? (
+              <div className="space-y-2 p-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
               </div>
-              <CardDescription>
-                Get help from our support team.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgb(var(--color-accent)/0.1)] text-[rgb(var(--color-accent))]">
-                  <Mail className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Email us</p>
-                  <a
-                    href="mailto:support@doloyal.ai"
-                    className="text-sm text-[rgb(var(--color-primary))] hover:underline"
+            ) : results.length > 0 ? (
+              <div className="py-1.5">
+                {results.map((article) => (
+                  <Link
+                    key={article.id}
+                    href={`/app/help/articles/${article.slug}`}
+                    onClick={() => setSearchFocused(false)}
+                    className="block px-4 py-2.5 transition-colors hover:bg-[rgb(var(--color-muted))]"
                   >
-                    support@doloyal.ai
-                  </a>
-                </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate text-sm font-medium text-[rgb(var(--color-foreground))]">
+                        {article.title}
+                      </span>
+                      <Badge variant="outline" className="shrink-0">
+                        {article.category}
+                      </Badge>
+                    </div>
+                    <p className="mt-0.5 line-clamp-1 text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {article.description}
+                    </p>
+                  </Link>
+                ))}
+                <Link
+                  href={`/app/help/articles?search=${encodeURIComponent(query.trim())}`}
+                  onClick={() => setSearchFocused(false)}
+                  className="flex items-center justify-center gap-1 border-t border-[rgb(var(--color-border))] px-4 py-2.5 text-sm text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-muted))]"
+                >
+                  View all articles
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
-              <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4">
-                <div className="flex items-center gap-2">
-                  <Badge variant="success" dot>
-                    Online
-                  </Badge>
-                  <span className="text-sm text-[rgb(var(--color-muted-foreground))])">
-                    Typically responds within 2 hours
-                  </span>
-                </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+                <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+                  No articles found for “{query.trim()}”.
+                </p>
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  <Ticket className="h-4 w-4" />
+                  Create a Support Ticket
+                </Button>
               </div>
-              <Button variant="primary" className="w-full">
-                <Mail className="h-4 w-4" />
-                Send a Message
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {/* ─── Support action cards ───────────────────────────────────────── */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="group relative overflow-hidden">
+          <CardContent className="flex h-full flex-col gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] transition-colors group-hover:bg-[rgb(var(--color-primary)/0.16)]">
+              <Ticket className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">Create Support Ticket</CardTitle>
+              <CardDescription className="mt-1 text-sm leading-relaxed">
+                Having a specific issue? Submit a ticket and our team will work with
+                you to resolve it.
+              </CardDescription>
+            </div>
+            <Button onClick={() => setDialogOpen(true)}>
+              Create a Ticket <ArrowRight className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="group relative overflow-hidden">
+          <CardContent className="flex h-full flex-col gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgb(var(--color-accent)/0.1)] text-[rgb(var(--color-accent))] transition-colors group-hover:bg-[rgb(var(--color-accent)/0.16)]">
+              <MessageCircle className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">Chat with Support</CardTitle>
+              <CardDescription className="mt-1 text-sm leading-relaxed">
+                {openTicket
+                  ? "You have an open conversation. Jump back in and continue chatting."
+                  : "Start a real-time conversation with our team right in your dashboard."}
+              </CardDescription>
+            </div>
+            <Button variant="secondary" onClick={openChat}>
+              {openTicket ? "Open Conversation" : "Start a Chat"}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ─── My Support Requests ────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[rgb(var(--color-foreground))]">
+              My Support Requests
+            </h2>
+            <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+              Track the status of your tickets and continue conversations.
+            </p>
+          </div>
+          {tickets.length > 0 ? (
+            <Button variant="ghost" onClick={() => setDialogOpen(true)}>
+              New Ticket <Ticket className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : tickets.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgb(var(--color-muted))] text-[rgb(var(--color-muted-foreground))]">
+                <MessageSquare className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">
+                  No support requests yet
+                </p>
+                <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
+                  When you contact us, your tickets and conversations will appear here.
+                </p>
+              </div>
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Ticket className="h-4 w-4" />
+                Create a Support Ticket
               </Button>
             </CardContent>
           </Card>
+        ) : (
+          <div className="space-y-2">
+            {tickets.map((ticket) => (
+              <Link
+                key={ticket.id}
+                href={`/app/help/tickets/${ticket.id}`}
+                className="flex items-center justify-between gap-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 transition-colors hover:border-[rgb(var(--color-primary)/0.4)] hover:bg-[rgb(var(--color-surface-2))]"
+              >
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--color-muted))] text-[rgb(var(--color-muted-foreground))]">
+                    <Ticket className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[rgb(var(--color-primary))]">
+                        {ticket.ticketNumber}
+                      </span>
+                      <Badge variant="outline" className="shrink-0">
+                        {ticket.category}
+                      </Badge>
+                    </div>
+                    <p className="truncate text-sm text-[rgb(var(--color-foreground))]">
+                      {ticket.subject}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="hidden items-center gap-1.5 sm:flex">
+                    <span
+                      className={`h-2 w-2 rounded-full ${STATUS_DOT[ticket.status] ?? "bg-[rgb(var(--color-muted-foreground))]"}`}
+                    />
+                    <span className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {SUPPORT_STATUS_LABELS[ticket.status as keyof typeof SUPPORT_STATUS_LABELS] ?? ticket.status}
+                    </span>
+                  </span>
+                  {typeof ticket._count?.messages === "number" && ticket._count.messages > 0 ? (
+                    <Badge variant="primary">{ticket._count.messages} new</Badge>
+                  ) : null}
+                  <ArrowRight className="h-4 w-4 text-[rgb(var(--color-muted-foreground))]" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
 
+      {/* ─── FAQ ────────────────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[rgb(var(--color-foreground))]">
+            Frequently Asked Questions
+          </h2>
+          <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+            Quick answers to the most common questions.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : faqs.length > 0 ? (
+          <div className="space-y-1.5">
+            {faqs.map((faq, i) => {
+              const isOpen = openFaq === i;
+              return (
+                <div
+                  key={faq.id}
+                  className="overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? null : i)}
+                    className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left text-sm font-medium text-[rgb(var(--color-foreground))] transition-colors hover:bg-[rgb(var(--color-muted))]"
+                  >
+                    <span>{faq.title}</span>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-[rgb(var(--color-muted-foreground))] transition-transform duration-200 ${
+                        isOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  <div
+                    className={`grid transition-all duration-200 ${
+                      isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <Link
+                        href={`/app/help/articles/${faq.slug}`}
+                        className="block border-t border-[rgb(var(--color-border))] px-5 py-4 text-sm leading-relaxed text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-primary))]"
+                      >
+                        {faq.description}
+                        <span className="mt-2 flex items-center gap-1 text-xs font-medium text-[rgb(var(--color-primary))]">
+                          Read the full article
+                          <ArrowRight className="h-3 w-3" />
+                        </span>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
           <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-[rgb(var(--color-muted-foreground))]" />
-                <CardTitle>Quick Links</CardTitle>
-              </div>
-              <CardDescription>
-                Popular resources and documentation.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-1">
-                {QUICK_LINKS.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[rgb(var(--color-muted-foreground))] transition-colors hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]"
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+            <CardContent className="px-6 py-8 text-center text-sm text-[rgb(var(--color-muted-foreground))]">
+              No FAQs available yet.
             </CardContent>
           </Card>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-5 py-4">
+          <div className="flex items-center gap-3">
+            <BookOpen className="h-5 w-5 text-[rgb(var(--color-primary))]" />
+            <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+              Browse every guide in the help center.
+            </p>
+          </div>
+          <Button variant="secondary" asChild>
+            <Link href="/app/help/articles">
+              View All Help Articles <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
-      </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-5 py-4">
+          <div className="flex items-center gap-3">
+            <Mail className="h-5 w-5 text-[rgb(var(--color-muted-foreground))]" />
+            <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+              Prefer email? Reach us at{" "}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="text-[rgb(var(--color-primary))] hover:underline"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <CreateTicketDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   );
 }

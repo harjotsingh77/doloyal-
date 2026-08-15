@@ -60,9 +60,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, body.error?.code ?? "UNKNOWN", body.error?.message ?? `Request failed with status ${res.status}`, body.error?.details);
   }
   if (res.status === 204 || !ct.includes("json")) return undefined as T;
-  const envelope = (await res.json()) as ApiResponse<T>;
-  if ("error" in envelope) throw new ApiError(res.status, envelope.error.code, envelope.error.message, envelope.error.details);
-  return envelope.data;
+  const envelope = (await res.json()) as ApiResponse<T> & Record<string, unknown>;
+  if (envelope && typeof envelope.error === "object" && envelope.error !== null && "code" in envelope.error) {
+    const err = envelope.error as { code: string; message: string; details?: unknown };
+    throw new ApiError(res.status, err.code, err.message, err.details);
+  }
+  return envelope.data as T;
 }
 
 async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mockArgs: any[]): Promise<T> {
@@ -1075,9 +1078,225 @@ export const api = {
     return { abort: () => controller.abort() };
   },
 
+  // ─── AI Workflows (automation builder) ───────────────────────────────────
+  listWorkflows: (params?: { search?: string; status?: string; sort?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set("search", params.search);
+    if (params?.status) q.set("status", params.status);
+    if (params?.sort) q.set("sort", params.sort);
+    const qs = q.toString();
+    return withFallback(
+      () => request<import("@doloyal/shared").WorkflowSummary[]>(`/workflows${qs ? `?${qs}` : ""}`),
+      "listWorkflows",
+      params,
+    );
+  },
+
+  getWorkflow: (id: string) =>
+    withFallback(
+      () => request<import("@doloyal/shared").WorkflowDetail>(`/workflows/${id}`),
+      "getWorkflow",
+      id,
+    ),
+
+  generateWorkflow: (prompt: string) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowGenerateResult>("/workflows/generate", {
+          method: "POST",
+          body: JSON.stringify({ prompt }),
+        }),
+      "generateWorkflow",
+      prompt,
+    ),
+
+  editWorkflow: (
+    id: string,
+    instruction: string,
+    opts?: { definition?: import("@doloyal/shared").WorkflowDefinition; context?: string },
+  ) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowGenerateResult>(`/workflows/${id}/edit`, {
+          method: "POST",
+          body: JSON.stringify({ instruction, ...(opts?.definition ? { definition: opts.definition } : {}), ...(opts?.context ? { context: opts.context } : {}) }),
+        }),
+      "editWorkflow",
+      id,
+      instruction,
+      opts,
+    ),
+
+  validateWorkflow: (
+    id: string,
+    definition?: import("@doloyal/shared").WorkflowDefinition,
+  ) =>
+    withFallback(
+      () =>
+        request<import("./workflows").WorkflowValidationResult>(`/workflows/${id}/validate`, {
+          method: "POST",
+          body: JSON.stringify({ ...(definition ? { definition } : {}) }),
+        }),
+      "validateWorkflow",
+      id,
+      definition,
+    ),
+
+  explainWorkflow: (id: string) =>
+    withFallback(
+      () =>
+        request<{ summary: string }>(`/workflows/${id}/explain`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "explainWorkflow",
+      id,
+    ),
+
+  saveWorkflow: (id: string, definition: import("@doloyal/shared").WorkflowDefinition) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowDetail>(`/workflows/${id}/save`, {
+          method: "POST",
+          body: JSON.stringify({ definition }),
+        }),
+      "saveWorkflow",
+      id,
+      definition,
+    ),
+
+  useWorkflowTemplate: (templateId: string) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowDetail>(
+          `/workflows/templates/${encodeURIComponent(templateId)}/use`,
+          { method: "POST", body: JSON.stringify({}) },
+        ),
+      "useWorkflowTemplate",
+      templateId,
+    ),
+
+  activateWorkflow: (id: string, audience?: number) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowDetail>(`/workflows/${id}/activate`, {
+          method: "POST",
+          body: JSON.stringify({ audience }),
+        }),
+      "activateWorkflow",
+      id,
+      audience,
+    ),
+
+  pauseWorkflow: (id: string) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowDetail>(`/workflows/${id}/pause`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "pauseWorkflow",
+      id,
+    ),
+
+  resumeWorkflow: (id: string) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowDetail>(`/workflows/${id}/resume`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "resumeWorkflow",
+      id,
+    ),
+
+  duplicateWorkflow: (id: string) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowDetail>(`/workflows/${id}/duplicate`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "duplicateWorkflow",
+      id,
+    ),
+
+  archiveWorkflow: (id: string) =>
+    withFallback(
+      () => request<{ ok: boolean }>(`/workflows/${id}`, { method: "DELETE" }),
+      "archiveWorkflow",
+      id,
+    ),
+
+  testWorkflow: (id: string, mode: "preview" | "sample" | "real" = "sample") =>
+    withFallback(
+      () =>
+        request<{ mode: string; ok: boolean; message: string; steps?: Array<{ nodeKey: string; status: string; output?: unknown }> }>(
+          `/workflows/${id}/test`,
+          { method: "POST", body: JSON.stringify({ mode }) },
+        ),
+      "testWorkflow",
+      id,
+      mode,
+    ),
+
+  listWorkflowRuns: (id: string, status?: string) => {
+    const qs = status ? `?runStatus=${encodeURIComponent(status)}` : "";
+    return withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowRunInfo[]>(`/workflows/${id}/runs${qs}`),
+      "listWorkflowRuns",
+      id,
+      status,
+    );
+  },
+
+  getWorkflowRun: (runId: string) =>
+    withFallback(
+      () => request<import("@doloyal/shared").WorkflowRunInfo>(`/workflows/runs/${runId}`),
+      "getWorkflowRun",
+      runId,
+    ),
+
+  retryWorkflowRun: (runId: string) =>
+    withFallback(
+      () =>
+        request<import("@doloyal/shared").WorkflowRunInfo>(`/workflows/runs/${runId}/retry`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "retryWorkflowRun",
+      runId,
+    ),
+
+  getWorkflowAnalytics: (id: string) =>
+    withFallback(
+      () => request<import("@doloyal/shared").WorkflowMetrics>(`/workflows/${id}/analytics`),
+      "getWorkflowAnalytics",
+      id,
+    ),
+
+  getWorkflowAudit: (id: string) =>
+    withFallback(
+      () => request<import("@doloyal/shared").WorkflowAuditEntry[]>(`/workflows/${id}/audit`),
+      "getWorkflowAudit",
+      id,
+    ),
+
+  listWorkflowTemplates: () =>
+    withFallback(
+      () => request<import("@doloyal/shared").WorkflowTemplateInfo[]>("/workflows/templates"),
+      "listWorkflowTemplates",
+    ),
+
+  getWorkflowCatalog: () =>
+    withFallback(
+      () => request<import("@doloyal/shared").WorkflowCapabilityCatalog>("/workflows/catalog"),
+      "getWorkflowCatalog",
+    ),
+
   onBoardTenant: (data: { name: string; category: string; phone: string; email: string; address?: string; currency?: string; timezone?: string; brandColor?: string; loyalty?: { mode: string; pointsPerCurrency: number; pointsPerVisit: number; currencyPerPoint: number; expiryDays: number } }) =>
     withFallback(() => request<Tenant>("/tenants", { method: "POST", body: JSON.stringify(data) }), "onBoardTenant", data),
-
   updateTenantSettings: (data: Record<string, unknown>) =>
     withFallback(() => request<Tenant>("/tenants/settings", { method: "PATCH", body: JSON.stringify(data) }), "updateTenantSettings", data),
 
@@ -1506,6 +1725,8 @@ export const api = {
         email: "demo@doloyal.ai",
         firstName: "Demo",
         lastName: "User",
+        isAdmin: true,
+        adminRole: "SUPER_ADMIN",
         memberships: [
           {
             id: "dev-membership-id",
@@ -1625,4 +1846,559 @@ export const api = {
       id,
       data,
     ),
+
+  // ─── Help & Support (live only) ───────────────────────────────────────────
+
+  listHelpArticles: (params?: { search?: string; category?: string; faq?: boolean; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set("search", params.search);
+    if (params?.category) q.set("category", params.category);
+    if (params?.faq !== undefined) q.set("faq", String(params.faq));
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<{ articles: import("@doloyal/shared").SupportArticle[]; categories: string[]; total: number }>(
+      `/support/articles${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  getHelpArticle: (id: string) =>
+    request<import("@doloyal/shared").SupportArticle>(`/support/articles/${encodeURIComponent(id)}`),
+
+  listSupportTickets: () =>
+    request<import("@doloyal/shared").SupportTicket[]>("/support/tickets"),
+
+  createSupportTicket: (data: import("@doloyal/shared").CreateSupportTicketInput) =>
+    request<import("@doloyal/shared").SupportTicket>("/support/tickets", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getSupportTicket: (ticketId: string) =>
+    request<import("@doloyal/shared").SupportTicket>(`/support/tickets/${ticketId}`),
+
+  getSupportTicketMessages: (ticketId: string, after?: string) =>
+    request<import("@doloyal/shared").SupportTicketConversation>(
+      `/support/tickets/${ticketId}/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`,
+    ),
+
+  sendSupportTicketMessage: (ticketId: string, data: import("@doloyal/shared").SupportMessageInput) =>
+    request<import("@doloyal/shared").SupportMessage>(`/support/tickets/${ticketId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  markSupportTicketRead: (ticketId: string) =>
+    request<{ updated: number }>(`/support/tickets/${ticketId}/messages/read`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  uploadSupportTicketFile: async (ticketId: string, file: File) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/support/tickets/${ticketId}/upload`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let body: { error?: { message?: string } } = {};
+      if (ct.includes("json")) { try { body = await res.json(); } catch {} }
+      throw new ApiError(res.status, "UPLOAD_FAILED", body.error?.message ?? "Upload failed");
+    }
+    const envelope = (await res.json()) as ApiResponse<import("@doloyal/shared").SupportAttachment>;
+    if ("error" in envelope) throw new ApiError(res.status, envelope.error.code, envelope.error.message);
+    return envelope.data;
+  },
+
+  /** Subscribe to customer support realtime events (SSE). */
+  subscribeSupportEvents: () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const withAuth = token
+      ? `${base}/support/events?access_token=${encodeURIComponent(token)}`
+      : `${base}/support/events`;
+    return new EventSource(withAuth);
+  },
+
+  // ─── Admin: Help & Support ────────────────────────────────────────────────
+
+  adminGetSupportStats: () =>
+    request<import("@doloyal/shared").AdminSupportStats>("/admin/support/stats"),
+
+  adminListSupportAgents: () =>
+    request<Array<{ id: string; firstName?: string | null; lastName?: string | null; email: string; avatarUrl?: string | null }>>(
+      "/admin/support/agents",
+    ),
+
+  adminListSupportTickets: (params?: {
+    status?: string;
+    priority?: string;
+    category?: string;
+    assignedAgent?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.priority) q.set("priority", params.priority);
+    if (params?.category) q.set("category", params.category);
+    if (params?.assignedAgent) q.set("assignedAgent", params.assignedAgent);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminSupportTicketList>(`/admin/support/tickets${qs ? `?${qs}` : ""}`);
+  },
+
+  adminGetSupportTicket: (ticketId: string) =>
+    request<import("@doloyal/shared").SupportTicketDetail>(`/admin/support/tickets/${ticketId}`),
+
+  adminUpdateSupportTicket: (ticketId: string, data: { subject?: string; category?: string; priority?: string }) =>
+    request<import("@doloyal/shared").SupportTicket>(`/admin/support/tickets/${ticketId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateSupportTicketStatus: (ticketId: string, status: string, note?: string) =>
+    request<import("@doloyal/shared").SupportTicket>(`/admin/support/tickets/${ticketId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note }),
+    }),
+
+  adminAssignSupportTicket: (ticketId: string, adminId?: string) =>
+    request<import("@doloyal/shared").SupportTicket>(`/admin/support/tickets/${ticketId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ adminId }),
+    }),
+
+  adminGetSupportTicketMessages: (ticketId: string) =>
+    request<import("@doloyal/shared").SupportTicketConversation>(`/admin/support/tickets/${ticketId}/messages`),
+
+  adminSendSupportTicketMessage: (ticketId: string, data: import("@doloyal/shared").SupportMessageInput) =>
+    request<import("@doloyal/shared").SupportMessage>(`/admin/support/tickets/${ticketId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adminMarkSupportTicketRead: (ticketId: string) =>
+    request<{ updated: number }>(`/admin/support/tickets/${ticketId}/messages/read`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  adminListSupportTicketNotes: (ticketId: string) =>
+    request<import("@doloyal/shared").SupportInternalNote[]>(`/admin/support/tickets/${ticketId}/notes`),
+
+  adminAddSupportTicketNote: (ticketId: string, note: string) =>
+    request<import("@doloyal/shared").SupportInternalNote>(`/admin/support/tickets/${ticketId}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+
+  adminUploadSupportTicketFile: async (ticketId: string, file: File) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/admin/support/tickets/${ticketId}/upload`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let body: { error?: { message?: string } } = {};
+      if (ct.includes("json")) { try { body = await res.json(); } catch {} }
+      throw new ApiError(res.status, "UPLOAD_FAILED", body.error?.message ?? "Upload failed");
+    }
+    const envelope = (await res.json()) as ApiResponse<import("@doloyal/shared").SupportAttachment>;
+    if ("error" in envelope) throw new ApiError(res.status, envelope.error.code, envelope.error.message);
+    return envelope.data;
+  },
+
+  /** Subscribe to admin support realtime events (SSE). */
+  subscribeAdminSupportEvents: () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const withAuth = token
+      ? `${base}/admin/support/events?access_token=${encodeURIComponent(token)}`
+      : `${base}/admin/support/events`;
+    return new EventSource(withAuth);
+  },
+
+  // ─── Admin Control Center ──────────────────────────────────────────────
+
+  adminDashboardOverview: (range?: string) =>
+    request<import("@doloyal/shared").AdminDashboardOverview>(
+      `/admin/dashboard/overview${range ? `?range=${range}` : ""}`,
+    ),
+
+  adminListBusinesses: (params?: {
+    status?: string; plan?: string; search?: string; sort?: string;
+    page?: number; pageSize?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.plan) q.set("plan", params.plan);
+    if (params?.search) q.set("search", params.search);
+    if (params?.sort) q.set("sort", params.sort);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminBusinessSummary>>(
+      `/admin/businesses${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminGetBusiness: (id: string) =>
+    request<import("@doloyal/shared").AdminBusinessDetail>(`/admin/businesses/${id}`),
+
+  adminChangeBusinessPlan: (id: string, plan: string) =>
+    request<{ ok: boolean; plan: string; status: string }>(`/admin/businesses/${id}/plan`, {
+      method: "PATCH",
+      body: JSON.stringify({ plan }),
+    }),
+
+  adminSetBusinessStatus: (id: string, status: string, note?: string) =>
+    request<{ ok: boolean; status: string }>(`/admin/businesses/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note }),
+    }),
+
+  adminAddBusinessNote: (id: string, note: string) =>
+    request<{ ok: boolean }>(`/admin/businesses/${id}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+
+  adminListUsers: (params?: { role?: string; status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.role) q.set("role", params.role);
+    if (params?.status) q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminUserItem>>(
+      `/admin/users${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminGetUser: (id: string) =>
+    request<import("@doloyal/shared").AdminUserDetail>(`/admin/users/${id}`),
+
+  adminSetUserSuspended: (id: string, suspended: boolean) =>
+    request<{ ok: boolean; status: string }>(`/admin/users/${id}/suspend`, {
+      method: "PATCH",
+      body: JSON.stringify({ suspended }),
+    }),
+
+  adminChangeUserRole: (id: string, tenantId: string, role: string) =>
+    request<{ ok: boolean; role: string }>(`/admin/users/${id}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ tenantId, role }),
+    }),
+
+  adminListSubscriptions: (params?: { status?: string; plan?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.plan) q.set("plan", params.plan);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminSubscriptionItem>>(
+      `/admin/subscriptions${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminChangeSubscriptionPlan: (id: string, plan: string) =>
+    request<{ ok: boolean }>(`/admin/subscriptions/${id}/plan`, { method: "PATCH", body: JSON.stringify({ plan }) }),
+
+  adminCancelSubscription: (id: string) =>
+    request<{ ok: boolean }>(`/admin/subscriptions/${id}/cancel`, { method: "PATCH", body: JSON.stringify({}) }),
+
+  adminRestartSubscription: (id: string) =>
+    request<{ ok: boolean }>(`/admin/subscriptions/${id}/restart`, { method: "PATCH", body: JSON.stringify({}) }),
+
+  adminExtendTrial: (id: string, days: number) =>
+    request<{ ok: boolean }>(`/admin/subscriptions/${id}/extend-trial`, {
+      method: "POST",
+      body: JSON.stringify({ days }),
+    }),
+
+  adminBillingOverview: () =>
+    request<import("@doloyal/shared").AdminBillingOverview>("/admin/billing/overview"),
+
+  adminListPlans: () =>
+    request<import("@doloyal/shared").AdminPlanInfo[]>("/admin/plans"),
+
+  adminUpdatePlanConfig: (planId: string, config: Record<string, unknown>) =>
+    request<{ ok: boolean }>(`/admin/plans/${planId}`, {
+      method: "PATCH",
+      body: JSON.stringify(config),
+    }),
+
+  adminListEnterpriseContracts: () =>
+    request<import("@doloyal/shared").AdminEnterpriseContract[]>("/admin/enterprise-contracts"),
+
+  adminCreateEnterpriseContract: (data: Record<string, unknown>) =>
+    request<{ ok: boolean }>("/admin/enterprise-contracts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adminIssueRefund: (data: Record<string, unknown>) =>
+    request<import("@doloyal/shared").AdminRefundResult>("/admin/refunds", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adminListCustomers: (params?: { search?: string; businessId?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set("search", params.search);
+    if (params?.businessId) q.set("businessId", params.businessId);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminCustomerItem>>(
+      `/admin/customers${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminBookingsOverview: () =>
+    request<{ today: number; upcoming: number; completed: number; canceled: number; noShows: number; total: number }>(
+      "/admin/bookings/overview",
+    ),
+
+  adminListBookings: (params?: { status?: string; businessId?: string; date?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.businessId) q.set("businessId", params.businessId);
+    if (params?.date) q.set("date", params.date);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminBookingItem>>(
+      `/admin/bookings${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminLoyaltyOverview: () =>
+    request<import("@doloyal/shared").AdminLoyaltyOverview>("/admin/loyalty/overview"),
+
+  adminRewardsOverview: () =>
+    request<import("@doloyal/shared").AdminRewardsOverview>("/admin/rewards/overview"),
+
+  adminMembershipsOverview: () =>
+    request<import("@doloyal/shared").AdminMembershipsOverview>("/admin/memberships/overview"),
+
+  adminCampaignsOverview: () =>
+    request<import("@doloyal/shared").AdminCampaignOverview>("/admin/campaigns/overview"),
+
+  adminAiOverview: (range?: string) =>
+    request<import("@doloyal/shared").AdminAiOverview>(`/admin/ai/overview${range ? `?range=${range}` : ""}`),
+
+  adminWebsiteBuilderOverview: () =>
+    request<import("@doloyal/shared").AdminWebsiteBuilderOverview>("/admin/websites/builder/overview"),
+
+  adminListWebsiteConnections: (params?: { status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminWebsiteConnectionItem>>(
+      `/admin/websites/connections${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminIntegrationsOverview: () =>
+    request<import("@doloyal/shared").AdminIntegrationsOverview>("/admin/integrations/overview"),
+
+  adminAnalyticsOverview: (range?: string) =>
+    request<import("@doloyal/shared").AdminAnalyticsOverview>(`/admin/analytics/overview${range ? `?range=${range}` : ""}`),
+
+  adminListFeedback: (params?: { type?: string; status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.type) q.set("type", params.type);
+    if (params?.status) q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminFeedbackItem>>(
+      `/admin/feedback${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminUpdateFeedbackStatus: (id: string, status: string) =>
+    request<{ ok: boolean; status: string }>(`/admin/feedback/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  adminListAnnouncements: (params?: { published?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.published) q.set("published", params.published);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminAnnouncementItem>>(
+      `/admin/announcements${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminCreateAnnouncement: (data: Record<string, unknown>) =>
+    request<{ ok: boolean; id: string }>("/admin/announcements", { method: "POST", body: JSON.stringify(data) }),
+
+  adminUpdateAnnouncement: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: boolean; id: string }>(`/admin/announcements/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  adminPublishAnnouncement: (id: string, published: boolean) =>
+    request<{ ok: boolean; published: boolean }>(`/admin/announcements/${id}/publish`, {
+      method: "PATCH",
+      body: JSON.stringify({ published }),
+    }),
+
+  adminDeleteAnnouncement: (id: string) =>
+    request<{ ok: boolean }>(`/admin/announcements/${id}`, { method: "DELETE" }),
+
+  adminListHelpArticles: (params?: { category?: string; published?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
+    if (params?.published) q.set("published", params.published);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminHelpArticleItem>>(
+      `/admin/help/articles${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminGetHelpArticle: (id: string) =>
+    request<import("@doloyal/shared").AdminHelpArticleItem>(`/admin/help/articles/${id}`),
+
+  adminCreateHelpArticle: (data: Record<string, unknown>) =>
+    request<{ ok: boolean; id: string }>("/admin/help/articles", { method: "POST", body: JSON.stringify(data) }),
+
+  adminUpdateHelpArticle: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: boolean; id: string }>(`/admin/help/articles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  adminDeleteHelpArticle: (id: string) =>
+    request<{ ok: boolean }>(`/admin/help/articles/${id}`, { method: "DELETE" }),
+
+  adminSystemHealth: () =>
+    request<import("@doloyal/shared").AdminSystemHealth>("/admin/ops/health"),
+
+  adminListLogs: (params?: { severity?: string; service?: string; date?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.service) q.set("service", params.service);
+    if (params?.date) q.set("date", params.date);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminLogItem>>(
+      `/admin/ops/logs${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminListSecurityEvents: (params?: { type?: string; severity?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.type) q.set("type", params.type);
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminSecurityEventItem>>(
+      `/admin/ops/security${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminListSessions: () =>
+    request<Array<{ id: string; email: string; name: string; adminRole: string | null; device: string | null; browser: string | null; ip: string | null; lastActive: string | null; sessions: number }>>(
+      "/admin/ops/sessions",
+    ),
+
+  adminTerminateSession: (userId: string) =>
+    request<{ ok: boolean }>(`/admin/ops/sessions/${userId}/terminate`, { method: "POST", body: JSON.stringify({}) }),
+
+  adminAuditLogs: (params?: { category?: string; action?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
+    if (params?.action) q.set("action", params.action);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminAuditLogItem>>(
+      `/admin/ops/audit-logs${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminListTeam: (params?: { status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminTeamMember>>(
+      `/admin/team${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminInviteTeamMember: (data: { email: string; firstName?: string; lastName?: string; role: string }) =>
+    request<{ ok: boolean; id: string }>("/admin/team/invite", { method: "POST", body: JSON.stringify(data) }),
+
+  adminChangeTeamRole: (userId: string, role: string) =>
+    request<{ ok: boolean; role: string }>(`/admin/team/${userId}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+
+  adminSetTeamStatus: (userId: string, status: "ACTIVE" | "SUSPENDED") =>
+    request<{ ok: boolean; status: string }>(`/admin/team/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  adminGetSettings: () =>
+    request<import("@doloyal/shared").AdminSettingsBundle>("/admin/settings"),
+
+  adminUpdateSettings: (data: Record<string, Record<string, unknown>>) =>
+    request<{ ok: boolean; updated: string[] }>("/admin/settings", { method: "PUT", body: JSON.stringify(data) }),
+
+  adminListNotifications: (params?: { unreadOnly?: boolean; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.unreadOnly) q.set("unreadOnly", "true");
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminNotificationsOverview>(`/admin/notifications${qs ? `?${qs}` : ""}`);
+  },
+
+  adminMarkNotificationRead: (id: string) =>
+    request<{ ok: boolean }>(`/admin/notifications/${id}/read`, { method: "POST", body: JSON.stringify({}) }),
+
+  adminMarkAllNotificationsRead: () =>
+    request<{ ok: boolean }>("/admin/notifications/read-all", { method: "POST", body: JSON.stringify({}) }),
+
+  adminGlobalSearch: (q: string) =>
+    request<import("@doloyal/shared").AdminSearchResults>(`/admin/search?q=${encodeURIComponent(q)}`),
+
+  adminImpersonate: (tenantId: string) =>
+    request<import("@doloyal/shared").AdminImpersonationResult>("/admin/impersonate", {
+      method: "POST",
+      body: JSON.stringify({ tenantId }),
+    }),
+
+  adminExport: (entity: string) =>
+    request<{ filename: string; csv: string }>(`/admin/exports/${entity}`),
 };

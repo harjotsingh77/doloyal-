@@ -112,7 +112,7 @@ export default function InviteAcceptPage({ params }: { params: { token: string }
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgb(var(--color-success)/0.12)] text-[rgb(var(--color-success))]">
                 <CheckCircle2 className="h-6 w-6" />
               </div>
-              <h2 className="mt-4 text-base font-semibold text-[rgb(var(--color-foreground))]">You're in!</h2>
+              <h2 className="mt-4 text-base font-semibold text-[rgb(var(--color-foreground))]">You&apos;re in!</h2>
               <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
                 Your account is ready. Sign in to continue to your workspace.
               </p>

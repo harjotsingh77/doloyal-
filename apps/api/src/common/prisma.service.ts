@@ -1,5 +1,4 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'async_hooks';
 import * as crypto from 'crypto';
@@ -15,6 +14,7 @@ const TENANT_MODELS = new Set([
   'ReferralConversion', 'ReferralRewardRecord', 'ReferralEvent',
   'ReferralRegistration', 'ReferralSource', 'ReferralLeaderboard',
   'AiConversation', 'AiMessage', 'AiAttachment', 'AiFeedback', 'AiUsage',
+  'Workflow', 'WorkflowRun',
 ]);
 
 const ALL_MODELS = [
@@ -34,6 +34,8 @@ const ALL_MODELS = [
   'websiteProject', 'websiteProjectRequirement', 'websiteProjectFile',
   'websiteConversation', 'websiteMessage', 'websiteProjectStatusHistory',
   'websiteConversationNote',
+  'workflow', 'workflowNode', 'workflowEdge', 'workflowVersion',
+  'workflowRun', 'workflowRunStep', 'workflowTemplate', 'workflowAuditLog',
 ];
 
 function uid() {
@@ -178,7 +180,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private inMemory = false;
   private stores = new Map<string, Map<string, any>>();
 
-  constructor(config: ConfigService) {
+  constructor() {
     const url = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/doloyal';
     super({
       datasources: { db: { url } },
@@ -312,7 +314,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   private seedDashboardData(tenantId: string, now: Date) {
     const daysAgo = (d: number) => new Date(now.getTime() - d * 86400000);
-    const USD = 'USD';
 
     const customers = [
       { id: uid(), tenantId, firstName: 'Sarah', lastName: 'Johnson', email: 'sarah@example.com', phone: '+1-555-1001', pointsBalance: 1250, totalSpent: 8750, totalVisits: 24, status: 'ACTIVE', lastVisitAt: daysAgo(2), tags: ['VIP', 'Regular'], churnRiskScore: 10, notes: null, dob: daysAgo(10000), avatarUrl: null, createdAt: daysAgo(90), updatedAt: now },
@@ -342,7 +343,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
     const appointmentIds = [];
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const oneHourAgo = new Date(now.getTime() - 3600000);
     const twoHoursAgo = new Date(now.getTime() - 7200000);
     const threeHoursAgo = new Date(now.getTime() - 10800000);
     const appointments = [
@@ -359,12 +359,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const apptStore = this.stores.get('appointment')!;
     for (const a of appointments) { apptStore.set(a.id, a); appointmentIds.push(a.id); }
 
-    const todayInvoicesData = [
-      { customerId: customers[0].id, total: 45 },
-      { customerId: customers[1].id, total: 25 },
-      { customerId: customers[4].id, total: 150 },
-    ];
-    const nowISO = now.toISOString();
     const invoices = [
       { id: uid(), tenantId, customerId: customers[0].id, invoiceNumber: 'INV-0001', subtotal: 45, discount: 0, tax: 0, total: 45, status: 'PAID', paymentMethod: 'CARD', paidAt: now, createdAt: now, updatedAt: now },
       { id: uid(), tenantId, customerId: customers[1].id, invoiceNumber: 'INV-0002', subtotal: 25, discount: 0, tax: 0, total: 25, status: 'PAID', paymentMethod: 'CARD', paidAt: now, createdAt: now, updatedAt: now },
@@ -838,7 +832,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         if (args.having) {
           const havingKey = Object.keys(args.having)[0];
           const havingOp = Object.keys(args.having[havingKey])[0];
-          const havingVal = args.having[havingKey][havingOp];
           const havingField = Object.keys(args.having[havingKey][havingOp] || {})[0];
           if (havingOp === '_count') {
             const count = group.length;

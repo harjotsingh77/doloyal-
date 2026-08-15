@@ -12,6 +12,7 @@ import type {
 } from "@doloyal/shared";
 import { LOYALTY_FEATURE_CATALOG, isCoreLoyaltyFeature, getPlan } from "@doloyal/shared";
 import { loadStore, saveStore } from "./persistent-store";
+import type { WorkflowValidationResult, WorkflowNodeValidation } from "./workflows";
 
 const NOW = new Date();
 const D = (daysAgo: number) => {
@@ -363,6 +364,393 @@ const DEFAULT_BOOKING_LINKS: BookingLink[] = [
 ];
 
 let currentMockPlan = "growth";
+
+// ─── AI Workflows (mock) ────────────────────────────────────────────────────
+
+interface MockWorkflow {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  status: import("@doloyal/shared").WorkflowStatus;
+  version: number;
+  trigger: import("@doloyal/shared").WorkflowTriggerDef;
+  definition: import("@doloyal/shared").WorkflowDefinition;
+  warnings?: string[];
+  activatedAt?: string;
+  pausedAt?: string;
+  lastRunAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  runs: number;
+  completedRuns: number;
+  failedRuns: number;
+  customersReached?: number;
+  messagesSent?: number;
+  bookingsGenerated?: number;
+  rewardsGenerated?: number;
+  revenueGenerated?: number;
+}
+
+type MockWorkflowRun = import("@doloyal/shared").WorkflowRunInfo & {
+  steps: import("@doloyal/shared").WorkflowRunStepInfo[];
+};
+
+interface MockWorkflowStore {
+  workflows: MockWorkflow[];
+  runs: MockWorkflowRun[];
+  audit: Array<import("@doloyal/shared").WorkflowAuditEntry & { createdAt: string }>;
+}
+
+const MOCK_WORKFLOW_TEMPLATES = [
+  { id: "tpl-winback", name: "Win-back inactive customers", category: "Retention", description: "Re-engage customers who haven't visited in a while with a personalized offer." },
+  { id: "tpl-birthday", name: "Birthday celebration", category: "Loyalty", description: "Send a birthday wish and a free reward to customers celebrating today." },
+  { id: "tpl-postvisit", name: "Post-visit thank you + review", category: "Engagement", description: "Thank customers after a visit and invite them to leave a review." },
+  { id: "tpl-threshold", name: "Points milestone reward", category: "Loyalty", description: "Celebrate customers who cross a points threshold with a reward." },
+  { id: "tpl-reminder", name: "Appointment reminder", category: "Appointments", description: "Remind customers about their upcoming appointment." },
+  { id: "tpl-noshow", name: "No-show recovery", category: "Appointments", description: "Recover no-show customers with a friendly rebooking message." },
+];
+
+const DEFAULT_WORKFLOW_STORE: MockWorkflowStore = {
+  workflows: [
+    {
+      id: "wf-demo-1",
+      tenantId: "t1",
+      name: "Win-back inactive customers",
+      description: "Re-engage customers who haven't visited in 30+ days with a personalized offer.",
+      status: "ACTIVE",
+      version: 2,
+      trigger: { type: "customer_inactive", config: { days: 30 } },
+      definition: {
+        name: "Win-back inactive customers",
+        description: "Re-engage customers who haven't visited in 30+ days with a personalized offer.",
+        trigger: { type: "customer_inactive", config: { days: 30 } },
+        nodes: [
+          { id: "n1", type: "trigger", label: "Customer inactive for 30+ days", config: { days: 30 } },
+          { id: "n2", type: "condition", label: "Loyalty band is VIP?", data: { key: "loyalty_band", op: "is", value: "VIP" } },
+          { id: "n3", type: "action", label: "Send WhatsApp win-back offer", config: { channel: "whatsapp", message: "We miss you! Book your next visit and get 20% off. {customer_first_name}" } },
+          { id: "n4", type: "action", label: "Send SMS win-back offer", config: { channel: "sms", message: "Hey {customer_first_name}, here's a special offer to get you back in. Reply BOOK to claim." } },
+          { id: "n5", type: "end", label: "Done" },
+        ],
+        edges: [
+          { source: "n1", target: "n2" },
+          { source: "n2", target: "n3", outcome: "true" },
+          { source: "n2", target: "n4", outcome: "false" },
+          { source: "n3", target: "n5" },
+          { source: "n4", target: "n5" },
+        ],
+      },
+      activatedAt: D(20),
+      lastRunAt: D(0),
+      createdAt: D(35),
+      updatedAt: D(1),
+      runs: 128,
+      completedRuns: 121,
+      failedRuns: 4,
+      customersReached: 96,
+      messagesSent: 128,
+      bookingsGenerated: 18,
+      rewardsGenerated: 0,
+      revenueGenerated: 32400,
+    },
+    {
+      id: "wf-demo-2",
+      tenantId: "t1",
+      name: "Birthday reward",
+      description: "Send a birthday wish with a free reward to customers celebrating today.",
+      status: "ACTIVE",
+      version: 1,
+      trigger: { type: "customer_birthday", config: {} },
+      definition: {
+        name: "Birthday reward",
+        description: "Send a birthday wish with a free reward to customers celebrating today.",
+        trigger: { type: "customer_birthday", config: {} },
+        nodes: [
+          { id: "n1", type: "trigger", label: "Customer birthday" },
+          { id: "n2", type: "action", label: "Send birthday WhatsApp", config: { channel: "whatsapp", message: "Happy birthday {customer_first_name}! Enjoy a free facial on us this week." } },
+          { id: "n3", type: "action", label: "Create birthday reward", data: { rewardType: "FREE_SERVICE", value: "Free Facial", message: "Happy Birthday!" } },
+          { id: "n4", type: "end", label: "Done" },
+        ],
+        edges: [
+          { source: "n1", target: "n2" },
+          { source: "n2", target: "n3" },
+          { source: "n3", target: "n4" },
+        ],
+      },
+      activatedAt: D(15),
+      lastRunAt: D(0),
+      createdAt: D(30),
+      updatedAt: D(15),
+      runs: 74,
+      completedRuns: 74,
+      failedRuns: 0,
+      customersReached: 12,
+      messagesSent: 74,
+      bookingsGenerated: 9,
+      rewardsGenerated: 74,
+      revenueGenerated: 16200,
+    },
+    {
+      id: "wf-demo-3",
+      tenantId: "t1",
+      name: "Appointment reminder",
+      description: "Remind customers 24h before their appointment and follow up for confirmation.",
+      status: "PAUSED",
+      version: 1,
+      trigger: { type: "appointment_booked", config: {} },
+      definition: {
+        name: "Appointment reminder",
+        description: "Remind customers 24h before their appointment and follow up for confirmation.",
+        trigger: { type: "appointment_booked", config: {} },
+        nodes: [
+          { id: "n1", type: "trigger", label: "Appointment booked" },
+          { id: "n2", type: "action", label: "Wait 24 hours", data: { duration: "24h" } },
+          { id: "n3", type: "action", label: "Send reminder SMS", config: { channel: "sms", message: "Reminder: Your appointment at {business_name} is tomorrow at {appointment_time}. Reply CONFIRM." } },
+          { id: "n4", type: "end", label: "Done" },
+        ],
+        edges: [
+          { source: "n1", target: "n2" },
+          { source: "n2", target: "n3" },
+          { source: "n3", target: "n4" },
+        ],
+      },
+      pausedAt: D(3),
+      createdAt: D(25),
+      updatedAt: D(3),
+      runs: 40,
+      completedRuns: 38,
+      failedRuns: 2,
+      customersReached: 34,
+      messagesSent: 40,
+      bookingsGenerated: 0,
+      rewardsGenerated: 0,
+      revenueGenerated: 0,
+    },
+  ],
+  runs: [
+    {
+      id: "run-demo-1", workflowId: "wf-demo-1", customerId: "c4", customerName: "Vikram Singh",
+      version: 2, status: "COMPLETED", trigger: "customer_inactive",
+      startedAt: D(0), completedAt: D(0), createdAt: D(0),
+      steps: [
+        { id: "s1", nodeKey: "n1", type: "trigger", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0) },
+        { id: "s2", nodeKey: "n2", type: "condition", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0), output: { passed: true } },
+        { id: "s3", nodeKey: "n3", type: "action", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0), output: { channel: "whatsapp", simulated: true } },
+        { id: "s4", nodeKey: "n5", type: "end", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0) },
+      ],
+    },
+    {
+      id: "run-demo-2", workflowId: "wf-demo-1", customerId: "c6", customerName: "Arun Joshi",
+      version: 2, status: "COMPLETED", trigger: "customer_inactive",
+      startedAt: D(0), completedAt: D(0), createdAt: D(0),
+      steps: [
+        { id: "s1", nodeKey: "n1", type: "trigger", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0) },
+        { id: "s2", nodeKey: "n2", type: "condition", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0), output: { passed: false } },
+        { id: "s3", nodeKey: "n4", type: "action", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0), output: { channel: "sms", simulated: true } },
+        { id: "s4", nodeKey: "n5", type: "end", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0) },
+      ],
+    },
+    {
+      id: "run-demo-3", workflowId: "wf-demo-2", customerId: "c1", customerName: "Priya Sharma",
+      version: 1, status: "COMPLETED", trigger: "customer_birthday",
+      startedAt: D(0), completedAt: D(0), createdAt: D(0),
+      steps: [
+        { id: "s1", nodeKey: "n1", type: "trigger", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0) },
+        { id: "s2", nodeKey: "n2", type: "action", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0), output: { channel: "whatsapp", simulated: true } },
+        { id: "s3", nodeKey: "n3", type: "action", status: "COMPLETED", attempt: 1, startedAt: D(0), completedAt: D(0), output: { rewardId: "mock-rw-1" } },
+      ],
+    },
+  ],
+  audit: [
+    { id: "aud-1", workflowId: "wf-demo-1", actorName: "Demo User", action: "activated", version: 2, details: {}, createdAt: D(20) },
+    { id: "aud-2", workflowId: "wf-demo-1", actorName: "Demo User", action: "edited", version: 2, details: {}, createdAt: D(21) },
+    { id: "aud-3", workflowId: "wf-demo-2", actorName: "Demo User", action: "activated", version: 1, details: {}, createdAt: D(15) },
+  ],
+};
+
+function getWorkflowStore(): MockWorkflowStore {
+  return loadStore("ai-workflows", DEFAULT_WORKFLOW_STORE);
+}
+function saveWorkflowStore(store: MockWorkflowStore) {
+  saveStore("ai-workflows", store);
+}
+
+function wfToSummary(wf: MockWorkflow): import("@doloyal/shared").WorkflowSummary {
+  return {
+    id: wf.id,
+    tenantId: wf.tenantId,
+    name: wf.name,
+    description: wf.description,
+    trigger: wf.trigger,
+    status: wf.status,
+    version: wf.version,
+    activatedAt: wf.activatedAt,
+    pausedAt: wf.pausedAt,
+    lastRunAt: wf.lastRunAt,
+    createdAt: wf.createdAt,
+    updatedAt: wf.updatedAt,
+    runs: wf.runs,
+    completedRuns: wf.completedRuns,
+    failedRuns: wf.failedRuns,
+    successRate: wf.runs ? Math.round((wf.completedRuns / wf.runs) * 100) : 100,
+    customersReached: wf.customersReached,
+    messagesSent: wf.messagesSent,
+    bookingsGenerated: wf.bookingsGenerated,
+    rewardsGenerated: wf.rewardsGenerated,
+    revenueGenerated: wf.revenueGenerated,
+  };
+}
+
+function wfToDetail(wf: MockWorkflow): import("@doloyal/shared").WorkflowDetail {
+  return {
+    ...wfToSummary(wf),
+    definition: wf.definition,
+    versions: [
+      { id: `ver-${wf.id}-${wf.version}`, version: wf.version, status: wf.status === "ACTIVE" ? "ACTIVE" : "DRAFT", createdAt: wf.updatedAt, activatedAt: wf.activatedAt },
+    ],
+    recentRuns: getWorkflowStore().runs.filter((r) => r.workflowId === wf.id).slice(0, 5),
+  };
+}
+
+const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 7)}`;
+
+function buildMockWorkflow(prompt: string, id: string): MockWorkflow {
+  const p = prompt.toLowerCase();
+  const nodes: import("@doloyal/shared").WorkflowNodeDef[] = [];
+  const edges: import("@doloyal/shared").WorkflowEdgeDef[] = [];
+  let trigger: import("@doloyal/shared").WorkflowTriggerDef = { type: "customer_inactive", config: { days: 30 } };
+  const warnings: string[] = [];
+  let name = prompt.length > 40 ? prompt.slice(0, 40).trim() + "…" : prompt.trim();
+
+  const add = (n: import("@doloyal/shared").WorkflowNodeDef) => nodes.push(n);
+
+  const n1 = uid("n");
+  if (/birthday|birth day/.test(p)) {
+    trigger = { type: "customer_birthday", config: {} };
+    name = "Birthday celebration";
+    add({ id: n1, type: "trigger", label: "Customer birthday" });
+    add({ id: uid("n"), type: "action", label: "Send birthday message", config: { channel: /email/.test(p) ? "email" : "whatsapp", message: "Happy birthday {customer_first_name}! Enjoy 20% off any service this week." } });
+    add({ id: uid("n"), type: "action", label: "Create birthday reward", data: { rewardType: "FREE_SERVICE", value: "Free Facial" } });
+  } else if (/win.?back|inactive|haven.?t visited|re-?engage/.test(p)) {
+    const days = /(\d+)\s*days/.exec(p);
+    const d = days ? Math.max(1, Math.min(180, Number(days[1]))) : 30;
+    trigger = { type: "customer_inactive", config: { days: d } };
+    name = "Win-back inactive customers";
+    add({ id: n1, type: "trigger", label: `Customer inactive for ${d}+ days`, config: { days: d } });
+    const c1 = uid("n");
+    add({ id: c1, type: "condition", label: "Loyalty band is VIP?", data: { key: "loyalty_band", op: "is", value: "VIP" } });
+    const a1 = uid("n");
+    add({ id: a1, type: "action", label: "Send win-back WhatsApp", config: { channel: "whatsapp", message: "We miss you! Book your next visit and get 20% off. {customer_first_name}" } });
+    const a2 = uid("n");
+    add({ id: a2, type: "action", label: "Send win-back SMS", config: { channel: "sms", message: "Hey {customer_first_name}, here's a special offer to bring you back in. Reply BOOK to claim." } });
+    const end = uid("n");
+    add({ id: end, type: "end", label: "Done" });
+    edges.push({ source: n1, target: c1 }, { source: c1, target: a1, outcome: "true" }, { source: c1, target: a2, outcome: "false" }, { source: a1, target: end }, { source: a2, target: end });
+  } else if (/review|thank|post.?visit|follow.?up after/.test(p)) {
+    trigger = { type: "appointment_completed", config: {} };
+    name = "Post-visit thank you + review";
+    add({ id: n1, type: "trigger", label: "Appointment completed" });
+    add({ id: uid("n"), type: "action", label: "Send thank-you message", config: { channel: "whatsapp", message: "Thanks for visiting, {customer_first_name}! We'd love a quick review." } });
+    add({ id: uid("n"), type: "action", label: "Request review", config: { channel: "sms", message: "How was your visit? Rate us here and get 50 bonus points." } });
+  } else if (/points|threshold|milestone/.test(p)) {
+    const t = /(\d+)\s*points/.exec(p);
+    const threshold = t ? Number(t[1]) : 500;
+    trigger = { type: "points_threshold_reached", config: { threshold } };
+    name = "Points milestone reward";
+    add({ id: n1, type: "trigger", label: `Customer reaches ${threshold} points`, config: { threshold } });
+    add({ id: uid("n"), type: "action", label: "Send milestone message", config: { channel: "whatsapp", message: `Congrats {customer_first_name}! You've reached ${threshold} points. Here's a little reward.` } });
+    add({ id: uid("n"), type: "action", label: "Create reward", data: { rewardType: "COUPON", value: "10% off", message: "Milestone reward" } });
+  } else if (/no.?show|missed|didn.?t.?show/.test(p)) {
+    trigger = { type: "appointment_no_show", config: {} };
+    name = "No-show recovery";
+    add({ id: n1, type: "trigger", label: "Appointment no-show" });
+    add({ id: uid("n"), type: "action", label: "Send rebooking message", config: { channel: "whatsapp", message: "Hi {customer_first_name}, we missed you! Let's get you rebooked at a time that works for you." } });
+    add({ id: uid("n"), type: "action", label: "Notify staff", data: { message: "No-show: {customer_name} ({appointment_service})" } });
+  } else if (/remind|appointment.*upcoming/.test(p)) {
+    trigger = { type: "appointment_booked", config: {} };
+    name = "Appointment reminder";
+    add({ id: n1, type: "trigger", label: "Appointment booked" });
+    add({ id: uid("n"), type: "action", label: "Wait 24 hours", data: { duration: "24h" } });
+    add({ id: uid("n"), type: "action", label: "Send reminder SMS", config: { channel: "sms", message: "Reminder: Your appointment is tomorrow. Reply CONFIRM to confirm." } });
+  } else if (/new customer|welcome/.test(p)) {
+    trigger = { type: "customer_created", config: {} };
+    name = "Welcome new customers";
+    add({ id: n1, type: "trigger", label: "New customer added" });
+    add({ id: uid("n"), type: "action", label: "Send welcome message", config: { channel: "whatsapp", message: "Welcome to {business_name}, {customer_first_name}! Here are 100 welcome points." } });
+    add({ id: uid("n"), type: "action", label: "Add welcome points", data: { points: 100, reason: "Welcome bonus" } });
+  } else if (/member.*expir|expiring/.test(p)) {
+    trigger = { type: "membership_expiring", config: { days: 7 } };
+    name = "Membership expiring reminder";
+    add({ id: n1, type: "trigger", label: "Membership expiring in 7 days" });
+    add({ id: uid("n"), type: "action", label: "Send renewal offer", config: { channel: "whatsapp", message: "Your membership at {business_name} expires soon. Renew today and keep your perks!" } });
+  } else {
+    trigger = { type: "customer_inactive", config: { days: 30 } };
+    name = "Customer retention automation";
+    add({ id: n1, type: "trigger", label: "Customer inactive for 30+ days", config: { days: 30 } });
+    add({ id: uid("n"), type: "action", label: "Send follow-up message", config: { channel: "whatsapp", message: "Hi {customer_first_name}, we'd love to see you again at {business_name}." } });
+  }
+
+  if (!edges.length) {
+    for (let i = 0; i < nodes.length - 1; i++) edges.push({ source: nodes[i]!.id, target: nodes[i + 1]!.id });
+  }
+
+  if (!/[?!.]+$/.test(prompt.trim()) && prompt.trim().length < 20) warnings.push("Tip: adding specifics like '30 days', 'WhatsApp', or 'VIP customers' makes the automation more accurate.");
+  warnings.push("This is a draft. Nothing is sent until you save and activate it.");
+
+  return {
+    id,
+    tenantId: "t1",
+    name,
+    description: prompt.trim(),
+    status: "DRAFT",
+    version: 1,
+    trigger,
+    definition: { name, description: prompt.trim(), trigger, nodes, edges },
+    warnings,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    runs: 0,
+    completedRuns: 0,
+    failedRuns: 0,
+  };
+}
+
+function applyMockEdit(wf: MockWorkflow, instruction: string): MockWorkflow {
+  const i = instruction.toLowerCase();
+  const nodes = [...wf.definition.nodes];
+  const edges = [...wf.definition.edges];
+  if (/channel|whatsapp|sms|email/.test(i)) {
+    const channel = /whatsapp/.test(i) ? "whatsapp" : /email/.test(i) ? "email" : "sms";
+    for (const n of nodes) {
+      if (n.type === "action" && (n.config?.channel || n.data?.channel)) {
+        n.config = { ...(n.config || {}), channel };
+      }
+    }
+  }
+  if (/message|text|copy|say|wording/.test(i) && i.includes("message")) {
+    const m = /["“]([^"”]+)["”]/.exec(instruction);
+    if (m) for (const n of nodes) if (n.type === "action") n.config = { ...(n.config || {}), message: m[1] };
+  }
+  if (/delay|wait|after\s+(\d+)\s*(day|hour|h)/.test(i)) {
+    const m = /(\d+)\s*(day|hour|h)/.exec(i);
+    if (m) {
+      const dur = m[2]?.startsWith("d") ? `${m[1]}d` : `${m[1]}h`;
+      nodes.unshift({ id: uid("n"), type: "delay", label: `Wait ${m[1]} ${m[2].startsWith("d") ? "days" : "hours"}`, data: { duration: dur } });
+      edges.unshift({ source: nodes[0]!.id, target: nodes[1]!.id });
+      for (const e of edges) {
+        if (e.source === nodes[0]!.id && e.target === nodes[2]?.id) e.source = nodes[1]!.id;
+      }
+    }
+  }
+  const updated: MockWorkflow = { ...wf, definition: { ...wf.definition, nodes, edges }, version: wf.status === "ACTIVE" ? wf.version + 1 : wf.version, updatedAt: new Date().toISOString() };
+  if (wf.status === "ACTIVE") updated.status = "DRAFT";
+  return updated;
+}
+
+function buildFromTemplate(template: { id: string; name: string; category: string; description: string }, id: string): MockWorkflow {
+  return buildMockWorkflow(template.name, id);
+}
+
 
 export const MOCK: Record<string, (...args: any[]) => any> = {
   getMe: (): AuthUser => ({
@@ -1859,4 +2247,368 @@ export const MOCK: Record<string, (...args: any[]) => any> = {
     saveConnectionStore(store);
     return store.websites[idx]!;
   },
+
+  // ─── AI Workflows (mock) ──────────────────────────────────────────────────
+
+  listWorkflows: (params?: { search?: string; status?: string; sort?: string }): import("@doloyal/shared").WorkflowSummary[] => {
+    let items = getWorkflowStore().workflows.map(wfToSummary);
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter((w) => w.name.toLowerCase().includes(q) || (w.description?.toLowerCase().includes(q)));
+    }
+    if (params?.status) items = items.filter((w) => w.status === params.status);
+    return items;
+  },
+
+  getWorkflow: (id: string): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const wf = store.workflows.find((w) => w.id === id);
+    if (!wf) throw new Error("Workflow not found");
+    return wfToDetail(wf);
+  },
+
+  generateWorkflow: (prompt: string): import("@doloyal/shared").WorkflowGenerateResult => {
+    const store = getWorkflowStore();
+    const draft = buildMockWorkflow(prompt, "wf-mock-" + Math.random().toString(36).slice(2, 8));
+    store.workflows.unshift(draft);
+    saveWorkflowStore(store);
+    return {
+      workflow: wfToDetail(draft),
+      message: `I've drafted an automation from your request. Review the steps below, then save & activate it.`,
+      warnings: draft.warnings || [],
+    };
+  },
+
+  editWorkflow: (
+    id: string,
+    instruction: string,
+    opts?: { definition?: import("@doloyal/shared").WorkflowDefinition; context?: string },
+  ): import("@doloyal/shared").WorkflowGenerateResult => {
+    const store = getWorkflowStore();
+    const idx = store.workflows.findIndex((w) => w.id === id);
+    if (idx < 0) throw new Error("Workflow not found");
+    const current = store.workflows[idx]!;
+    const base = opts?.definition || current.definition;
+    const edited = applyMockEdit({ ...current, definition: base }, instruction);
+    if (!opts?.definition) {
+      store.workflows[idx] = edited;
+      saveWorkflowStore(store);
+    }
+    return {
+      workflow: { ...wfToDetail(edited), definition: edited.definition },
+      message: "I've updated the workflow based on your instruction.",
+    };
+  },
+
+  validateWorkflow: (
+    id: string,
+    definition?: import("@doloyal/shared").WorkflowDefinition,
+  ): import("./workflows").WorkflowValidationResult => {
+    const store = getWorkflowStore();
+    const wf = store.workflows.find((w) => w.id === id);
+    if (!wf) throw new Error("Workflow not found");
+    const def = definition || wf.definition;
+    return mockValidateDefinition(def);
+  },
+
+  explainWorkflow: (id: string): { summary: string } => {
+    const store = getWorkflowStore();
+    const wf = store.workflows.find((w) => w.id === id);
+    if (!wf) throw new Error("Workflow not found");
+    const nodeNames = wf.definition.nodes.map((n) => `${n.label} (${n.type})`).join(" → ");
+    return {
+      summary:
+        `This workflow is called "${wf.name}". It triggers on ${wf.definition.trigger.type} and flows through: ${nodeNames}. ` +
+        `Each customer who matches the trigger goes through these steps in order, and the workflow only activates after you confirm.`,
+    };
+  },
+
+  saveWorkflow: (id: string, definition: import("@doloyal/shared").WorkflowDefinition): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const idx = store.workflows.findIndex((w) => w.id === id);
+    if (idx < 0) throw new Error("Workflow not found");
+    store.workflows[idx] = {
+      ...store.workflows[idx]!,
+      name: definition.name || store.workflows[idx]!.name,
+      description: definition.description ?? store.workflows[idx]!.description,
+      definition,
+      version: store.workflows[idx]!.version,
+      updatedAt: new Date().toISOString(),
+    };
+    saveWorkflowStore(store);
+    return wfToDetail(store.workflows[idx]!);
+  },
+
+  useWorkflowTemplate: (templateId: string): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const template = MOCK_WORKFLOW_TEMPLATES.find((t) => t.id === templateId);
+    const draft = template
+      ? buildFromTemplate(template, "wf-mock-" + Math.random().toString(36).slice(2, 8))
+      : buildMockWorkflow("Follow up with customers", "wf-mock-" + Math.random().toString(36).slice(2, 8));
+    store.workflows.unshift(draft);
+    saveWorkflowStore(store);
+    return wfToDetail(draft);
+  },
+
+  activateWorkflow: (id: string, audience?: number): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const idx = store.workflows.findIndex((w) => w.id === id);
+    if (idx < 0) throw new Error("Workflow not found");
+    const wf = store.workflows[idx]!;
+    store.workflows[idx] = {
+      ...wf,
+      status: "ACTIVE",
+      version: wf.status === "ACTIVE" ? wf.version : wf.version,
+      activatedAt: new Date().toISOString(),
+      pausedAt: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    saveWorkflowStore(store);
+    return wfToDetail(store.workflows[idx]!);
+  },
+
+  pauseWorkflow: (id: string): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const idx = store.workflows.findIndex((w) => w.id === id);
+    if (idx < 0) throw new Error("Workflow not found");
+    store.workflows[idx] = { ...store.workflows[idx]!, status: "PAUSED", pausedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    saveWorkflowStore(store);
+    return wfToDetail(store.workflows[idx]!);
+  },
+
+  resumeWorkflow: (id: string): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const idx = store.workflows.findIndex((w) => w.id === id);
+    if (idx < 0) throw new Error("Workflow not found");
+    store.workflows[idx] = { ...store.workflows[idx]!, status: "ACTIVE", pausedAt: undefined, activatedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    saveWorkflowStore(store);
+    return wfToDetail(store.workflows[idx]!);
+  },
+
+  duplicateWorkflow: (id: string): import("@doloyal/shared").WorkflowDetail => {
+    const store = getWorkflowStore();
+    const src = store.workflows.find((w) => w.id === id);
+    if (!src) throw new Error("Workflow not found");
+    const copy: MockWorkflow = {
+      ...JSON.parse(JSON.stringify(src)),
+      id: "wf-mock-" + Math.random().toString(36).slice(2, 8),
+      name: `${src.name} (copy)`,
+      status: "DRAFT",
+      version: 1,
+      activatedAt: undefined,
+      pausedAt: undefined,
+      lastRunAt: undefined,
+      runs: 0,
+      completedRuns: 0,
+      failedRuns: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    store.workflows.unshift(copy);
+    saveWorkflowStore(store);
+    return wfToDetail(copy);
+  },
+
+  archiveWorkflow: (id: string): { ok: boolean } => {
+    const store = getWorkflowStore();
+    const idx = store.workflows.findIndex((w) => w.id === id);
+    if (idx < 0) throw new Error("Workflow not found");
+    store.workflows[idx] = { ...store.workflows[idx]!, status: "ARCHIVED", updatedAt: new Date().toISOString() };
+    saveWorkflowStore(store);
+    return { ok: true };
+  },
+
+  testWorkflow: (id: string, mode: "preview" | "sample" | "real" = "sample") => {
+    const store = getWorkflowStore();
+    const wf = store.workflows.find((w) => w.id === id);
+    if (!wf) throw new Error("Workflow not found");
+    const steps = wf.definition.nodes.map((n) => ({
+      nodeKey: n.id,
+      status: n.type === "condition" || n.type === "trigger" || n.type === "end" ? "COMPLETED" : "COMPLETED",
+      output: n.type === "action" ? { channel: n.config?.channel || "SMS", simulated: true } : undefined,
+    }));
+    return { mode, ok: true, message: `Test ${mode} completed. ${steps.length} steps executed against the sample customer.`, steps };
+  },
+
+  listWorkflowRuns: (id: string, status?: string): import("@doloyal/shared").WorkflowRunInfo[] => {
+    const store = getWorkflowStore();
+    let runs = store.runs.filter((r) => r.workflowId === id);
+    if (status) runs = runs.filter((r) => r.status === status);
+    return runs.map((r) => ({ ...r, steps: r.steps ?? [] }));
+  },
+
+  getWorkflowRun: (runId: string): import("@doloyal/shared").WorkflowRunInfo => {
+    const store = getWorkflowStore();
+    const run = store.runs.find((r) => r.id === runId);
+    if (!run) throw new Error("Run not found");
+    return { ...run, steps: run.steps ?? [] };
+  },
+
+  retryWorkflowRun: (runId: string): import("@doloyal/shared").WorkflowRunInfo => {
+    const store = getWorkflowStore();
+    const idx = store.runs.findIndex((r) => r.id === runId);
+    if (idx < 0) throw new Error("Run not found");
+    store.runs[idx] = {
+      ...store.runs[idx]!,
+      status: "QUEUED",
+      error: undefined,
+      completedAt: undefined,
+      startedAt: undefined,
+      steps: store.runs[idx]!.steps.map((s) => ({ ...s, status: "PENDING", error: undefined })),
+    };
+    saveWorkflowStore(store);
+    return { ...store.runs[idx]!, steps: store.runs[idx]!.steps ?? [] };
+  },
+
+  getWorkflowAnalytics: (id: string): import("@doloyal/shared").WorkflowMetrics => {
+    const store = getWorkflowStore();
+    const wf = store.workflows.find((w) => w.id === id);
+    const runs = store.runs.filter((r) => r.workflowId === id);
+    const completedRuns = runs.filter((r) => r.status === "COMPLETED").length;
+    const failedRuns = runs.filter((r) => r.status === "FAILED").length;
+    const runningRuns = runs.filter((r) => r.status === "QUEUED" || r.status === "RUNNING").length;
+    const totalRuns = runs.length;
+    return {
+      totalRuns,
+      completedRuns,
+      failedRuns,
+      runningRuns,
+      customersReached: wf?.customersReached ?? 0,
+      messagesSent: wf?.messagesSent ?? 0,
+      bookingsGenerated: wf?.bookingsGenerated ?? 0,
+      rewardsGenerated: wf?.rewardsGenerated ?? 0,
+      revenueGenerated: wf?.revenueGenerated ?? 0,
+      successRate: totalRuns ? Math.round((completedRuns / totalRuns) * 100) : 100,
+    };
+  },
+
+  getWorkflowAudit: (id: string): import("@doloyal/shared").WorkflowAuditEntry[] => {
+    const store = getWorkflowStore();
+    return store.audit.filter((a) => a.workflowId === id).sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+  },
+
+  listWorkflowTemplates: (): import("@doloyal/shared").WorkflowTemplateInfo[] =>
+    MOCK_WORKFLOW_TEMPLATES.map(({ id, name, category, description }) => ({ id, name, category, description })),
+
+  getWorkflowCatalog: (): import("@doloyal/shared").WorkflowCapabilityCatalog => ({
+    triggers: [
+      { type: "appointment_booked", label: "Appointment booked", category: "Appointments", description: "Fires when a customer books an appointment" },
+      { type: "appointment_completed", label: "Appointment completed", category: "Appointments", description: "Fires when an appointment is marked completed" },
+      { type: "appointment_canceled", label: "Appointment canceled", category: "Appointments", description: "Fires when an appointment is canceled" },
+      { type: "appointment_no_show", label: "Appointment no-show", category: "Appointments", description: "Fires when a customer misses an appointment" },
+      { type: "customer_created", label: "New customer added", category: "Customers", description: "Fires when a new customer is added" },
+      { type: "points_earned", label: "Points earned", category: "Loyalty", description: "Fires when a customer earns points" },
+      { type: "points_threshold_reached", label: "Points threshold reached", category: "Loyalty", description: "Fires when a customer crosses a points milestone" },
+      { type: "customer_birthday", label: "Customer birthday", category: "Scheduled", description: "Runs daily for customers celebrating today" },
+      { type: "customer_inactive", label: "Customer inactive", category: "Scheduled", description: "Runs daily for customers who haven't visited recently" },
+      { type: "membership_expiring", label: "Membership expiring", category: "Memberships", description: "Runs daily for memberships ending soon" },
+    ],
+    conditions: [
+      { key: "loyalty_band", label: "Loyalty band", category: "Customer", operators: ["is", "is not", "at least", "at most"] },
+      { key: "churn_risk", label: "Churn risk", category: "Customer", operators: ["is", "is not"] },
+      { key: "points_balance", label: "Points balance", category: "Loyalty", operators: ["is", "at least", "at most", "less than"] },
+      { key: "visit_count", label: "Visit count", category: "Customer", operators: ["is", "at least", "at most"] },
+      { key: "last_visit_days", label: "Days since last visit", category: "Customer", operators: ["at least", "at most"] },
+      { key: "total_spend", label: "Total spend", category: "Customer", operators: ["is", "at least", "at most"] },
+    ],
+    actions: [
+      { type: "send_message", label: "Send message", category: "Messaging", description: "Send a personalized message", channels: ["whatsapp", "sms", "email"] },
+      { type: "add_points", label: "Add points", category: "Loyalty", description: "Add points to a customer's balance" },
+      { type: "remove_points", label: "Remove points", category: "Loyalty", description: "Deduct points from a customer's balance" },
+      { type: "create_reward", label: "Create reward", category: "Loyalty", description: "Generate a reward for the customer" },
+      { type: "add_tags", label: "Add tags", category: "Customer", description: "Attach tags to the customer profile" },
+      { type: "notify_staff", label: "Notify staff", category: "Team", description: "Create an internal task / notification for staff" },
+      { type: "wait", label: "Wait / delay", category: "Flow", description: "Pause the workflow for a period" },
+      { type: "end", label: "End", category: "Flow", description: "Finish the workflow" },
+    ],
+  }),
 };
+
+const MOCK_DELAY_PATTERN = /^(\d+)\s*(s|m|h|d)$/i;
+
+function mockValidateDefinition(def: any): WorkflowValidationResult {
+  const nodes: WorkflowNodeValidation[] = [];
+  const nodeIdSet = new Set<string>();
+  const ids = (Array.isArray(def?.nodes) ? def.nodes : []).map((n: any) => n.id);
+  for (const id of ids) nodeIdSet.add(id);
+
+  for (const node of Array.isArray(def?.nodes) ? def.nodes : []) {
+    const config = node.config || node.data || {};
+    const checks: any[] = [];
+    const fail = (label: string, message: string) => checks.push({ label, status: "ERROR", message });
+    const warn = (label: string, message: string) => checks.push({ label, status: "WARNING", message });
+    const ok = (label: string, message?: string) => checks.push({ label, status: "OK", message });
+
+    if (node.type === "trigger") {
+      ok("Trigger type", String(config.type || node.label || "trigger"));
+    } else if (node.type === "action") {
+      const type = String(config.type || config.action || "");
+      ok("Action type", type || node.label);
+      if (type === "send_whatsapp" || type === "send_sms" || type === "send_email") {
+        if (config.message) ok("Message", String(config.message));
+        else if (type === "send_email" && config.body) ok("Email body", String(config.body));
+        else fail("Missing config", "Message is missing for this action.");
+      }
+      if (type === "add_points" || type === "remove_points") {
+        if (Number(config.points) > 0) ok("Points", String(config.points));
+        else fail("Invalid config", "Points must be greater than zero.");
+      }
+      if (type === "create_reward") {
+        if (config.name && config.value) ok("Reward", `${config.name} (${config.value})`);
+        else fail("Missing config", "Reward name and value are required.");
+      }
+      if (type === "add_tag" || type === "remove_tag") {
+        if (config.tag) ok("Tag", String(config.tag));
+        else fail("Missing config", "Tag is missing for this action.");
+      }
+    } else if (node.type === "delay") {
+      const duration = String(config.duration || config.wait || "");
+      if (MOCK_DELAY_PATTERN.test(duration)) ok("Duration", `Wait ${duration}`);
+      else fail("Duration", 'Wait needs a duration like "7d" or "2h".');
+    } else if (node.type === "condition") {
+      const key = String(config.condition || config.key || "");
+      if (key) {
+        ok("Condition", key);
+        const value = config.value;
+        if (value === undefined || value === null || value === "") fail("Condition value", "A comparison value is required for this condition.");
+        else ok("Condition value", String(value));
+      } else {
+        fail("Condition", "Condition is missing.");
+      }
+    } else if (node.type === "end") {
+      ok("End", "Stops the workflow here.");
+    } else {
+      fail("Unknown step", `Step type "${node.type}" is not recognised.`);
+    }
+
+    const hasError = checks.some((c) => c.status === "ERROR");
+    const hasWarning = checks.some((c) => c.status === "WARNING");
+    nodes.push({
+      nodeKey: node.id,
+      type: node.type,
+      label: node.label || node.type,
+      status: hasError ? "ERROR" : hasWarning ? "WARNING" : "OK",
+      summary: hasError
+        ? (checks.find((c) => c.status === "ERROR")?.message || "Needs attention.")
+        : hasWarning
+          ? (checks.find((c) => c.status === "WARNING")?.message || "OK with notes.")
+          : "Ready.",
+      checks,
+      canContinue: !hasError,
+      action: hasError ? { kind: "fix_node" as const } : undefined,
+    });
+  }
+
+  const errors = nodes.filter((n) => n.status === "ERROR").length;
+  const warnings = nodes.filter((n) => n.status === "WARNING").length;
+  return {
+    ok: errors === 0,
+    simulated: true,
+    testedAt: new Date().toISOString(),
+    plan: "growth",
+    nodes,
+    errors,
+    warnings,
+    message: errors === 0 ? "All steps passed. The test is simulated — no real messages were sent." : `${errors} step${errors === 1 ? "" : "s"} need${errors === 1 ? "s" : ""} attention before this workflow can run.`,
+  };
+}

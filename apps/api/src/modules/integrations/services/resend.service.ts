@@ -9,7 +9,7 @@ export class ResendIntegrationService {
   async validateCredentials(apiKey: string): Promise<{ valid: boolean; accountName?: string; error?: string }> {
     try {
       const resend = new Resend(apiKey);
-      const domains = await resend.domains.list();
+      await resend.domains.list();
       return { valid: true, accountName: 'Resend Account' };
     } catch (err: any) {
       return { valid: false, error: err.message };

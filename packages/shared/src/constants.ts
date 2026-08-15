@@ -118,7 +118,6 @@ export function avatarColor(seed: string): string {
   return palette[hash % palette.length]!;
 }
 
-/** App sidebar navigation. Used by both the shell and the landing page. */
 export interface NavItem {
   label: string;
   href: string;
@@ -128,28 +127,61 @@ export interface NavItem {
   badge?: "new" | "soon";
 }
 
-export const APP_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/app", icon: "LayoutDashboard" },
-  { label: "Customers", href: "/app/customers", icon: "Users", requires: ["customers:read"] },
-  { label: "Appointments", href: "/app/appointments", icon: "CalendarDays", requires: ["appointments:read"] },
-  { label: "Booking Links", href: "/app/appointments/booking-links", icon: "Link", requires: ["appointments:manage"] },
-  { label: "Loyalty", href: "/app/loyalty", icon: "Sparkles", requires: ["loyalty:read"] },
-  { label: "Rewards", href: "/app/rewards", icon: "Gift", requires: ["loyalty:read"] },
-  { label: "Memberships", href: "/app/memberships", icon: "Crown", requires: ["loyalty:read"] },
-  { label: "Referrals", href: "/app/referrals", icon: "Share2" },
-  { label: "Campaigns", href: "/app/campaigns", icon: "Megaphone", requires: ["campaigns:manage"] },
-  { label: "Doloyal AI", href: "/app/assistant", icon: "Bot", requires: ["ai:use"], badge: "new" },
-  { label: "Analytics", href: "/app/analytics", icon: "BarChart3", requires: ["analytics:read"] },
-  { label: "Invoices", href: "/app/invoices", icon: "FileText", requires: ["invoices:read"] },
-  { label: "Staff", href: "/app/staff", icon: "IdCard", requires: ["staff:read"] },
-  { label: "Branches", href: "/app/branches", icon: "Store", requires: ["branches:read"] },
-  { label: "Integrations", href: "/app/integrations", icon: "Puzzle" },
-  { label: "Website Builder", href: "/app/websites", icon: "Globe", badge: "new" },
-  { label: "Website Connections", href: "/app/website-connections", icon: "Link2", badge: "new" },
-  { label: "Settings", href: "/app/settings", icon: "Settings", requires: ["settings:manage"] },
-  { label: "Billing", href: "/app/billing", icon: "CreditCard" },
-  { label: "Help", href: "/app/help", icon: "CircleHelp" },
+export interface NavGroup {
+  section: string;
+  items: NavItem[];
+}
+
+export const APP_NAV_GROUPS: NavGroup[] = [
+  {
+    section: "Overview",
+    items: [
+      { label: "Dashboard", href: "/app", icon: "LayoutDashboard" },
+      { label: "Analytics", href: "/app/analytics", icon: "BarChart3", requires: ["analytics:read"] },
+      { label: "Doloyal AI", href: "/app/assistant", icon: "Bot", requires: ["ai:use"], badge: "new" },
+    ],
+  },
+  {
+    section: "Engagement & Loyalty",
+    items: [
+      { label: "Customers", href: "/app/customers", icon: "Users", requires: ["customers:read"] },
+      { label: "Appointments", href: "/app/appointments", icon: "CalendarDays", requires: ["appointments:read"] },
+      { label: "Booking Links", href: "/app/appointments/booking-links", icon: "Link", requires: ["appointments:manage"] },
+      { label: "Loyalty", href: "/app/loyalty", icon: "Sparkles", requires: ["loyalty:read"] },
+      { label: "Rewards", href: "/app/rewards", icon: "Gift", requires: ["loyalty:read"] },
+      { label: "Memberships", href: "/app/memberships", icon: "Crown", requires: ["loyalty:read"] },
+      { label: "Referrals", href: "/app/referrals", icon: "Share2" },
+      { label: "Campaigns", href: "/app/campaigns", icon: "Megaphone", requires: ["campaigns:manage"] },
+    ],
+  },
+  {
+    section: "AI & Websites",
+    items: [
+      { label: "Workflows", href: "/app/workflows", icon: "Workflow", badge: "new" },
+      { label: "Website Builder", href: "/app/websites", icon: "Globe", badge: "new" },
+      { label: "Website Connections", href: "/app/website-connections", icon: "Link2", badge: "new" },
+    ],
+  },
+  {
+    section: "Operations & Team",
+    items: [
+      { label: "Invoices", href: "/app/invoices", icon: "FileText", requires: ["invoices:read"] },
+      { label: "Staff", href: "/app/staff", icon: "IdCard", requires: ["staff:read"] },
+      { label: "Branches", href: "/app/branches", icon: "Store", requires: ["branches:read"] },
+      { label: "Integrations", href: "/app/integrations", icon: "Puzzle" },
+    ],
+  },
+  {
+    section: "Account & Support",
+    items: [
+      { label: "Settings", href: "/app/settings", icon: "Settings", requires: ["settings:manage"] },
+      { label: "Billing", href: "/app/billing", icon: "CreditCard" },
+      { label: "Help", href: "/app/help", icon: "CircleHelp" },
+    ],
+  },
 ];
+
+export const APP_NAV: NavItem[] = APP_NAV_GROUPS.flatMap((g) => g.items);
 
 /** Suggested prompts shown on the AI assistant empty state. */
 export const ASSISTANT_SUGGESTIONS = [

@@ -25,7 +25,6 @@ const INTEGRATION_CATEGORIES = [
     items: [
       { name: "WhatsApp Business API", desc: "Engage customers through official messaging.", status: "Available" },
       { name: "Email Marketing", desc: "Send customer campaigns and automated receipts.", status: "Available" },
-      { name: "SMS Gateway", desc: "Deliver instant verification OTPs & booking SMS.", status: "Available" },
     ],
   },
   {

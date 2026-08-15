@@ -8,7 +8,7 @@ export class RazorpayIntegrationService {
 
   async validateCredentials(keyId: string, keySecret: string): Promise<{ valid: boolean; accountName?: string; error?: string }> {
     try {
-      const client = new Razorpay({ key_id: keyId, key_secret: keySecret });
+      new Razorpay({ key_id: keyId, key_secret: keySecret });
       return { valid: true, accountName: 'Razorpay Account' };
     } catch (err: any) {
       return { valid: false, error: err.message };

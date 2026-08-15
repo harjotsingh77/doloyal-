@@ -256,7 +256,7 @@ export default function AiWebsiteBuilderPage() {
             Building your website with AI
           </h1>
           <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
-            We're using your business data to design your site…
+            We&apos;re using your business data to design your site…
           </p>
         </div>
 
@@ -324,7 +324,7 @@ export default function AiWebsiteBuilderPage() {
               <Loader2 className="h-6 w-6 text-[rgb(var(--color-danger))]" />
             </div>
             <h2 className="mt-4 text-lg font-semibold text-[rgb(var(--color-foreground))]">
-              We couldn't generate your website
+              We couldn&apos;t generate your website
             </h2>
             <p className="mt-1 max-w-sm text-sm text-[rgb(var(--color-muted-foreground))]">{error}</p>
             <div className="mt-6 flex gap-2">

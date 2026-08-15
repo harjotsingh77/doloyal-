@@ -10,9 +10,6 @@ import type {
   CustomerMembership,
   ActivityEntry,
   LoyaltyConfig,
-  DashboardOverview,
-  CustomerTimelineEntry,
-  CustomerProfile,
 } from '@doloyal/shared';
 
 export function prismaCustomerToShared(c: PrismaCustomer & { _count?: { invoices?: number; appointments?: number } }): Customer {

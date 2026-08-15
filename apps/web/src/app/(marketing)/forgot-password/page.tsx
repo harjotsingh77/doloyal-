@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
           <img src="/logo-symbol.png" alt="Doloyal" className="h-10 w-10 object-contain" />
           <h1 className="mt-6 text-2xl font-bold tracking-[-0.02em]">Reset your password</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-[rgb(var(--color-muted-foreground))]">
-            Enter the email you use to sign in. We'll send you a secure reset link within a minute.
+            Enter the email you use to sign in. We&apos;ll send you a secure reset link within a minute.
           </p>
           <div className="mt-6">
             <label htmlFor="email" className="mb-1.5 block text-[13px] font-semibold">Email</label>

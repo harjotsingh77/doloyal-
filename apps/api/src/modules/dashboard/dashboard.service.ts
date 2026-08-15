@@ -22,7 +22,6 @@ export class DashboardService {
     const [
       todayInvoices,
       todayCustomers,
-      totalCustomers,
       repeatCustomers30d,
       newCustomers30d,
       inactiveCustomers,
@@ -44,7 +43,6 @@ export class DashboardService {
       this.prisma.customer.count({
         where: { tenantId, createdAt: { gte: startOfDay } },
       }),
-      this.prisma.customer.count({ where: { tenantId } }),
       this.prisma.invoice.groupBy({
         by: ['customerId'],
         where: {

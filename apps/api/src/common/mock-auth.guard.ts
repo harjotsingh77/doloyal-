@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from './prisma.service';
 import { IS_PUBLIC_KEY } from '../modules/auth/jwt-auth.guard';
+import { permissionsForRole } from '@doloyal/shared';
 
 @Injectable()
 export class MockAuthGuard implements CanActivate {
@@ -89,6 +90,8 @@ export class MockAuthGuard implements CanActivate {
       lastName: user.lastName,
       avatarUrl: user.avatarUrl,
       isAdmin: user.isAdmin === true || user.email === 'demo@doloyal.ai',
+      adminRole: user.adminRole || (user.email === 'demo@doloyal.ai' ? 'SUPER_ADMIN' : null),
+      adminPermissions: permissionsForRole(user.adminRole || (user.email === 'demo@doloyal.ai' ? 'SUPER_ADMIN' : null)),
       memberships: memberships.map((m: any) => ({
         id: m.id, userId: m.userId, tenantId: m.tenantId, role: m.role,
         createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : m.createdAt,
@@ -159,6 +162,8 @@ export class MockAuthGuard implements CanActivate {
         lastName: user.lastName,
         avatarUrl: user.avatarUrl,
         isAdmin: user.isAdmin === true,
+        adminRole: user.adminRole ?? null,
+        adminPermissions: permissionsForRole(user.adminRole),
         memberships: memberships.map((m: any) => ({
           id: m.id, userId: m.userId, tenantId: m.tenantId, role: m.role,
           createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : m.createdAt,

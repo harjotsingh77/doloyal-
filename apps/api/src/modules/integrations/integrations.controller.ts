@@ -1,10 +1,9 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, Headers } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from '../auth/public.decorator';
-import { Roles } from '../../common/roles.decorator';
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
-import { getIntegrationDef, INTEGRATION_DEFINITIONS } from './integration-definitions';
+import { INTEGRATION_DEFINITIONS } from './integration-definitions';
 
 class ConnectIntegrationDto {
   @IsString() @IsNotEmpty() type: string;

@@ -293,7 +293,7 @@ export class AiService {
     messageId: string,
     handlers?: StreamHandlers,
   ) {
-    const conv = await this.assertConversation(tenantId, userId, conversationId);
+    await this.assertConversation(tenantId, userId, conversationId);
     const target = await this.prisma.aiMessage.findFirst({
       where: { id: messageId, conversationId, tenantId, role: 'assistant' },
     });

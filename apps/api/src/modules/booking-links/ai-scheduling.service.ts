@@ -10,7 +10,6 @@ export class AiSchedulingService {
     serviceId: string,
     date: string,
     staffId?: string,
-    customerId?: string,
   ) {
     const service = await this.prisma.service.findFirst({
       where: { id: serviceId, tenantId },
@@ -119,7 +118,6 @@ export class AiSchedulingService {
   }
 
   async detectConflicts(tenantId: string, date: string, staffId?: string) {
-    const dateObj = new Date(date);
     const appointments = await this.prisma.appointment.findMany({
       where: {
         tenantId,

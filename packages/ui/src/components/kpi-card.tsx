@@ -92,6 +92,11 @@ export function KpiCard({
               {loading ? <span className="opacity-40">—</span> : display}
             </div>
           </div>
+          {icon ? (
+            <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", ACCENT_BG[accent])}>
+              {icon}
+            </div>
+          ) : null}
         </div>
         {delta !== undefined ? (
           <div className="mt-3 flex items-center gap-1.5 text-xs">

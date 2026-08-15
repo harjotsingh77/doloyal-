@@ -29,7 +29,10 @@ export class TransformInterceptor implements NestInterceptor {
         if (
           payload !== null &&
           payload !== undefined &&
-          (payload as any).error !== undefined
+          typeof payload === 'object' &&
+          !Array.isArray(payload) &&
+          payload.error &&
+          typeof payload.error === 'object'
         ) {
           return payload;
         }

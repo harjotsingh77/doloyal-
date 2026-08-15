@@ -139,6 +139,8 @@ export interface AuthUser {
   avatarUrl?: string;
   twoFactorEnabled?: boolean;
   isAdmin?: boolean;
+  adminRole?: import("./admin").AdminRole | null;
+  adminPermissions?: import("./admin").AdminPermission[];
   memberships: Membership[];
   activeTenantId: string;
   activeRole: Role;
@@ -1940,4 +1942,320 @@ export interface AdminWebsiteProjectList {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+// ─── Help & Support ─────────────────────────────────────────────────────────
+
+export interface SupportTicket {
+  id: string;
+  ticketNumber: string;
+  tenantId: string;
+  userId: string;
+  subject: string;
+  category: string;
+  priority: string;
+  description: string;
+  status: string;
+  assignedAgentId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  closedAt?: string | null;
+  assignedAgent?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email: string;
+  } | null;
+  user?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  tenant?: { id: string; name: string; slug?: string | null } | null;
+  /** Most recent message, if any. */
+  messages?: Array<{
+    id: string;
+    message: string;
+    senderRole: string;
+    senderId: string;
+    createdAt: string;
+    readAt?: string | null;
+  }>;
+  /** Filtered count of unread messages from the other party. */
+  _count?: {
+    messages: number;
+  };
+}
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderRole: string; // CUSTOMER | ADMIN | SYSTEM
+  message: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentMimeType?: string | null;
+  isLink: boolean;
+  readAt?: string | null;
+  createdAt: string;
+  senderName?: string | null;
+}
+
+export interface SupportAttachment {
+  id: string;
+  ticketId: string;
+  messageId?: string | null;
+  uploadedBy: string;
+  fileUrl: string;
+  fileName: string;
+  fileType?: string | null;
+  fileSize?: number | null;
+  createdAt: string;
+}
+
+export interface SupportInternalNote {
+  id: string;
+  ticketId: string;
+  adminId?: string | null;
+  adminName?: string | null;
+  note: string;
+  createdAt: string;
+}
+
+export interface SupportStatusHistory {
+  id: string;
+  ticketId: string;
+  oldStatus?: string | null;
+  newStatus: string;
+  changedById?: string | null;
+  changedByName?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface SupportArticle {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string | null;
+  content: string;
+  category: string;
+  keywords: string[];
+  faq: boolean;
+  sortOrder: number;
+  published: boolean;
+  updatedAt: string;
+}
+
+export interface SupportTicketDetail extends SupportTicket {
+  messages: SupportMessage[];
+  statusHistory: SupportStatusHistory[];
+  attachments: SupportAttachment[];
+}
+
+export interface SupportTicketConversation {
+  ticket: SupportTicket;
+  messages: SupportMessage[];
+}
+
+export interface CreateSupportTicketInput {
+  subject: string;
+  category: string;
+  priority?: string;
+  description: string;
+}
+
+export interface SupportMessageInput {
+  message: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentMimeType?: string;
+  isLink?: boolean;
+}
+
+export interface AdminSupportTicketList {
+  items: SupportTicket[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface AdminSupportStats {
+  open: number;
+  inProgress: number;
+  waiting: number;
+  resolved: number;
+  closed: number;
+  total: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Workflows
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type WorkflowStatus =
+  | "DRAFT"
+  | "ACTIVE"
+  | "PAUSED"
+  | "ERROR"
+  | "ARCHIVED";
+
+export type WorkflowRunStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED"
+  | "SKIPPED"
+  | "CANCELLED";
+
+export type WorkflowNodeType =
+  | "trigger"
+  | "action"
+  | "condition"
+  | "delay"
+  | "branch"
+  | "end";
+
+export interface WorkflowTriggerDef {
+  type: string;
+  config?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+}
+
+export interface WorkflowNodeDef {
+  id: string;
+  type: WorkflowNodeType;
+  label: string;
+  description?: string;
+  config?: Record<string, unknown>;
+  /** condition / action / delay specifics */
+  data?: Record<string, unknown>;
+}
+
+export interface WorkflowEdgeDef {
+  source: string;
+  target: string;
+  outcome?: string | null;
+}
+
+export interface WorkflowDefinition {
+  name: string;
+  description?: string;
+  trigger: WorkflowTriggerDef;
+  nodes: WorkflowNodeDef[];
+  edges: WorkflowEdgeDef[];
+}
+
+export interface WorkflowSummary {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  trigger: WorkflowTriggerDef;
+  status: WorkflowStatus;
+  version: number;
+  activatedAt?: string;
+  pausedAt?: string;
+  lastRunAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  runs: number;
+  completedRuns: number;
+  failedRuns: number;
+  successRate?: number;
+  customersReached?: number;
+  messagesSent?: number;
+  bookingsGenerated?: number;
+  rewardsGenerated?: number;
+  revenueGenerated?: number;
+}
+
+export interface WorkflowDetail extends WorkflowSummary {
+  definition: WorkflowDefinition;
+  versions: WorkflowVersionInfo[];
+  recentRuns: WorkflowRunInfo[];
+}
+
+export interface WorkflowVersionInfo {
+  id: string;
+  version: number;
+  status: "DRAFT" | "ACTIVE" | "SUPERSEDED";
+  createdAt: string;
+  activatedAt?: string;
+}
+
+export interface WorkflowRunInfo {
+  id: string;
+  workflowId: string;
+  customerId?: string;
+  customerName?: string;
+  version: number;
+  status: WorkflowRunStatus;
+  trigger: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+  createdAt: string;
+  steps: WorkflowRunStepInfo[];
+}
+
+export interface WorkflowRunStepInfo {
+  id: string;
+  nodeKey: string;
+  type: string;
+  status: string;
+  attempt: number;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+  output?: Record<string, unknown> | null;
+}
+
+export interface WorkflowTemplateInfo {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+}
+
+export interface WorkflowMetrics {
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  runningRuns: number;
+  customersReached: number;
+  messagesSent: number;
+  bookingsGenerated: number;
+  rewardsGenerated: number;
+  revenueGenerated: number;
+  successRate: number;
+}
+
+export interface WorkflowCapabilityCatalog {
+  triggers: Array<{ type: string; label: string; category: string; description: string }>;
+  conditions: Array<{ key: string; label: string; category: string; operators: string[] }>;
+  actions: Array<{ type: string; label: string; category: string; description: string; channels?: string[] }>;
+}
+
+export interface WorkflowGenerateResult {
+  workflow: WorkflowDetail;
+  message: string;
+  clarification?: string;
+  needsClarification?: boolean;
+  warnings?: string[];
+}
+
+export interface WorkflowAuditEntry {
+  id: string;
+  workflowId: string;
+  actorName?: string;
+  action: string;
+  version?: number;
+  details?: Record<string, unknown>;
+  createdAt: string;
 }

@@ -201,7 +201,7 @@ export class StaffController {
     @Param('noteId') noteId: string,
     @CurrentUser() user: any,
   ) {
-    return this.staff.deleteNote(user.activeTenantId, id, noteId, user);
+    return this.staff.deleteNote(user.activeTenantId, id, noteId);
   }
 
   // ─── Presence ────────────────────────────────────────────────────────────
@@ -245,7 +245,7 @@ export class StaffController {
     return this.staff.inviteMember(user.activeTenantId, dto as any, {
       ...user,
       ...this.requestMeta(req),
-    }, this.requestMeta(req).ip || undefined);
+    });
   }
 
   @Post('invitations/:id/resend')

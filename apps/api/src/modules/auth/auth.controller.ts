@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, Query, Headers, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, Req, UnauthorizedException } from '@nestjs/common';
 import { AuthService, type LoginMeta } from './auth.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from './public.decorator';
@@ -141,7 +141,7 @@ export class AuthController {
   @Post('switch-tenant')
   @HttpCode(HttpStatus.OK)
   async switchTenant(@Body() dto: SwitchTenantDto, @CurrentUser() user: any) {
-    return this.authService.switchTenant(user.id, dto.tenantId, user);
+    return this.authService.switchTenant(user.id, dto.tenantId);
   }
 
   @Post('change-password')

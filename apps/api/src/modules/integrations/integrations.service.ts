@@ -160,7 +160,7 @@ export class IntegrationsService {
     });
 
     try {
-      const result = await this.syncWithProvider(type as any, integration);
+      const result = await this.syncWithProvider(type as any);
       await this.prisma.integration.update({
         where: { id: integration.id },
         data: { lastSyncedAt: new Date(), errorLog: null },
@@ -444,7 +444,7 @@ export class IntegrationsService {
     }
   }
 
-  private async syncWithProvider(type: string, integration: any) {
+  private async syncWithProvider(type: string) {
     switch (type) {
       case 'HUBSPOT':
       case 'SALESFORCE':

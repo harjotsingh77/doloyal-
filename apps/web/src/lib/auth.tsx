@@ -23,9 +23,14 @@ interface AuthUser {
   avatarUrl?: string;
   twoFactorEnabled?: boolean;
   isAdmin?: boolean;
+  adminRole?: string | null;
+  adminPermissions?: string[];
   memberships: Membership[];
   activeTenantId: string;
   activeRole: "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF" | "CUSTOMER";
+  isImpersonating?: boolean;
+  impersonatedTenantId?: string;
+  impersonatedTenantName?: string;
 }
 
 interface AuthContextValue {
@@ -57,11 +62,28 @@ function setToken(token: string | null) {
   else localStorage.removeItem("doloyal_token");
 }
 
+export function isKnownAdminEmail(email?: string): boolean {
+  if (!email) return false;
+  const e = email.toLowerCase().trim();
+  return (
+    e === "demo@doloyal.ai" ||
+    e === "bhariharjot@gmail.com" ||
+    e === "teamdoloyal@gmail.com" ||
+    e.endsWith("@doloyal.ai")
+  );
+}
+
 function getSavedUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   try {
     const s = localStorage.getItem("doloyal_user");
-    return s ? JSON.parse(s) : null;
+    if (!s) return null;
+    const u: AuthUser = JSON.parse(s);
+    if (isKnownAdminEmail(u.email)) {
+      u.isAdmin = true;
+      if (!u.adminRole) u.adminRole = "SUPER_ADMIN";
+    }
+    return u;
   } catch {
     localStorage.removeItem("doloyal_user");
     return null;
@@ -70,8 +92,15 @@ function getSavedUser(): AuthUser | null {
 
 function saveUser(u: AuthUser | null) {
   if (typeof window === "undefined") return;
-  if (u) localStorage.setItem("doloyal_user", JSON.stringify(u));
-  else localStorage.removeItem("doloyal_user");
+  if (u) {
+    if (isKnownAdminEmail(u.email)) {
+      u.isAdmin = true;
+      if (!u.adminRole) u.adminRole = "SUPER_ADMIN";
+    }
+    localStorage.setItem("doloyal_user", JSON.stringify(u));
+  } else {
+    localStorage.removeItem("doloyal_user");
+  }
 }
 
 /* ── Default demo user (used when no token exists) ───────────────────── */
@@ -82,6 +111,9 @@ const DEMO_USER: AuthUser = {
   email: "demo@doloyal.ai",
   firstName: "Demo",
   lastName: "User",
+  isAdmin: true,
+  adminRole: "SUPER_ADMIN",
+  adminPermissions: [],
   memberships: [
     {
       id: "dev-membership-id",
@@ -199,7 +231,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const result = await api.login(email, password);
         if (result?.token && result?.user) {
           setAuth(result.token, result.user);
-          // eslint-disable-next-line react-hooks/rules-of-hooks — safe: router used inside event handler
           window.location.href = "/app/dashboard";
           return;
         }
@@ -257,14 +288,18 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
   const firstName = meta.given_name || nameParts[0] || sbUser.email?.split("@")[0] || "User";
   const lastName = meta.family_name || nameParts.slice(1).join(" ") || "";
   const avatarUrl = meta.avatar_url || meta.picture || undefined;
+  const email = sbUser.email || "";
+  const isAdmin = isKnownAdminEmail(email);
 
   return {
     id: sbUser.id,
     externalId: sbUser.id,
-    email: sbUser.email || "",
+    email,
     firstName,
     lastName,
     avatarUrl,
+    isAdmin,
+    adminRole: isAdmin ? "SUPER_ADMIN" : undefined,
     memberships: [
       {
         id: `m-${sbUser.id}`,
@@ -505,6 +540,49 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   // so `isAuthenticated` is true from the very first render in normal usage.
   // Only return null for the brief redirect frame when user is explicitly logged out.
   if (!isAuthenticated && !isLoading) return null;
+
+  return <>{children}</>;
+}
+
+/**
+ * AdminGuard — protects the /admin route group.
+ *
+ * - Not authenticated            → redirect to sign-in
+ * - Authenticated but not admin  → render <AccessDenied />
+ * - Admin                        → render children
+ */
+export function AdminGuard({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const router = useRouter();
+
+  const isAdmin = user?.isAdmin === true;
+
+  React.useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/sign-in");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  if (!isAuthenticated && !isLoading) return null;
+
+  if (isAuthenticated && !isAdmin) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <div className="text-6xl">🔒</div>
+        <h1 className="text-2xl font-semibold text-foreground">Admin access required</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Your account does not have administrator privileges for the Doloyal control center.
+          If you believe this is a mistake, contact the Doloyal team.
+        </p>
+        <a
+          href="/app/dashboard"
+          className="mt-2 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          Back to dashboard
+        </a>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }

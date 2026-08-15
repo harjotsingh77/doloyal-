@@ -2,8 +2,8 @@ import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, 
 import { MembershipsService } from './memberships.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Roles } from '../../common/roles.decorator';
-import { IsString, IsNumber, IsArray, IsOptional, IsNotEmpty, IsIn, Matches, MaxLength } from 'class-validator';
-import { PLANS, getPlan } from './plan-definitions';
+import { IsString, IsNumber, IsArray, IsOptional, IsNotEmpty, Matches, MaxLength } from 'class-validator';
+import { PLANS } from './plan-definitions';
 
 class CreateTierDto {
   @IsString()

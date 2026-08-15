@@ -1,4 +1,5 @@
 import { PrismaClient, Role, CustomerStatus, LoyaltyMode, InvoiceStatus, AppointmentStatus, ActivityType, RedemptionStatus } from '@prisma/client';
+import { HELP_ARTICLES } from './help-articles';
 
 const prisma = new PrismaClient();
 
@@ -30,6 +31,8 @@ const REWARDS_DATA = [
 
 async function main() {
   console.log('Seeding Doloyal database...');
+
+  await seedHelpArticles();
 
   const existingUser = await prisma.user.findFirst({
     where: {
@@ -386,6 +389,40 @@ async function main() {
   console.log(`  Appointments: ${apptCount}`);
   console.log(`  Redemptions: ${redemptionCount}`);
   console.log(`\nDemo login: demo@doloyal.ai (mock auth)`);
+}
+
+/** Idempotent help-article seed — upserts by slug, safe to run any time. */
+async function seedHelpArticles() {
+  const count = HELP_ARTICLES.length;
+  let upserted = 0;
+  for (const article of HELP_ARTICLES) {
+    await prisma.supportArticle.upsert({
+      where: { slug: article.slug },
+      update: {
+        title: article.title,
+        description: article.description,
+        content: article.content,
+        category: article.category,
+        keywords: article.keywords,
+        faq: article.faq,
+        sortOrder: article.sortOrder,
+        published: true,
+      },
+      create: {
+        slug: article.slug,
+        title: article.title,
+        description: article.description,
+        content: article.content,
+        category: article.category,
+        keywords: article.keywords,
+        faq: article.faq,
+        sortOrder: article.sortOrder,
+        published: true,
+      },
+    });
+    upserted++;
+  }
+  console.log(`Seeded ${upserted}/${count} help articles`);
 }
 
 main()

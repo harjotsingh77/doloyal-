@@ -73,7 +73,7 @@ export default function WaitlistPage() {
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                     <CheckCircle2 className="h-8 w-8" />
                   </div>
-                  <h3 className="mt-6 text-2xl font-extrabold text-[#282628]">🎉 You're On The Waitlist!</h3>
+                  <h3 className="mt-6 text-2xl font-extrabold text-[#282628]">🎉 You&apos;re On The Waitlist!</h3>
                   <p className="mt-2 text-base text-gray-600">
                     We’ll send you early access credentials & your 1 Month Free trial link as soon as we launch.
                   </p>

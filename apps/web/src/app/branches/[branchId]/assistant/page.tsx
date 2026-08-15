@@ -156,7 +156,7 @@ export default function BranchAssistantPage() {
               </div>
               <p className="mt-3 text-sm font-medium">Ask about {selectedBranch.name}</p>
               <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                Example: "How much revenue today?" — or "Compare with Whitefield"
+                Example: &quot;How much revenue today?&quot; — or &quot;Compare with Whitefield&quot;
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (

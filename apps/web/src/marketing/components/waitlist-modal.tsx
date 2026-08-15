@@ -110,7 +110,7 @@ export function WaitlistModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 shadow-inner">
                   <CheckCircle2 className="h-8 w-8" />
                 </div>
-                <h3 className="mt-6 text-2xl font-extrabold text-[#282628]">🎉 You're On The Waitlist!</h3>
+                <h3 className="mt-6 text-2xl font-extrabold text-[#282628]">🎉 You&apos;re On The Waitlist!</h3>
                 <p className="mt-3 text-sm leading-relaxed text-gray-600">
                   Thank you for joining. We’re preparing Doloyal for launch and you’ll get early access & 1 Month Free!
                 </p>
@@ -195,7 +195,7 @@ export function WaitlistModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                   </button>
 
                   <p className="text-center text-[12px] text-gray-400">
-                    No spam. We'll only email you when early access opens.
+                    No spam. We&apos;ll only email you when early access opens.
                   </p>
                 </form>
               </div>

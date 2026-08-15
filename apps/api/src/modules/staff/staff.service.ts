@@ -310,9 +310,7 @@ export class StaffService {
       };
     }
 
-    const allowedSorts = ['name', 'role', 'status', 'dateJoined', 'lastLogin', 'createdAt'];
-    const sortBy: keyof Prisma.StaffProfileOrderByWithRelationInput =
-      (query.sortBy === 'role' || query.sortBy === 'status' || query.sortBy === 'dateJoined' || query.sortBy === 'createdAt' ? query.sortBy : 'dateJoined') as any;
+    const sortBy: keyof Prisma.StaffProfileOrderByWithRelationInput =      (query.sortBy === 'role' || query.sortBy === 'status' || query.sortBy === 'dateJoined' || query.sortBy === 'createdAt' ? query.sortBy : 'dateJoined') as any;
     const sortDir = query.sortDir || 'desc';
     const orderBy: Prisma.StaffProfileOrderByWithRelationInput[] = (() => {
       if (query.sortBy === 'name') {
@@ -530,7 +528,7 @@ export class StaffService {
     if (dto.twoFactorRequired !== undefined) data.twoFactorRequired = dto.twoFactorRequired;
     if (dto.permissions) data.permissions = dto.permissions as any;
 
-    let userData: Prisma.UserUpdateInput = {};
+    const userData: Prisma.UserUpdateInput = {};
     if (dto.firstName !== undefined) userData.firstName = dto.firstName;
     if (dto.lastName !== undefined) userData.lastName = dto.lastName;
     if (dto.phone !== undefined) userData.phone = dto.phone;
@@ -825,7 +823,7 @@ export class StaffService {
     };
   }
 
-  async deleteNote(tenantId: string, memberId: string, noteId: string, actor: Actor) {
+  async deleteNote(tenantId: string, memberId: string, noteId: string) {
     const note = await this.prisma.employeeNote.findFirst({
       where: { id: noteId, staffProfileId: memberId, tenantId },
     });
@@ -947,7 +945,7 @@ export class StaffService {
     });
   }
 
-  async inviteMember(tenantId: string, dto: InviteMemberLike, actor: Actor, ip?: string) {
+  async inviteMember(tenantId: string, dto: InviteMemberLike, actor: Actor) {
     await this.ensureProfile(actor.id, tenantId, actor.activeRole);
     const email = dto.email.toLowerCase().trim();
 

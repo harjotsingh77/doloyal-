@@ -419,7 +419,7 @@ export default function BranchesPage() {
             </div>
             <h3 className="text-base font-semibold text-[rgb(var(--color-foreground))]">Map view coming soon</h3>
             <p className="mt-1.5 max-w-sm text-sm text-[rgb(var(--color-muted-foreground))]">
-              Pin all your branches on an interactive map for a bird's-eye view of your
+              Pin all your branches on an interactive map for a bird&apos;s-eye view of your
               operations.
             </p>
           </div>

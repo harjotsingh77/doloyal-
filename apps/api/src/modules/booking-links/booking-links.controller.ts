@@ -344,7 +344,7 @@ export class BookingLinksController {
   }
 
   @Post('notifications/send')
-  sendNotification(@Body() dto: SendNotificationDto, @CurrentUser() user: any) {
+  sendNotification(@Body() dto: SendNotificationDto) {
     return this.notificationsService.send(dto.appointmentId, dto.type, dto.channel);
   }
 
@@ -395,7 +395,7 @@ export class BookingLinksController {
 
   @Post('ai/suggest-slot')
   suggestSlot(@Body() dto: AiSuggestSlotDto, @CurrentUser() user: any) {
-    return this.aiSchedulingService.suggestBestSlot(user.activeTenantId, dto.serviceId, dto.date, dto.staffId, dto.customerId);
+    return this.aiSchedulingService.suggestBestSlot(user.activeTenantId, dto.serviceId, dto.date, dto.staffId);
   }
 
   @Post('ai/detect-conflicts')

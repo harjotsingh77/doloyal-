@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Param, Body } from "@nestjs/common";
 import { IsString, IsOptional, IsNotEmpty } from "class-validator";
 import { WebsitesService } from "./websites.service";
 import { WebsiteAIService } from "./website-ai.service";

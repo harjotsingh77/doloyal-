@@ -605,7 +605,7 @@ function OverviewPanel({ project, onChanged }: { project: any; onChanged: () => 
               Need to update your requirements?
             </p>
             <p className="mt-1">
-              While your request is under review you can share changes with our team directly in the chat — we'll update your project.
+              While your request is under review you can share changes with our team directly in the chat — we&apos;ll update your project.
             </p>
           </div>
         </CardContent>

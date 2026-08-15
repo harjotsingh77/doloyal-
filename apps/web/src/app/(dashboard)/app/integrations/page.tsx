@@ -52,7 +52,7 @@ export default function IntegrationsPage() {
         api.listIntegrationProviders(),
         api.listIntegrations(),
       ]);
-      setProviders(provs);
+      setProviders(provs.filter((p: any) => p.type !== "SMS" && p.type !== "sms" && p.name !== "SMS Provider"));
       const map: Record<string, any> = {};
       for (const i of list) map[i.type.toLowerCase()] = i;
       setIntegrations(map);

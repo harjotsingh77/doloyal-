@@ -730,3 +730,60 @@ export const PROJECT_FILE_CATEGORIES = [
   "CHAT_ATTACHMENT",
 ] as const;
 export type ProjectFileCategory = (typeof PROJECT_FILE_CATEGORIES)[number];
+
+// ─── Help & Support ─────────────────────────────────────────────────────────
+
+export const SUPPORT_STATUSES = [
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_FOR_CUSTOMER",
+  "RESOLVED",
+  "CLOSED",
+] as const;
+export type SupportStatus = (typeof SUPPORT_STATUSES)[number];
+
+export const SUPPORT_STATUS_LABELS: Record<SupportStatus, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  WAITING_FOR_CUSTOMER: "Waiting for Customer",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+};
+
+export const SUPPORT_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
+export type SupportPriority = (typeof SUPPORT_PRIORITIES)[number];
+
+export const SUPPORT_PRIORITY_LABELS: Record<SupportPriority, string> = {
+  LOW: "Low",
+  NORMAL: "Normal",
+  HIGH: "High",
+  URGENT: "Urgent",
+};
+
+export const SUPPORT_CATEGORIES = [
+  "Account & Login",
+  "Billing & Payments",
+  "Customers",
+  "Appointments & Booking",
+  "Loyalty & Rewards",
+  "Memberships",
+  "Campaigns",
+  "Analytics",
+  "Website Builder",
+  "Website Connection",
+  "Integrations",
+  "AI Assistant",
+  "Technical Issue",
+  "Other",
+] as const;
+export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
+
+/** Compact help-center category navigation shown on the Help page. */
+export const HELP_CATEGORIES = [
+  "Getting Started",
+  "Account & Billing",
+  "Core Features",
+  "Website & Integrations",
+  "Troubleshooting",
+] as const;
+export type HelpCategory = (typeof HELP_CATEGORIES)[number];

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
@@ -125,11 +125,24 @@ export class AuthService {
       include: { memberships: true },
     });
 
+    const isAdminEmail = (email: string) =>
+      ['bhariharjot@gmail.com', 'teamdoloyal@gmail.com', 'demo@doloyal.ai'].includes(email.toLowerCase()) ||
+      email.toLowerCase().endsWith('@doloyal.ai');
+
+    const shouldBeAdmin = isAdminEmail(googleProfile.email);
+
     if (user) {
-      if (!user.googleId) {
+      const updateData: any = {};
+      if (!user.googleId) updateData.googleId = googleProfile.id;
+      if (googleProfile.avatarUrl && googleProfile.avatarUrl !== user.avatarUrl) updateData.avatarUrl = googleProfile.avatarUrl;
+      if (shouldBeAdmin && (!user.isAdmin || !user.adminRole)) {
+        updateData.isAdmin = true;
+        updateData.adminRole = 'SUPER_ADMIN';
+      }
+      if (Object.keys(updateData).length > 0) {
         user = await this.prisma.user.update({
           where: { id: user.id },
-          data: { googleId: googleProfile.id, avatarUrl: googleProfile.avatarUrl || user.avatarUrl },
+          data: updateData,
           include: { memberships: true },
         });
       }
@@ -141,6 +154,8 @@ export class AuthService {
           lastName: googleProfile.lastName,
           avatarUrl: googleProfile.avatarUrl,
           googleId: googleProfile.id,
+          isAdmin: shouldBeAdmin,
+          adminRole: shouldBeAdmin ? 'SUPER_ADMIN' : null,
         },
         include: { memberships: true },
       });
@@ -246,7 +261,7 @@ export class AuthService {
     return this.mapUser(dbUser, activeMembership?.tenantId || user.activeTenantId, activeMembership?.role || user.activeRole);
   }
 
-  async switchTenant(userId: string, tenantId: string, currentUser: any): Promise<AuthUser> {
+  async switchTenant(userId: string, tenantId: string): Promise<AuthUser> {
     const membership = await this.prisma.membership.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
     });
@@ -343,6 +358,7 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: Boolean(user.twoFactorEnabled),
       isAdmin: Boolean(user.isAdmin),
+      adminRole: user.adminRole || (user.isAdmin ? 'SUPER_ADMIN' : undefined),
       memberships: (user.memberships || []).map((m: any) => ({
         id: m.id,
         userId: m.userId,

@@ -604,7 +604,7 @@ export default function AppointmentsPage() {
                   <CalendarDays className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Today's Appointments</p>
+                  <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Today&apos;s Appointments</p>
                   <p className="text-xl font-bold">{todaySummary.count}</p>
                 </div>
               </div>

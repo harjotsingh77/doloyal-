@@ -1754,7 +1754,7 @@ export default function BookingLinksPage() {
         <DialogContent className="max-w-md rounded-3xl p-6 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-red-600">
-              Delete "{deleteModalLink?.name || deleteModalLink?.slug}"?
+              Delete &quot;{deleteModalLink?.name || deleteModalLink?.slug}&quot;?
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               This link has {deleteModalLink?.metrics?.totalBookings ?? deleteModalLink?.bookingCount ?? 0}{" "}

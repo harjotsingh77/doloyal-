@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
 import { FeatureFlagsService } from '../feature-flags/feature-flags.service';
+import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 import {
   prismaConfigToShared,
   prismaPointsLedgerToShared,
@@ -30,6 +31,7 @@ export class LoyaltyService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly featureFlags: FeatureFlagsService,
+    private readonly workflowEngine: WorkflowEngineService,
   ) {}
 
   // ─── Config ───────────────────────────────────────────────────────────────
@@ -1415,6 +1417,30 @@ export class LoyaltyService {
         message: `${points} points earned - ${reason}`,
       },
     });
+
+    try {
+      await this.workflowEngine.handleEvent(tenantId, 'points_earned', {
+        customerId,
+        amount: points,
+        balanceAfter: newBalance,
+        reason,
+      });
+      const prevBalance = customer.pointsBalance;
+      const threshold = 500;
+      const crossedThreshold =
+        Math.floor(newBalance / threshold) > Math.floor(prevBalance / threshold);
+      if (crossedThreshold) {
+        await this.workflowEngine.handleEvent(tenantId, 'points_threshold_reached', {
+          customerId,
+          amount: points,
+          balanceAfter: newBalance,
+          threshold,
+        });
+      }
+    } catch {
+      // Workflows must never block point earning
+    }
+
     return prismaPointsLedgerToShared(ledger);
   }
 

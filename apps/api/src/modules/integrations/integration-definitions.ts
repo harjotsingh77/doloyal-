@@ -23,6 +23,7 @@ export const INTEGRATION_DEFINITIONS: IntegrationDefinition[] = [
   { type: 'STRIPE', name: 'Stripe', description: 'Payment processing and subscription management.', category: 'Payments', icon: 'CreditCard', hasApiKey: true, hasApiSecret: false, hasOAuth: false, hasWebhook: true, supportsSync: true, supportsTest: true, envKeys: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] },
   { type: 'RAZORPAY', name: 'Razorpay', description: 'Indian payment gateway for UPI, cards, net banking.', category: 'Payments', icon: 'CreditCard', hasApiKey: true, hasApiSecret: true, hasOAuth: false, hasWebhook: true, supportsSync: true, supportsTest: true, envKeys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] },
   { type: 'RESEND', name: 'Resend', description: 'Modern email API for developers.', category: 'Email', icon: 'Mail', hasApiKey: true, hasApiSecret: false, hasOAuth: false, hasWebhook: true, supportsSync: false, supportsTest: true, envKeys: ['RESEND_API_KEY'] },
+  { type: 'WHATSAPP', name: 'WhatsApp Business', description: 'Send WhatsApp messages to your customers.', category: 'Messaging', icon: 'MessageCircle', hasApiKey: true, hasApiSecret: false, hasOAuth: false, hasWebhook: false, supportsSync: false, supportsTest: true, envKeys: ['WHATSAPP_API_TOKEN'], configureInstructions: 'Paste your WhatsApp Business Cloud API access token. WhatsApp messages are simulated in test mode and never sent without an explicit approval.' },
 ];
 
 export function getIntegrationDef(type: string): IntegrationDefinition | undefined {

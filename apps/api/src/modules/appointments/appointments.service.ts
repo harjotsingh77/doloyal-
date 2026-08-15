@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { prismaAppointmentToShared } from '../../common/helpers';
 import { ReferralsService } from '../referrals/referrals.service';
+import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly referrals: ReferralsService,
+    private readonly workflowEngine: WorkflowEngineService,
   ) {}
 
   async list(tenantId: string, query: { status?: string; from?: string; to?: string }) {
@@ -60,6 +62,17 @@ export class AppointmentsService {
       // Referral automation must not block booking
     }
 
+    try {
+      await this.workflowEngine.handleEvent(tenantId, 'appointment_booked', {
+        customerId: data.customerId,
+        appointmentId: appointment.id,
+        serviceName: data.serviceName,
+        appointmentStatus: 'BOOKED',
+      });
+    } catch {
+      // Workflows must never block booking
+    }
+
     return prismaAppointmentToShared(appointment);
   }
 
@@ -98,6 +111,26 @@ export class AppointmentsService {
       } catch {
         // non-blocking
       }
+    }
+
+    try {
+      const eventMap: Record<string, string> = {
+        COMPLETED: 'appointment_completed',
+        CANCELLED: 'appointment_canceled',
+        NO_SHOW: 'appointment_no_show',
+        CONFIRMED: 'appointment_confirmed',
+      };
+      const eventType = eventMap[status];
+      if (eventType) {
+        await this.workflowEngine.handleEvent(tenantId, eventType, {
+          customerId: appointment.customerId,
+          appointmentId: appointment.id,
+          serviceName: appointment.serviceName,
+          appointmentStatus: status,
+        });
+      }
+    } catch {
+      // Workflows must never block status updates
     }
 
     return prismaAppointmentToShared(updated);

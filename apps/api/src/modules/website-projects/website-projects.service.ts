@@ -51,18 +51,6 @@ const projectInclude = {
   },
 };
 
-const conversationInclude = {
-  messages: {
-    orderBy: { createdAt: 'asc' as const },
-  },
-  project: {
-    select: { id: true, name: true, websiteType: true, status: true },
-  },
-  admin: {
-    select: { id: true, firstName: true, lastName: true, email: true },
-  },
-};
-
 @Injectable()
 export class WebsiteProjectsService {
   constructor(
@@ -206,7 +194,7 @@ export class WebsiteProjectsService {
     if (dto.websiteType !== undefined) data.websiteType = dto.websiteType;
     if (dto.goal !== undefined) data.goal = dto.goal || null;
 
-    const updated = await this.prisma.websiteProject.update({
+    await this.prisma.websiteProject.update({
       where: { id: projectId },
       data,
     });
@@ -444,7 +432,7 @@ export class WebsiteProjectsService {
       return project;
     }
 
-    const updated = await this.prisma.websiteProject.update({
+await this.prisma.websiteProject.update({
       where: { id: projectId },
       data: { status: dto.status },
     });
@@ -467,7 +455,7 @@ export class WebsiteProjectsService {
       newStatus: dto.status,
     });
 
-    return updated;
+    return this.adminGetProject(projectId);
   }
 
   async adminAssign(admin: any, projectId: string, adminId?: string) {
@@ -552,7 +540,7 @@ export class WebsiteProjectsService {
   // ─── admin: notes ──────────────────────────────────────────────────────────
 
   async adminAddNote(admin: any, projectId: string, note: string) {
-    const project = await this.adminGetProject(projectId);
+    await this.adminGetProject(projectId);
     const conversation = await this.getConversation(projectId);
     if (!note?.trim()) throw new BadRequestException('note is required');
     return this.prisma.websiteConversationNote.create({

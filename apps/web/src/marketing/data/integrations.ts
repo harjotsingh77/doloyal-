@@ -18,12 +18,11 @@ export const INTEGRATIONS: Integration[] = [
   { name: "Facebook", category: "Social", mark: "f", gradient: "from-[#1877F2] to-[#0B5CD6]" },
   { name: "Cloudinary", category: "Media", mark: "C", gradient: "from-[#3448C5] to-[#1F2A7A]" },
   { name: "Email", category: "Messaging", mark: "@", gradient: "from-[#0EA5E9] to-[#2563EB]" },
-  { name: "SMS", category: "Messaging", mark: "✉", gradient: "from-[#10B981] to-[#059669]" },
   { name: "Calendar", category: "Calendar", mark: "▤", gradient: "from-[#F59E0B] to-[#D97706]" },
 ];
 
 export const INTEGRATION_GROUPS = [
-  { title: "Messaging", description: "Meet customers where they already are — WhatsApp, SMS, email.", items: INTEGRATIONS.filter((i) => i.category === "Messaging") },
+  { title: "Messaging", description: "Meet customers where they already are — WhatsApp, email.", items: INTEGRATIONS.filter((i) => i.category === "Messaging") },
   { title: "Payments", description: "Collect online payments, deposits, and subscriptions.", items: INTEGRATIONS.filter((i) => i.category === "Payments") },
   { title: "Calendar", description: "Keep every calendar in perfect sync.", items: INTEGRATIONS.filter((i) => i.category === "Calendar") },
   { title: "Social & local", description: "Turn profiles and maps listings into bookings.", items: INTEGRATIONS.filter((i) => i.category === "Social" || i.category === "Local") },

@@ -285,7 +285,7 @@ export default function BookDemoPage() {
                     <div>
                       <h4 className="text-sm font-bold text-white">Instant Confirmation</h4>
                       <p className="mt-1 text-xs text-white/70">
-                        We'll confirm your demo time via email and WhatsApp.
+                        We&apos;ll confirm your demo time via email and WhatsApp.
                       </p>
                     </div>
                   </li>
@@ -309,7 +309,7 @@ export default function BookDemoPage() {
                     <div>
                       <h4 className="text-sm font-bold text-white">Pre-Loaded Free Trial</h4>
                       <p className="mt-1 text-xs text-white/70">
-                        We'll set up your free trial account with your business settings ready.
+                        We&apos;ll set up your free trial account with your business settings ready.
                       </p>
                     </div>
                   </li>

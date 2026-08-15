@@ -26,6 +26,9 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { WebsiteConnectionsModule } from './modules/website-connections/website-connections.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
 import { WebsiteProjectsModule } from './modules/website-projects/website-projects.module';
+import { SupportModule } from './modules/support/support.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { WorkflowsModule } from './modules/workflows/workflow.module';
 
 @Module({
   imports: [
@@ -54,6 +57,9 @@ import { WebsiteProjectsModule } from './modules/website-projects/website-projec
     IntegrationsModule,
     WebsiteConnectionsModule,
     WebsiteProjectsModule,
+    SupportModule,
+    AdminModule,
+    WorkflowsModule,
   ],
   providers: [
     Reflector,

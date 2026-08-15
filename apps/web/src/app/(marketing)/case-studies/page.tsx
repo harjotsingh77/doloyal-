@@ -87,7 +87,7 @@ export default function CaseStudiesPage() {
                 The pattern behind every win
               </h2>
               <p className="mt-4 text-[15.5px] leading-relaxed text-white/60">
-                Different industries, same playbook. Here's what every successful switch has in common.
+                Different industries, same playbook. Here&apos;s what every successful switch has in common.
               </p>
             </div>
             <ul className="space-y-4">

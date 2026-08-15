@@ -292,7 +292,7 @@ export function DashboardScreen({ className }: { className?: string }) {
                   </div>
                 </div>
                 <div className="flex-1 rounded-xl border border-[rgb(var(--color-border))] bg-white p-3.5">
-                  <div className="mb-2 text-[11px] font-bold">Today's bookings</div>
+                  <div className="mb-2 text-[11px] font-bold">Today&apos;s bookings</div>
                   <div className="space-y-2">
                     {[
                       { t: "10:30", n: "Priya S.", s: "Hair + Color" },

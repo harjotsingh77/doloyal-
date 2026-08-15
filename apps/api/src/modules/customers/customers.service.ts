@@ -15,10 +15,14 @@ import {
   parseCustomerExcel,
   type ParsedImportRow,
 } from './customer-excel';
+import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workflowEngine: WorkflowEngineService,
+  ) {}
 
   async list(tenantId: string, query: {
     search?: string;
@@ -229,6 +233,17 @@ export class CustomersService {
         where: { id: customer.id },
         data: { pointsBalance: newBalance },
       });
+    }
+
+    try {
+      await this.workflowEngine.handleEvent(tenantId, 'customer_created', {
+        customerId: customer.id,
+        name: `${customer.firstName} ${customer.lastName}`.trim(),
+        email: customer.email,
+        phone: customer.phone,
+      });
+    } catch {
+      // Workflows must never block customer creation
     }
 
     return prismaCustomerToShared(customer);

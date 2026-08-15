@@ -71,7 +71,7 @@ export default function AboutPage() {
               transition={{ duration: 0.6, delay: 0.1, ease: EASE }}
               className="mt-6 text-base sm:text-xl leading-relaxed text-[#58585E] font-normal"
             >
-              We're redefining the future of sales and customer retention with intelligent, AI-powered solutions that are built for modern sales teams.
+              We&apos;re redefining the future of sales and customer retention with intelligent, AI-powered solutions that are built for modern sales teams.
             </motion.p>
           </div>
 

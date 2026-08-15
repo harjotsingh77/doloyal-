@@ -207,7 +207,7 @@ export default function NewWebsiteProjectPage() {
                 </div>
               </div>
               <div>
-                <Label>What's your main goal?</Label>
+                <Label>What&apos;s your main goal?</Label>
                 <Textarea
                   placeholder="e.g. Get more online bookings, showcase our services, accept orders…"
                   value={goal}
@@ -551,7 +551,7 @@ function ReviewStep({
       </dl>
       <div className="flex items-center gap-2 rounded-xl bg-[rgb(var(--color-primary)/0.06)] p-4 text-xs text-[rgb(var(--color-muted-foreground))]">
         <Sparkles className="h-4 w-4 shrink-0 text-[rgb(var(--color-primary))]" />
-        <p>Our team typically responds within one business day. You'll chat with us right here on this project.</p>
+        <p>Our team typically responds within one business day. You&apos;ll chat with us right here on this project.</p>
       </div>
     </div>
   );

@@ -140,7 +140,7 @@ export default function PartnerPage() {
         </div>
       </section>
 
-      <FinalCta title={<>Let's build <em className="font-[var(--font-instrument)] italic">together</em></>} lead="Tell us about your agency or platform — we'll reply within one business day." />
+      <FinalCta title={<>Let&apos;s build <em className="font-[var(--font-instrument)] italic">together</em></>} lead="Tell us about your agency or platform — we&apos;ll reply within one business day." />
     </div>
   );
 }

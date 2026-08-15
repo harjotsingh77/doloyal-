@@ -515,7 +515,7 @@ export default function WebsiteBuilderPage() {
               Generate Website with AI
             </DialogTitle>
             <DialogDescription>
-              Describe your ideal website. We'll use your business info to generate a complete site.
+              Describe your ideal website. We&apos;ll use your business info to generate a complete site.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -679,7 +679,7 @@ function SectionRenderer({ section }: { section: any }) {
           <div className="grid gap-4 sm:grid-cols-2">
             {(data.items ?? []).map((item: any, i: number) => (
               <div key={i} className="rounded-xl border border-[rgb(var(--color-border))] p-4">
-                <p className="text-sm italic">"{item.text}"</p>
+                <p className="text-sm italic">&quot;{item.text}&quot;</p>
                 <p className="text-xs font-medium mt-2">— {item.name}</p>
               </div>
             ))}
