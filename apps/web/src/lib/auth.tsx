@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "./api";
-import { supabase, isSupabaseConfigured, getAuthCallbackUrl } from "./supabase";
+import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl } from "./supabase";
 
 interface Membership {
   id: string;
@@ -277,27 +277,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = React.useCallback(() => {
     if (googleLoginInFlight.current) return;
     if (!isSupabaseConfigured()) {
+      const missing = getMissingSupabaseConfig();
+      console.error(
+        "[auth] Google sign-in disabled: missing build-time env vars:",
+        missing,
+        "→ set these in the hosting provider (e.g. Vercel) and redeploy the web app. Never rely on the placeholder Supabase values.",
+      );
       toast.error("Google sign-in is not configured yet. Please try again later.");
       return;
     }
     googleLoginInFlight.current = true;
     setIsLoading(true);
+    const redirectTo = getAuthCallbackUrl();
+    console.info("[auth] Starting Google OAuth, redirect_to:", redirectTo);
     void supabase.auth
       .signInWithOAuth({
         provider: "google",
-        options: { redirectTo: getAuthCallbackUrl() },
+        options: { redirectTo },
       })
       .then(({ error }) => {
         if (error) {
           googleLoginInFlight.current = false;
           setIsLoading(false);
+          console.error("[auth] signInWithOAuth error:", error);
           toast.error("Unable to start Google sign-in. Please try again.");
         }
         // On success the browser is redirected away from this page.
       })
-      .catch(() => {
+      .catch((err) => {
         googleLoginInFlight.current = false;
         setIsLoading(false);
+        console.error("[auth] signInWithOAuth exception:", err);
         toast.error("Unable to reach the sign-in service. Check your connection and try again.");
       });
   }, [setIsLoading]);

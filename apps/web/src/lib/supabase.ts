@@ -12,6 +12,21 @@ export const isSupabaseConfigured = (): boolean => {
   );
 };
 
+/**
+ * Returns the names of the build-time Supabase env vars that are missing or
+ * still set to their placeholder value. An empty array means fully configured.
+ * Only the variable *names* are returned — never the values (the anon key is
+ * safe to expose, but keeping this helper secret-free is simpler to audit).
+ */
+export function getMissingSupabaseConfig(): string[] {
+  const missing: string[] = [];
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || url === 'https://placeholder.supabase.co') missing.push('NEXT_PUBLIC_SUPABASE_URL');
+  if (!key || key === 'placeholder-anon-key') missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  return missing;
+}
+
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,

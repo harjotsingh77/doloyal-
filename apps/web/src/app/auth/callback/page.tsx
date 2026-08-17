@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, getMissingSupabaseConfig } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 
 /**
@@ -31,9 +31,17 @@ export default function AuthCallbackPage() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const error = params.get("error") || params.get("error_code");
+    console.info("[auth/callback] Received on", window.location.origin + window.location.pathname, {
+      hasCode: Boolean(code),
+      error: error || null,
+    });
 
     if (error || !isSupabaseConfigured()) {
-      console.error("Auth callback error param:", error);
+      const missing = getMissingSupabaseConfig();
+      console.error(
+        "[auth/callback] Cannot complete sign-in:",
+        error ? `OAuth error=${error}` : `missing Supabase env vars=${missing.join(", ")}`,
+      );
       finish("/sign-in?auth=error");
       return;
     }
@@ -48,6 +56,7 @@ export default function AuthCallbackPage() {
         }
         const user = await resolveSupabaseSession();
         if (user) {
+          console.info("[auth/callback] Session bridged to Doloyal API for", user.email);
           finish("/app/dashboard");
           return;
         }
