@@ -151,7 +151,7 @@ export class WorkflowAiService {
     const { provider, apiKey, baseURL, model } = this.getProviderConfig();
     const userPrompt = `${prompt}\n\nAvailable business data in Doloyal:\n${await this.businessContext(tenantId)}`;
 
-    if (apiKey && provider !== 'fallback') {
+    if (apiKey && provider !== 'fallback' && provider !== 'anthropic') {
       try {
         const raw = await this.completeJson(
           baseURL!,
@@ -181,7 +181,7 @@ export class WorkflowAiService {
       : '';
     const userPrompt = `CURRENT WORKFLOW DEFINITION:\n${JSON.stringify(definition, null, 2)}\n\nUSER INSTRUCTION:\n${instruction}${contextBlock}`;
 
-    if (apiKey && provider !== 'fallback') {
+    if (apiKey && provider !== 'fallback' && provider !== 'anthropic') {
       try {
         const raw = await this.completeJson(
           baseURL!,
@@ -221,7 +221,7 @@ export class WorkflowAiService {
   /** Natural-language summary of a workflow for the Explain button. */
   async explain(definition: WorkflowDefinition): Promise<string> {
     const { provider, apiKey, baseURL, model } = this.getProviderConfig();
-    if (apiKey && provider !== 'fallback') {
+    if (apiKey && provider !== 'fallback' && provider !== 'anthropic') {
       try {
         const raw = await this.completeJson(
           baseURL!,

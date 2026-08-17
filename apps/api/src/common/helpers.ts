@@ -298,3 +298,25 @@ export function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pi
   }
   return result;
 }
+
+/**
+ * Allowed frontend origins for CORS (comma-separated `CORS_ORIGIN`).
+ * Production example: https://www.doloyal.com,http://localhost:3000
+ */
+export function getAllowedOrigins(): string[] {
+  return (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Resolves the `Access-Control-Allow-Origin` value for an inbound request
+ * origin. Returns `''` when the origin is not allowed, so private endpoints
+ * never echo arbitrary origins back with credentials.
+ */
+export function resolveCorsOrigin(origin?: string): string {
+  if (!origin) return '';
+  const allowed = getAllowedOrigins();
+  return allowed.includes(origin) ? origin : '';
+}

@@ -68,10 +68,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return envelope.data as T;
 }
 
+/**
+ * Demo/mock mode is a development convenience. It is NEVER active in
+ * production builds: production must show real API data or surface the actual
+ * error — never fabricated data and never fake success states.
+ */
+const DEMO_MODE =
+  process.env.NODE_ENV !== "production" ||
+  process.env.NEXT_PUBLIC_ALLOW_DEMO_AUTH === "true";
+
 async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mockArgs: any[]): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
   const useMock =
-    !token || token === "mock-token" || token === "demo-token";
+    DEMO_MODE && (!token || token === "mock-token" || token === "demo-token");
 
   if (useMock) {
     const mockFn = MOCK[mockKey];
@@ -81,6 +90,7 @@ async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mo
   try {
     return await apiCall();
   } catch (err) {
+    if (!DEMO_MODE) throw err;
     const mockFn = MOCK[mockKey];
     if (mockFn) {
       console.warn(`API request for "${mockKey}" failed, falling back to mock data:`, err);
@@ -1026,6 +1036,13 @@ export const api = {
         message = body?.error?.message || message;
       } catch {
         /* ignore */
+      }
+      if (res.status === 401 || res.status === 403) {
+        message = "Your session expired. Please sign in again.";
+      } else if (res.status === 429) {
+        message = "Doloyal AI is busy right now. Please try again in a moment.";
+      } else if (res.status >= 500) {
+        message = "Doloyal AI is temporarily unavailable. Please try again.";
       }
       handlers.onError?.(message);
       return { abort: () => controller.abort() };

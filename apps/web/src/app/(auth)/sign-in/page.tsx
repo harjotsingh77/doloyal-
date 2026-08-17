@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Mail, Lock, ArrowRight } from "lucide-react";
 import { Button, Input, Card, CardContent, Logo } from "@doloyal/ui";
-import { useAuth } from "@/lib/auth";
+import { useAuth, DEMO_MODE } from "@/lib/auth";
 
 function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -126,9 +126,11 @@ export default function SignInPage() {
             </button>
 
             <div className="mt-4">
-              <Button variant="ghost" className="w-full text-sm text-[rgb(var(--color-primary))]" onClick={demoLogin} loading={isLoading}>
-                Demo Login (skip auth)
-              </Button>
+              {DEMO_MODE && (
+                <Button variant="ghost" className="w-full text-sm text-[rgb(var(--color-primary))]" onClick={demoLogin} loading={isLoading}>
+                  Demo Login (skip auth)
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

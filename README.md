@@ -101,18 +101,18 @@ With the seed loaded, you'll land on a dashboard pre-populated with 90 days of r
 - **RBAC.** Clerk handles identity; authorization is owned by the app via a `Membership` (user↔tenant+role) model and `@Roles()` decorators enforced by a `RolesGuard`. Roles: Owner, Manager, Receptionist, Staff, Customer.
 - **Immutable loyalty ledger.** Points are an append-only ledger (`PointsLedger`) with running balances and per-entry expiry — auditable and correct by construction.
 - **Real KPIs.** Every dashboard metric is computed from real data, not cached counts. Aggregations run on indexed columns.
-- **Env-gated everything.** Missing API keys never break the app. The backend runs deterministic dev auth when `CLERK_SECRET_KEY` is unset; the AI module returns structured, data-backed templated responses when `OPENAI_API_KEY` is unset.
+- **Env-gated everything.** In development, missing API keys never break the app: the backend runs deterministic mock auth when `CLERK_SECRET_KEY` is unset and the AI module returns structured templated responses when no provider key is set. **In production these fallbacks are disabled** — auth requires a real token, the AI surfaces real errors, and the app fails loudly instead of showing fake data.
 
 ## Production deployment
 
 The monorepo deploys as **three isolated applications**. Each Vercel project uses its own
 **Root Directory** so builds never pull unrelated workspaces into scope.
 
-| Application | Path            | Package          | Domain            | Host          |
-| ----------- | --------------- | ---------------- | ----------------- | ------------- |
-| Landing     | `apps/landing`  | `@doloyal/landing` | `doloyal.com`     | Vercel        |
-| SaaS app    | `apps/web`      | `@doloyal/web`   | `app.doloyal.com` | Vercel        |
-| API         | `apps/api`      | `@doloyal/api`   | `api.doloyal.com` | Node container |
+| Application | Path            | Package          | Domain             | Host          |
+| ----------- | --------------- | ---------------- | ------------------ | ------------- |
+| Landing     | `apps/landing`  | `@doloyal/landing` | `doloyal.com`      | Vercel        |
+| SaaS app    | `apps/web`      | `@doloyal/web`   | `www.doloyal.com`  | Vercel        |
+| API         | `apps/api`      | `@doloyal/api`   | `api.<you>.com`    | Render        |
 
 ### Vercel (landing + SaaS)
 
@@ -134,43 +134,58 @@ workspace from the repo lockfile.
 **SaaS (`apps/web/vercel.json`)**
 - Build: `pnpm turbo run build --filter=@doloyal/web...` (builds `@doloyal/shared` + `@doloyal/ui` first)
 - Output: `.next`
-- Required env vars:
-  - `NEXT_PUBLIC_API_BASE_URL` → `https://api.doloyal.com`
-  - `NEXT_PUBLIC_APP_URL` → `https://app.doloyal.com`
-  - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` → Google OAuth client id (for Google sign-in)
+- Required env vars (build-time — a missing value silently bakes a broken value into the bundle):
+  - `NEXT_PUBLIC_API_BASE_URL` → `https://<your-api-domain>` (the Render API URL)
+  - `NEXT_PUBLIC_APP_URL` → `https://www.doloyal.com`
+  - `NEXT_PUBLIC_SUPABASE_URL` → e.g. `https://tppkzjslmyoavvcyzhjg.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → the Supabase public anon key
 
-### API (Node container)
+> **Why Google login was failing:** `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`
+> were unset, so the bundle referenced `https://placeholder.supabase.co` and Google OAuth
+> was never configured. **Why every API call failed:** `NEXT_PUBLIC_API_BASE_URL` was unset,
+> so the bundle called `http://localhost:4000`. Verify with
+> `https://www.doloyal.com/_next/static/...` — these env vars must be set **before** the
+> next production build.
+
+### API (Render)
 
 The API is a long-running NestJS + Fastify server with SSE streaming and file uploads —
-it is **not** Vercel-serverless compatible. Deploy it as a container (Railway, Render,
-Fly.io, ECS, or any Docker host). A `vercel.json` also lives in `apps/api/` for teams
-that still build the API on Vercel (root directory `apps/api`): it installs with
-`--frozen-lockfile` (which runs the root `postinstall` Prisma generation) and builds
-only `@doloyal/api` and its workspace dependencies.
+it is **not** Vercel-serverless compatible. Deploy it as a container (Render, Railway,
+Fly.io, ECS, or any Docker host).
 
-To build the container image:
+**Render blueprint**
 
-```bash
-docker build -t doloyal-api -f apps/api/Dockerfile .
-docker run -p 4000:4000 --env-file .env doloyal-api
-```
+1. New → **Web Service** → connect the GitHub repo.
+2. **Root Directory:** `apps/api`
+3. **Build Command:** `pnpm install --frozen-lockfile && pnpm build`
+4. **Start Command:** `node dist/main.js`
+5. **Instance Type:** Starter (the AI streaming + SSE needs a persistent process).
+6. Required env vars (see `.env.example` for full list and comments):
+   - `NODE_ENV=production`
+   - `DATABASE_URL` → Postgres/Supabase connection string
+   - `DIRECT_URL` → Port 5432 direct URL (migrations only)
+   - `JWT_SECRET` → strong random string ≥ 32 chars (API refuses to boot otherwise)
+   - `CORS_ORIGIN` → `https://www.doloyal.com,http://localhost:3000`
+   - `AI_PROVIDER` → `openrouter` (recommended)
+   - `AI_MODEL` → `openai/gpt-4o-mini`
+   - `OPENROUTER_API_KEY` → provider key
+   - `SUPABASE_SERVICE_ROLE_KEY` → server-only Supabase key
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` → Google integration
+7. Apply migrations once against the production DB (from a machine with the repo):
+   ```bash
+   pnpm db:deploy   # prisma migrate deploy (safe for production — never reset)
+   ```
+8. Set the web app's `NEXT_PUBLIC_API_BASE_URL` to the Render service URL
+   (`https://<service>.onrender.com`) and redeploy the Vercel project.
 
-Required env vars:
+### Supabase & Google Cloud (one-time setup)
 
-- `DATABASE_URL` — Postgres connection string
-- `JWT_SECRET` — long random string shared with all auth tokens
-- `CORS_ORIGIN` — comma-separated frontend origins: `https://app.doloyal.com,https://doloyal.com`
-- `API_PORT` — `4000`
-- `WEB_BASE_URL` / `PUBLIC_APP_URL` — `https://app.doloyal.com`
-- Optional: `CLERK_SECRET_KEY`, `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
-  `RESEND_API_KEY`, `RESEND_FROM`
-
-Apply migrations before starting:
-
-```bash
-pnpm db:deploy   # prisma migrate deploy (safe for production — never reset)
-```
+- **Supabase Dashboard** → Auth → Providers → enable **Google** with the OAuth client
+  ID/secret, and add both callback URLs to **Redirect URLs**:
+  - `http://localhost:3000/auth/callback`
+  - `https://www.doloyal.com/auth/callback`
+- **Google Cloud Console** → OAuth consent screen → add the same authorized redirect URIs.
+- Copy the project URL, anon key, and service-role key into the env vars above.
 
 ### CI
 

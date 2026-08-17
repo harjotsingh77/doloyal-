@@ -23,7 +23,10 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
 /**
  * Absolute URL Google OAuth redirects back to after authentication.
  * Local development: http://localhost:3000/auth/callback
- * Production:        https://doloyal.com/auth/callback
+ * Production:        https://www.doloyal.com/auth/callback
+ *
+ * The Supabase Auth project must have the matching redirect URL allow-listed
+ * (and the Google OAuth client must allow the same URI).
  */
 export function getAuthCallbackUrl(): string {
   if (typeof window === 'undefined') return '';

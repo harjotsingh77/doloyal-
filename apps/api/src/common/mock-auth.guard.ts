@@ -27,11 +27,22 @@ export class MockAuthGuard implements CanActivate {
     if ((request as any).user) return true;
 
     const authHeader = request.headers['authorization'] as string;
+
+    // A present bearer token is validated by the real JwtAuthGuard (passport-jwt).
+    // Nothing here should ever "trust" a token — we only skip mock provisioning.
     if (authHeader?.startsWith('Bearer ') && authHeader.length > 30) {
       return true;
     }
 
     const clerkKey = this.config?.get<string>('CLERK_SECRET_KEY') || process.env.CLERK_SECRET_KEY;
+
+    // Production must never grant unauthenticated/demo access. Any protected
+    // request without a valid token is rejected.
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) {
+      if (clerkKey) return this.handleClerkAuth(context);
+      throw new UnauthorizedException('Authentication required');
+    }
 
     if (!clerkKey) {
       return this.handleMockAuth(context);
@@ -40,6 +51,11 @@ export class MockAuthGuard implements CanActivate {
   }
 
   private async handleMockAuth(context: ExecutionContext): Promise<boolean> {
+    // Defense in depth: mock/demo auth is a development convenience only.
+    if (process.env.NODE_ENV === 'production') {
+      throw new UnauthorizedException('Authentication required');
+    }
+
     const request = context.switchToHttp().getRequest();
 
     let user: any = null;

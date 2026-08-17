@@ -128,24 +128,41 @@ const DEMO_USER: AuthUser = {
 };
 
 /**
+ * Demo/mock mode is enabled only outside production builds, or when explicitly
+ * opted in via NEXT_PUBLIC_ALLOW_DEMO_AUTH=true.
+ *
+ * Production NEVER auto-provisions a demo session and NEVER serves mock data:
+ * unauthenticated visitors are treated as unauthenticated (redirected to
+ * sign-in) and every API call must return real data or surface a real error.
+ */
+export const DEMO_MODE =
+  process.env.NODE_ENV !== "production" ||
+  process.env.NEXT_PUBLIC_ALLOW_DEMO_AUTH === "true";
+
+/**
  * Synchronously resolve the initial user from localStorage.
  * This runs during the first `useState` call — before any render —
  * so the UI never starts in a "loading" state.
+ *
+ * In production, no user/token means no session: return null so the auth
+ * guards redirect to sign-in. In development, a first-time visitor gets a
+ * demo session so localhost still works without keys.
  */
-function getInitialUser(): AuthUser {
+function getInitialUser(): AuthUser | null {
   const saved = getSavedUser();
   if (saved) return saved;
 
   const token = getToken();
   if (!token) {
-    // First-ever visit: provision a demo session synchronously
+    if (!DEMO_MODE) return null;
+    // First-ever visit (dev only): provision a demo session synchronously
     saveUser(DEMO_USER);
     setToken("mock-token");
     return DEMO_USER;
   }
 
-  // Token exists but no cached user — return demo until background refresh
-  return DEMO_USER;
+  // Token exists but no cached user — return demo until background refresh (dev only)
+  return DEMO_MODE ? DEMO_USER : null;
 }
 
 /* ══════════════════════════════════════════════════════════════════════ *
@@ -234,13 +251,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           window.location.href = "/app/dashboard";
           return;
         }
-      } catch {
-        const r = await api.demoLogin();
-        if (r) {
-          setAuth(r.token, r.user);
-          window.location.href = "/app/dashboard";
-          return;
+      } catch (err) {
+        // Demo fallback exists only in dev — production must surface the real error.
+        if (DEMO_MODE) {
+          const r = await api.demoLogin();
+          if (r) {
+            setAuth(r.token, r.user);
+            window.location.href = "/app/dashboard";
+            return;
+          }
         }
+        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -393,6 +414,10 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
   }, [setAuth, clearAuth]);
 
   const demoLogin = React.useCallback(async () => {
+    if (!DEMO_MODE) {
+      toast.error("Demo login is disabled in production.");
+      return;
+    }
     setIsLoading(true);
     try {
       const r = await api.demoLogin();
@@ -430,7 +455,8 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
           window.location.href = "/onboarding";
           return;
         }
-      } catch {
+      } catch (err) {
+        if (!DEMO_MODE) throw err;
         const nu: AuthUser = {
           id: "dev-user-id",
           externalId: "dev-user",

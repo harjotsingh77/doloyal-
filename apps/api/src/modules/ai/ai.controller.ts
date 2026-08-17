@@ -12,10 +12,13 @@ import {
   Req,
   Res,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AiService, ChatAttachmentInput } from './ai.service';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { resolveCorsOrigin } from '../../common/helpers';
 import { IsString, IsOptional, MaxLength, MinLength, IsArray, IsIn, IsBoolean, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -66,6 +69,8 @@ class RegenerateDto {
 
 @Controller('assistant')
 export class AiController {
+  private readonly logger = new Logger(AiController.name);
+
   constructor(private readonly aiService: AiService) {}
 
   @Get('conversations')
@@ -124,15 +129,20 @@ export class AiController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const requestId = randomUUID();
     const raw = reply.raw;
-    const origin = (req.headers.origin as string) || 'http://localhost:3000';
+    const corsOrigin = resolveCorsOrigin(req.headers.origin as string | undefined);
     raw.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Credentials': 'true',
+      ...(corsOrigin
+        ? {
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Access-Control-Allow-Credentials': 'true',
+          }
+        : {}),
       Vary: 'Origin',
     });
 
@@ -161,7 +171,9 @@ export class AiController {
       );
       write('done', result);
     } catch (err: any) {
+      this.logError('POST /assistant/chat/stream', requestId, user, err);
       write('error', {
+        requestId,
         message: 'Unable to generate a response. Please try again.',
       });
     } finally {
@@ -177,15 +189,20 @@ export class AiController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const requestId = randomUUID();
     const raw = reply.raw;
-    const origin = (req.headers.origin as string) || 'http://localhost:3000';
+    const corsOrigin = resolveCorsOrigin(req.headers.origin as string | undefined);
     raw.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Credentials': 'true',
+      ...(corsOrigin
+        ? {
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Access-Control-Allow-Credentials': 'true',
+          }
+        : {}),
       Vary: 'Origin',
     });
     const write = (event: string, data: unknown) => {
@@ -209,11 +226,33 @@ export class AiController {
         },
       );
       write('done', result);
-    } catch {
-      write('error', { message: 'Unable to regenerate. Please try again.' });
+    } catch (err: any) {
+      this.logError('POST /assistant/regenerate', requestId, user, err);
+      write('error', { requestId, message: 'Unable to regenerate. Please try again.' });
     } finally {
       if (!raw.writableEnded) raw.end();
     }
+  }
+
+  /**
+   * Log AI request failures with request context for production debugging.
+   * Never logs secrets (API keys are never in these objects).
+   */
+  private logError(route: string, requestId: string, user: any, err: any) {
+    this.logger.error(
+      JSON.stringify({
+        requestId,
+        route,
+        tenantId: user?.activeTenantId ?? null,
+        userId: user?.id ?? null,
+        provider: err?.provider ?? null,
+        model: err?.model ?? null,
+        status: err?.status ?? err?.statusCode ?? null,
+        code: err?.code ?? err?.name ?? null,
+        message: err?.message ?? String(err),
+        stack: err?.stack,
+      }),
+    );
   }
 
   @Post('feedback')

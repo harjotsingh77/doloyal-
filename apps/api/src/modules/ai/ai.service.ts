@@ -468,8 +468,19 @@ export class AiService {
       })
       .join('\n\n');
 
-    if (apiKey && provider !== 'fallback' && provider !== 'anthropic') {
+    if (apiKey && provider !== 'fallback') {
       try {
+        if (provider === 'anthropic') {
+          return await this.chatWithAnthropic({
+            apiKey,
+            baseURL: baseURL!,
+            model,
+            history,
+            message,
+            attachmentContext,
+            onToken,
+          });
+        }
         return await this.chatWithOpenAICompatible({
           tenantId,
           apiKey,
@@ -499,6 +510,106 @@ export class AiService {
       await onToken(part);
       await new Promise((r) => setTimeout(r, 12));
     }
+  }
+
+  /**
+   * Anthropic uses the Messages API, which is NOT OpenAI-compatible
+   * (`x-api-key` header, different request/stream shape). Called directly
+   * here so an Anthropic key actually works instead of silently falling back.
+   */
+  private async chatWithAnthropic(opts: {
+    apiKey: string;
+    baseURL: string;
+    model: string;
+    history: { role: string; content: string }[];
+    message: string;
+    attachmentContext: string;
+    onToken?: (token: string) => void | Promise<void>;
+  }) {
+    const baseURL = (opts.baseURL || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
+    const system = opts.attachmentContext
+      ? [`${this.systemPrompt()}\n\nAttached files:\n${opts.attachmentContext}`]
+      : this.systemPrompt();
+
+    const messages = opts.history
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(0, -1)
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+    messages.push({ role: 'user', content: opts.message });
+
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      'x-api-key': opts.apiKey,
+      'anthropic-version': '2023-06-01',
+    };
+
+    let text = '';
+
+    if (opts.onToken) {
+      const res = await fetch(`${baseURL}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: opts.model,
+          max_tokens: 2048,
+          system,
+          messages,
+          stream: true,
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Anthropic ${res.status}: ${errText}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (!data || data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data);
+            if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta' && json.delta.text) {
+              text += json.delta.text;
+              await opts.onToken(json.delta.text);
+            }
+          } catch {
+            /* skip malformed event */
+          }
+        }
+      }
+    } else {
+      const res = await fetch(`${baseURL}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: opts.model,
+          max_tokens: 2048,
+          system,
+          messages,
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Anthropic ${res.status}: ${errText}`);
+      }
+      const json: any = await res.json();
+      text =
+        json.content
+          ?.filter((b: any) => b.type === 'text')
+          .map((b: any) => b.text)
+          .join('') || 'I could not process your request.';
+    }
+
+    return { text, toolCalls: [], provider: 'anthropic', model: opts.model };
   }
 
   private systemPrompt() {
