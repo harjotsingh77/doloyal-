@@ -212,13 +212,52 @@ export interface StaffInvitation {
   branchNames?: string[];
   department?: string | null;
   jobTitle?: string | null;
+  message?: string | null;
   token?: string;
   invitationUrl?: string | null;
   expiresAt: string;
-  sentAt: string;
+  sentAt: string | null;
+  lastSentAt?: string | null;
   acceptedAt?: string | null;
+  cancelledAt?: string | null;
+  cancelledById?: string | null;
+  cancelledByName?: string | null;
+  acceptedByUserId?: string | null;
+  acceptedByName?: string | null;
+  invitedById?: string | null;
+  invitedByName?: string | null;
+  joinedMemberId?: string | null;
   resendCount: number;
   createdAt: string;
+}
+
+export interface InvitationCounts {
+  ALL: number;
+  PENDING: number;
+  ACCEPTED: number;
+  EXPIRED: number;
+  CANCELLED: number;
+}
+
+export interface InvitationActivityItem {
+  id: string;
+  actorId?: string | null;
+  actorName?: string | null;
+  eventType: string;
+  action: string;
+  category?: string | null;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface StaffInvitationDetail extends StaffInvitation {
+  activity: InvitationActivityItem[];
+  /** Seconds until a resend is allowed again (0 when ready). */
+  resendCooldownSeconds?: number;
+  resendAvailableAt?: string | null;
+  /** Whether the invitee email already maps to a Doloyal account. */
+  hasExistingAccount?: boolean;
 }
 
 export interface LoginHistoryEntry {
@@ -872,6 +911,7 @@ export interface DashboardOverview {
     "id" | "name" | "phone" | "lifetimeValue" | "visitCount" | "loyaltyBand" | "churnRisk"
   >[];
   topRewards: Pick<Reward, "id" | "name" | "pointsCost" | "redeemedCount">[];
+  topServices?: { service: string; revenue: number; customers: number; growth: number }[];
   recentActivity: ActivityEntry[];
 }
 
@@ -2067,6 +2107,10 @@ export interface CreateSupportTicketInput {
   category: string;
   priority?: string;
   description: string;
+  /** Ask Doloyal conversation this ticket is escalated from (if any). */
+  conversationId?: string;
+  /** Dashboard page the user was on when the ticket was created. */
+  currentPage?: string;
 }
 
 export interface SupportMessageInput {
@@ -2092,6 +2136,115 @@ export interface AdminSupportStats {
   resolved: number;
   closed: number;
   total: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ask Doloyal — AI support assistant
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SupportConversationMode = "AI" | "HUMAN";
+export type SupportConversationSender = "USER" | "AI" | "SYSTEM";
+
+export interface SupportConversationMessage {
+  id: string;
+  conversationId: string;
+  senderType: SupportConversationSender;
+  content: string;
+  metadata?: {
+    escalate?: boolean;
+    suggestedCategory?: string;
+    suggestedPriority?: string;
+    suggestedSubject?: string;
+    sources?: { id: string; slug: string; title: string; category: string }[];
+    agentReply?: boolean;
+    ticketId?: string;
+    ticketNumber?: string;
+    provider?: string;
+    model?: string;
+  } | null;
+  createdAt: string;
+}
+
+export interface SupportConversation {
+  id: string;
+  tenantId: string;
+  userId: string;
+  title: string;
+  mode: SupportConversationMode;
+  status: string;
+  currentPage?: string | null;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+  messageCount?: number;
+  lastMessage?: {
+    id: string;
+    senderType: SupportConversationSender;
+    content: string;
+    createdAt: string;
+  } | null;
+  ticket?: {
+    id: string;
+    ticketNumber: string;
+    status: string;
+  } | null;
+}
+
+export interface SupportConversationDetail extends Omit<SupportConversation, "lastMessage" | "messageCount"> {
+  messages: SupportConversationMessage[];
+  ticket?: SupportConversation["ticket"];
+}
+
+export interface AskDoloyalChatInput {
+  message: string;
+  conversationId?: string;
+  currentPage?: string;
+}
+
+export interface AskDoloyalChatResponse {
+  conversationId: string;
+  messageId: string;
+  message: string;
+  escalate: boolean;
+  suggestedCategory?: string;
+  suggestedPriority?: string;
+  suggestedSubject?: string;
+  sources?: { id: string; slug: string; title: string; category: string }[];
+  mode: SupportConversationMode;
+  provider: string;
+  model: string;
+}
+
+export interface SupportUnreadBadge {
+  unread: number;
+}
+
+export interface AdminAiAssistResult {
+  draft: string;
+  articles: { id: string; slug: string; title: string; category: string }[];
+  provider: string;
+  model: string;
+}
+
+export interface AdminSupportAnalytics {
+  range: string;
+  tickets: {
+    created: number;
+    resolved: number;
+    avgFirstResponseHours: number | null;
+    avgResolutionHours: number | null;
+    byCategory: { category: string; count: number }[];
+    byPriority: { priority: string; count: number }[];
+    daily: { date: string; created: number; resolved: number }[];
+  };
+  ai: {
+    conversations: number;
+    aiAnswers: number;
+    escalated: number;
+    escalationRate: number;
+    aiResolutionRate: number;
+    chatEscalationRate: number;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

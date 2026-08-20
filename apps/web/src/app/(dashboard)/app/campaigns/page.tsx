@@ -43,9 +43,10 @@ import {
   KpiCard,
   EmptyState,
 } from "@doloyal/ui";
+import { api } from "@/lib/api";
 
 type Channel = "SMS" | "EMAIL" | "WHATSAPP";
-type Status = "DRAFT" | "SCHEDULED" | "SENT" | "PAUSED";
+type Status = "DRAFT" | "SCHEDULED" | "PAUSED" | "SENT";
 type Audience = "All" | "VIP" | "At Risk" | "Inactive";
 
 interface Campaign {
@@ -59,6 +60,7 @@ interface Campaign {
   redeemRate: number;
   status: Status;
   scheduleDate: string;
+  failedCount?: number;
 }
 
 const CHANNEL_ICON: Record<Channel, React.ReactNode> = {
@@ -74,56 +76,14 @@ const STATUS_VARIANT: Record<Status, "primary" | "outline" | "success" | "warnin
   PAUSED: "warning",
 };
 
-const INITIAL_CAMPAIGNS: Campaign[] = [
-  {
-    id: "1",
-    name: "Summer Sale Blast",
-    channel: "SMS",
-    audience: "All",
-    audienceSize: 12480,
-    sentCount: 12480,
-    openRate: 68.2,
-    redeemRate: 12.4,
-    status: "SENT",
-    scheduleDate: "2026-06-15",
-  },
-  {
-    id: "2",
-    name: "VIP Exclusive Offer",
-    channel: "EMAIL",
-    audience: "VIP",
-    audienceSize: 342,
-    sentCount: 340,
-    openRate: 92.1,
-    redeemRate: 34.7,
-    status: "SENT",
-    scheduleDate: "2026-07-01",
-  },
-  {
-    id: "3",
-    name: "Re-engagement Series",
-    channel: "WHATSAPP",
-    audience: "Inactive",
-    audienceSize: 2100,
-    sentCount: 0,
-    openRate: 0,
-    redeemRate: 0,
-    status: "SCHEDULED",
-    scheduleDate: "2026-08-01",
-  },
-  {
-    id: "4",
-    name: "Autumn Promo Draft",
-    channel: "EMAIL",
-    audience: "At Risk",
-    audienceSize: 890,
-    sentCount: 0,
-    openRate: 0,
-    redeemRate: 0,
-    status: "DRAFT",
-    scheduleDate: "2026-09-10",
-  },
-];
+const API_STATUS_TO_UI: Record<string, Status> = {
+  DRAFT: "DRAFT",
+  SCHEDULED: "SCHEDULED",
+  PAUSED: "PAUSED",
+  SENDING: "SCHEDULED",
+  COMPLETED: "SENT",
+  FAILED: "DRAFT",
+};
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
@@ -131,18 +91,48 @@ export default function CampaignsPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [newName, setNewName] = React.useState("");
+  const [newSubject, setNewSubject] = React.useState("");
   const [newChannel, setNewChannel] = React.useState<Channel>("EMAIL");
   const [newAudience, setNewAudience] = React.useState<Audience>("All");
   const [newMessage, setNewMessage] = React.useState("");
   const [newDate, setNewDate] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [sendingId, setSendingId] = React.useState<string | null>(null);
+  const [toast, setToast] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const rows = await api.listCampaigns();
+      setCampaigns(
+        rows.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          channel: c.channel as Channel,
+          audience: (c.audience || "All") as Audience,
+          audienceSize: c.recipients || 0,
+          sentCount: c.sentCount || 0,
+          failedCount: c.failedCount || 0,
+          openRate: c.openRate || 0,
+          redeemRate: c.redeemRate || 0,
+          status: API_STATUS_TO_UI[c.status] || "DRAFT",
+          scheduleDate: c.scheduleDate ? String(c.scheduleDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        })),
+      );
+    } catch (err: any) {
+      setError(err?.message || "Failed to load campaigns");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      setCampaigns(INITIAL_CAMPAIGNS);
-      setLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
+    load();
+  }, [load]);
+
+  const showToast = (type: "success" | "error", text: string) => {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const kpis = React.useMemo(() => {
     const totalSent = campaigns.reduce((s, c) => s + c.sentCount, 0);
@@ -155,38 +145,59 @@ export default function CampaignsPage() {
     return { totalSent, avgOpen, totalRedeem, active };
   }, [campaigns]);
 
-  const togglePause = (id: string) => {
-    setCampaigns((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        if (c.status === "PAUSED") return { ...c, status: "SCHEDULED" as Status };
-        if (c.status === "SCHEDULED") return { ...c, status: "PAUSED" as Status };
-        return c;
-      }),
-    );
+  const togglePause = async (id: string) => {
+    const target = campaigns.find((c) => c.id === id);
+    if (!target) return;
+    try {
+      const nextStatus = target.status === "PAUSED" ? "SCHEDULED" : "PAUSED";
+      await api.setCampaignStatus(id, nextStatus);
+      setCampaigns((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: nextStatus } : c)),
+      );
+    } catch (err: any) {
+      showToast("error", err?.message || "Failed to update campaign");
+    }
   };
 
-  const handleCreate = () => {
-    if (!newName || !newDate) return;
-    const campaign: Campaign = {
-      id: String(Date.now()),
-      name: newName,
-      channel: newChannel,
-      audience: newAudience,
-      audienceSize: 0,
-      sentCount: 0,
-      openRate: 0,
-      redeemRate: 0,
-      status: "DRAFT",
-      scheduleDate: newDate,
-    };
-    setCampaigns((prev) => [campaign, ...prev]);
-    setDialogOpen(false);
-    setNewName("");
-    setNewChannel("EMAIL");
-    setNewAudience("All");
-    setNewMessage("");
-    setNewDate("");
+  const sendNow = async (id: string, name: string) => {
+    setSendingId(id);
+    try {
+      const result = await api.sendCampaign(id);
+      showToast("success", result?.message || `${name} sent successfully.`);
+      await load();
+    } catch (err: any) {
+      showToast("error", err?.message || "Failed to send campaign");
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!newName || !newMessage) return;
+    setSubmitting(true);
+    try {
+      await api.createCampaign({
+        name: newName,
+        subject: newChannel === "EMAIL" ? newSubject || newName : undefined,
+        body: newMessage,
+        channel: newChannel,
+        audience: newAudience,
+        scheduleDate: newDate || undefined,
+      });
+      showToast("success", "Campaign created.");
+      setDialogOpen(false);
+      setNewName("");
+      setNewSubject("");
+      setNewChannel("EMAIL");
+      setNewAudience("All");
+      setNewMessage("");
+      setNewDate("");
+      await load();
+    } catch (err: any) {
+      showToast("error", err?.message || "Failed to create campaign");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (error) {
@@ -211,6 +222,18 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+            toast.type === "success"
+              ? "border-[rgb(var(--color-success)/0.4)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]"
+              : "border-[rgb(var(--color-danger)/0.4)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]"
+          }`}
+        >
+          {toast.type === "success" ? "Success" : "Error"}: {toast.text}
+        </div>
+      )}
+
       <PageHeader
         title="Campaigns"
         description="Create and manage marketing campaigns"
@@ -241,12 +264,21 @@ export default function CampaignsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="SMS">SMS</SelectItem>
                       <SelectItem value="EMAIL">Email</SelectItem>
+                      <SelectItem value="SMS">SMS</SelectItem>
                       <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
+                {newChannel === "EMAIL" && (
+                  <Field label="Subject" required>
+                    <Input
+                      placeholder="Email subject"
+                      value={newSubject}
+                      onChange={(e) => setNewSubject(e.target.value)}
+                    />
+                  </Field>
+                )}
                 <Field label="Audience" required>
                   <Select value={newAudience} onValueChange={(v) => setNewAudience(v as Audience)}>
                     <SelectTrigger>
@@ -260,14 +292,14 @@ export default function CampaignsPage() {
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Message">
+                <Field label="Message" required>
                   <Textarea
                     placeholder="Write your campaign message..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                   />
                 </Field>
-                <Field label="Schedule date" required>
+                <Field label="Schedule date">
                   <Input
                     type="date"
                     value={newDate}
@@ -276,10 +308,12 @@ export default function CampaignsPage() {
                 </Field>
               </div>
               <DialogFooter>
-                <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+                <Button variant="secondary" onClick={() => setDialogOpen(false)} disabled={submitting}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreate}>Create Campaign</Button>
+                <Button onClick={handleCreate} disabled={submitting}>
+                  {submitting ? "Creating..." : "Create Campaign"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -375,7 +409,7 @@ export default function CampaignsPage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-auto flex items-center justify-between border-t border-[rgb(var(--color-border))] pt-3">
+                <div className="mt-auto flex items-center justify-between gap-2 border-t border-[rgb(var(--color-border))] pt-3">
                   <div className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-muted-foreground))]">
                     <Clock className="h-3.5 w-3.5" />
                     {new Date(c.scheduleDate).toLocaleDateString("en-US", {
@@ -384,20 +418,32 @@ export default function CampaignsPage() {
                       year: "numeric",
                     })}
                   </div>
-                  {(c.status === "SCHEDULED" || c.status === "PAUSED") && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => togglePause(c.id)}
-                      title={c.status === "PAUSED" ? "Activate" : "Pause"}
-                    >
-                      {c.status === "PAUSED" ? (
-                        <Play className="h-4 w-4 text-[rgb(var(--color-success))]" />
-                      ) : (
-                        <Pause className="h-4 w-4 text-[rgb(var(--color-warning))]" />
-                      )}
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {c.channel === "EMAIL" && (c.status === "DRAFT" || c.status === "SCHEDULED") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={sendingId === c.id}
+                        onClick={() => sendNow(c.id, c.name)}
+                      >
+                        {sendingId === c.id ? "Sending..." : "Send now"}
+                      </Button>
+                    )}
+                    {(c.status === "SCHEDULED" || c.status === "PAUSED") && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => togglePause(c.id)}
+                        title={c.status === "PAUSED" ? "Activate" : "Pause"}
+                      >
+                        {c.status === "PAUSED" ? (
+                          <Play className="h-4 w-4 text-[rgb(var(--color-success))]" />
+                        ) : (
+                          <Pause className="h-4 w-4 text-[rgb(var(--color-warning))]" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

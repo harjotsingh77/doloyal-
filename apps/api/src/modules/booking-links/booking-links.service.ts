@@ -4,6 +4,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { prismaAppointmentToShared } from '../../common/helpers';
+import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
 import {
   DEFAULT_AUTOMATIONS,
   DEFAULT_AUTH_MODE,
@@ -73,7 +75,10 @@ const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 @Injectable()
 export class BookingLinksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly googleCalendar: GoogleCalendarIntegrationService,
+  ) {}
 
   private publicUrl(slug: string) {
     return bookingUrl(slug);
@@ -684,6 +689,14 @@ export class BookingLinksService {
     const slots: { time: string; endTime: string; available: boolean; staffId?: string | null }[] = [];
     const current = new Date(dayStart);
 
+    // Google Calendar free/busy for the whole working day — marks overlapping slots unavailable.
+    let busyPeriods: Array<{ start: Date; end: Date }> = [];
+    try {
+      busyPeriods = await this.googleCalendar.getBusyPeriods(tenant.id, dayStartFilter, dayEndFilter);
+    } catch {
+      // Calendar unavailable (not connected / revoked) must not block booking availability.
+    }
+
     while (current < dayEnd) {
       const slotStart = new Date(current);
       const slotEnd = new Date(slotStart.getTime() + duration * 60000);
@@ -705,13 +718,15 @@ export class BookingLinksService {
         return bufferedStart < aptEnd && bufferedEnd > aptStart;
       });
 
+      const googleBusy = busyPeriods.some((b) => bufferedStart < b.end && bufferedEnd > b.start);
+
       const hh = String(slotStart.getHours()).padStart(2, '0');
       const mm = String(slotStart.getMinutes()).padStart(2, '0');
 
       slots.push({
         time: `${hh}:${mm}`,
         endTime: slotEnd.toISOString(),
-        available: !tooSoon && !inBreak && overlapping.length < maxPerSlot,
+        available: !tooSoon && !inBreak && !googleBusy && overlapping.length < maxPerSlot,
         staffId: staffId || null,
       });
 
@@ -1081,7 +1096,22 @@ export class BookingLinksService {
       include: { customer: true, staff: true },
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
-    return appointment;
+    return {
+      ...prismaAppointmentToShared(appointment),
+      source: appointment.source,
+      paymentStatus: appointment.paymentStatus,
+      paymentAmount: appointment.paymentAmount,
+      bookingLinkId: appointment.bookingLinkId,
+      cancelledAt: appointment.cancelledAt?.toISOString() ?? null,
+      rescheduledFrom: appointment.rescheduledFrom,
+      serviceId: appointment.serviceId,
+      customerPhone: appointment.customer?.phone ?? null,
+      customerEmail: appointment.customer?.email ?? null,
+      activityTimeline: [],
+      attachments: [],
+      createdAt: appointment.createdAt.toISOString(),
+      updatedAt: appointment.updatedAt.toISOString(),
+    };
   }
 
   async updateAppointment(tenantId: string, id: string, dto: any) {

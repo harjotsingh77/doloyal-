@@ -7,14 +7,16 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, User as PrismaUser } from '@prisma/client';
 import {
   STAFF_ROLE_DEFAULT_PERMISSIONS,
   type StaffMember,
   type StaffProfileDetail,
   type StaffInvitation,
+  type StaffInvitationDetail,
   type StaffStats,
   type StaffMemberList,
+  type InvitationCounts,
 } from '@doloyal/shared';
 import { parseUserAgent } from './user-agent';
 
@@ -938,11 +940,48 @@ export class StaffService {
 
   // ─── Invitations ─────────────────────────────────────────────────────────
 
+  private resendCooldownMs() {
+    const secs = Number(process.env.INVITE_RESEND_COOLDOWN_SECONDS) || 60;
+    return secs * 1000;
+  }
+
   async expirePendingInvitations(tenantId: string) {
-    await this.prisma.invitation.updateMany({
+    const updated = await this.prisma.invitation.updateMany({
       where: { tenantId, status: 'PENDING', expiresAt: { lt: new Date() } },
       data: { status: 'EXPIRED' },
     });
+    return updated.count;
+  }
+
+  async listBranches(tenantId: string) {
+    const branches = await this.prisma.branch.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, address: true, city: true },
+    });
+    return branches.map((b) => ({
+      id: b.id,
+      name: b.name,
+      address: b.address ? [b.address, b.city].filter(Boolean).join(', ') : (b.city ?? null),
+    }));
+  }
+
+  private async assertBranchesBelongToTenant(tenantId: string, branchIds: string[]) {
+    if (!branchIds.length) return;
+    const count = await this.prisma.branch.count({
+      where: { tenantId, id: { in: branchIds } },
+    });
+    if (count !== branchIds.length) {
+      throw new BadRequestException('One or more selected branches are invalid');
+    }
+  }
+
+  private async resendRemainingSeconds(invitation: { lastSentAt?: Date | null; sentAt?: Date | null }): Promise<number> {
+    const last = invitation.lastSentAt ?? invitation.sentAt;
+    if (!last) return 0;
+    const elapsed = Date.now() - new Date(last).getTime();
+    if (elapsed < 0) return Math.ceil(this.resendCooldownMs() / 1000);
+    return Math.max(0, Math.ceil((this.resendCooldownMs() - elapsed) / 1000));
   }
 
   async inviteMember(tenantId: string, dto: InviteMemberLike, actor: Actor) {
@@ -952,6 +991,8 @@ export class StaffService {
     if (actor.activeRole !== 'OWNER' && (dto.role === 'OWNER' || dto.role === 'MANAGER')) {
       throw new ForbiddenException('Only the owner can invite owner or manager roles');
     }
+
+    await this.assertBranchesBelongToTenant(tenantId, dto.branchIds || []);
 
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -970,8 +1011,9 @@ export class StaffService {
       throw new ConflictException('An invitation for this email is already pending');
     }
 
-    const token = crypto.randomBytes(24).toString('hex');
+    const token = crypto.randomBytes(32).toString('hex');
     const isDraft = Boolean(dto.saveDraft);
+    const now = new Date();
     const invitation = await this.prisma.invitation.create({
       data: {
         tenantId,
@@ -985,11 +1027,13 @@ export class StaffService {
         jobTitle: dto.jobTitle || null,
         permissions: (dto.permissions && dto.permissions.length ? dto.permissions : null) as any,
         notes: dto.notes || null,
-        status: isDraft ? 'PENDING' : 'PENDING',
+        message: dto.message || null,
+        status: 'PENDING',
         token,
         invitationUrl: isDraft ? null : `${this.webBaseUrl()}/invite/${token}`,
-        expiresAt: new Date(Date.now() + this.inviteExpiryMs()),
-        sentAt: isDraft ? null : new Date(),
+        expiresAt: new Date(now.getTime() + this.inviteExpiryMs()),
+        sentAt: isDraft ? null : now,
+        lastSentAt: isDraft ? null : now,
         invitedById: actor.id,
       },
     });
@@ -1015,20 +1059,47 @@ export class StaffService {
     return this.mapInvitation(invitation);
   }
 
-  async listInvitations(tenantId: string, query: { status?: string; search?: string; page?: number; pageSize?: number }) {
-    this.expirePendingInvitations(tenantId);
+  async getInvitationCounts(tenantId: string): Promise<InvitationCounts> {
+    await this.expirePendingInvitations(tenantId);
+    const grouped = await this.prisma.invitation.groupBy({
+      by: ['status'],
+      where: { tenantId },
+      _count: { _all: true },
+    });
+    const map: Record<string, number> = { PENDING: 0, ACCEPTED: 0, EXPIRED: 0, CANCELLED: 0 };
+    for (const g of grouped) map[g.status] = g._count._all;
+    const ALL = Object.values(map).reduce((a, b) => a + b, 0);
+    return { ALL, PENDING: map.PENDING, ACCEPTED: map.ACCEPTED, EXPIRED: map.EXPIRED, CANCELLED: map.CANCELLED };
+  }
+
+  async listInvitations(
+    tenantId: string,
+    query: { status?: string; search?: string; role?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number },
+  ) {
+    await this.expirePendingInvitations(tenantId);
     const page = query.page || 1;
     const pageSize = query.pageSize || 20;
     const where: Prisma.InvitationWhereInput = { tenantId };
-    if (query.status) where.status = query.status as any;
-    if (query.search) {
+    if (query.status && query.status !== 'ALL') where.status = query.status as any;
+    if (query.role && query.role !== 'ALL') where.role = query.role as any;
+    const term = query.search?.trim();
+    if (term) {
       where.OR = [
-        { email: { contains: query.search.trim(), mode: 'insensitive' } },
-        { firstName: { contains: query.search.trim(), mode: 'insensitive' } },
-        { lastName: { contains: query.search.trim(), mode: 'insensitive' } },
+        { email: { contains: term, mode: 'insensitive' } },
+        { firstName: { contains: term, mode: 'insensitive' } },
+        { lastName: { contains: term, mode: 'insensitive' } },
+        { id: { contains: term, mode: 'insensitive' } },
       ];
     }
-    const [total, rows] = await Promise.all([
+    const dateFrom = query.dateFrom ? new Date(query.dateFrom) : null;
+    const dateTo = query.dateTo ? new Date(query.dateTo) : null;
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        gte: dateFrom || undefined,
+        lte: dateTo || undefined,
+      };
+    }
+    const [total, rows, counts] = await Promise.all([
       this.prisma.invitation.count({ where }),
       this.prisma.invitation.findMany({
         where,
@@ -1036,16 +1107,81 @@ export class StaffService {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
+      this.getInvitationCounts(tenantId),
     ]);
     const branchIds = Array.from(new Set(rows.flatMap((r) => r.branchIds)));
-    const branches = await this.prisma.branch.findMany({ where: { tenantId, id: { in: branchIds } } });
+    const userIds = Array.from(
+      new Set(rows.flatMap((r) => [r.invitedById, r.cancelledById, r.acceptedByUserId].filter(Boolean) as string[])),
+    );
+    const [branches, users] = await Promise.all([
+      this.prisma.branch.findMany({ where: { tenantId, id: { in: branchIds } } }),
+      this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+    ]);
     const branchNameById = new Map(branches.map((b) => [b.id, b.name]));
+    const userById = new Map(users.map((u) => [u.id, u]));
     return {
-      items: rows.map((r) => this.mapInvitation(r, branchNameById)),
+      items: rows.map((r) => this.mapInvitation(r, branchNameById, userById)),
       total,
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      counts,
+    };
+  }
+
+  async getInvitationDetail(tenantId: string, invitationId: string): Promise<StaffInvitationDetail> {
+    await this.expirePendingInvitations(tenantId);
+    const invitation = await this.prisma.invitation.findFirst({
+      where: { id: invitationId, tenantId },
+    });
+    if (!invitation) throw new NotFoundException('Invitation not found');
+
+    const [activity, branches, users, joinedProfile, existingAccount] = await Promise.all([
+      this.prisma.staffActivityLog.findMany({
+        where: { tenantId, targetId: invitation.id, category: 'invitations' },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      this.prisma.branch.findMany({ where: { tenantId, id: { in: invitation.branchIds } } }),
+      this.prisma.user.findMany({
+        where: {
+          id: {
+            in: [invitation.invitedById, invitation.cancelledById, invitation.acceptedByUserId].filter(Boolean) as string[],
+          },
+        },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+      invitation.acceptedByUserId
+        ? this.prisma.staffProfile.findFirst({
+            where: { userId: invitation.acceptedByUserId, tenantId },
+            select: { id: true, userId: true, role: true, status: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.user.findUnique({ where: { email: invitation.email } }),
+    ]);
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const detail = this.mapInvitation(invitation, new Map(branches.map((b) => [b.id, b.name])), userById);
+    const cooldown = await this.resendRemainingSeconds(invitation);
+    return {
+      ...detail,
+      joinedMemberId: joinedProfile?.id ?? null,
+      hasExistingAccount: Boolean(existingAccount),
+      resendCooldownSeconds: cooldown,
+      resendAvailableAt: cooldown > 0 ? new Date(Date.now() + cooldown * 1000).toISOString() : null,
+      activity: activity.map((a) => ({
+        id: a.id,
+        actorId: a.actorId,
+        actorName: a.actorName,
+        eventType: a.action,
+        action: a.action,
+        category: a.category,
+        message: a.message,
+        metadata: a.metadata as Record<string, unknown> | null,
+        createdAt: a.createdAt.toISOString(),
+      })),
     };
   }
 
@@ -1057,18 +1193,23 @@ export class StaffService {
     if (invitation.status === 'ACCEPTED') {
       throw new BadRequestException('This invitation has already been accepted');
     }
-    if (invitation.status === 'CANCELLED') {
-      throw new BadRequestException('This invitation was cancelled');
+    const cooldown = await this.resendRemainingSeconds(invitation);
+    if (cooldown > 0) {
+      throw new BadRequestException(`Invitation can be resent in ${cooldown} seconds`);
     }
-    const token = crypto.randomBytes(24).toString('hex');
+    const token = crypto.randomBytes(32).toString('hex');
+    const now = new Date();
     const updated = await this.prisma.invitation.update({
       where: { id: invitation.id },
       data: {
         token,
         invitationUrl: `${this.webBaseUrl()}/invite/${token}`,
-        expiresAt: new Date(Date.now() + this.inviteExpiryMs()),
-        sentAt: new Date(),
+        expiresAt: new Date(now.getTime() + this.inviteExpiryMs()),
+        sentAt: now,
+        lastSentAt: now,
         status: 'PENDING',
+        cancelledAt: null,
+        cancelledById: null,
         resendCount: { increment: 1 },
       },
     });
@@ -1080,7 +1221,7 @@ export class StaffService {
       action: 'INVITATION_RESENT', category: 'invitations',
       message: `Resent invitation to ${updated.email}`,
     });
-    return this.mapInvitation(updated);
+    return this.getInvitationDetail(tenantId, invitationId);
   }
 
   async cancelInvitation(tenantId: string, invitationId: string, actor: Actor) {
@@ -1088,9 +1229,19 @@ export class StaffService {
       where: { id: invitationId, tenantId },
     });
     if (!invitation) throw new NotFoundException('Invitation not found');
+    if (invitation.status === 'ACCEPTED') {
+      throw new BadRequestException('An accepted invitation cannot be cancelled');
+    }
     const updated = await this.prisma.invitation.update({
       where: { id: invitation.id },
-      data: { status: 'CANCELLED' },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelledById: actor.id,
+        // Rotate the token so the previous link is dead even at the data layer.
+        token: crypto.randomBytes(32).toString('hex'),
+        invitationUrl: null,
+      },
     });
     await this.recordActivity({
       tenantId, actor,
@@ -1099,7 +1250,7 @@ export class StaffService {
       action: 'INVITATION_CANCELLED', category: 'invitations',
       message: `Cancelled invitation for ${updated.email}`,
     });
-    return this.mapInvitation(updated);
+    return this.getInvitationDetail(tenantId, invitationId);
   }
 
   async getInvitationLink(tenantId: string, invitationId: string) {
@@ -1108,7 +1259,10 @@ export class StaffService {
     });
     if (!invitation) throw new NotFoundException('Invitation not found');
     if (!invitation.invitationUrl) {
-      throw new BadRequestException('This invitation has not been sent yet');
+      throw new BadRequestException('This invitation has no active link');
+    }
+    if (invitation.status !== 'PENDING') {
+      throw new BadRequestException('This invitation link is no longer active');
     }
     return { invitationUrl: invitation.invitationUrl, expiresAt: invitation.expiresAt.toISOString() };
   }
@@ -1122,7 +1276,11 @@ export class StaffService {
       await this.prisma.invitation.update({ where: { id: invitation.id }, data: { status: 'EXPIRED' } });
       throw new BadRequestException('This invitation has expired');
     }
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: invitation.tenantId } });
+    const [tenant, branches, existing] = await Promise.all([
+      this.prisma.tenant.findUnique({ where: { id: invitation.tenantId } }),
+      this.prisma.branch.findMany({ where: { tenantId: invitation.tenantId, id: { in: invitation.branchIds } } }),
+      this.prisma.user.findUnique({ where: { email: invitation.email } }),
+    ]);
     return {
       id: invitation.id,
       email: invitation.email,
@@ -1131,99 +1289,175 @@ export class StaffService {
       phone: invitation.phone,
       role: invitation.role,
       branchIds: invitation.branchIds,
+      branchNames: branches.map((b) => b.name),
       department: invitation.department,
       jobTitle: invitation.jobTitle,
+      message: invitation.message,
       businessName: tenant?.name || 'the business',
       expiresAt: invitation.expiresAt.toISOString(),
+      hasExistingAccount: Boolean(existing),
     };
   }
 
   async acceptInvitation(token: string, dto: AcceptInvitationLike) {
     const invitation = await this.prisma.invitation.findUnique({ where: { token } });
     if (!invitation) throw new NotFoundException('Invitation not found');
-    if (invitation.status !== 'PENDING') {
-      throw new BadRequestException('This invitation is no longer active');
-    }
-    if (invitation.expiresAt < new Date()) {
+
+    const now = new Date();
+    if (invitation.expiresAt < now) {
       await this.prisma.invitation.update({ where: { id: invitation.id }, data: { status: 'EXPIRED' } });
       throw new BadRequestException('This invitation has expired');
     }
-    if (dto.password.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters');
-    }
-    const bcrypt = await import('bcrypt');
-    const hashed = await bcrypt.hash(dto.password, 12);
 
-    let user = await this.prisma.user.findUnique({ where: { email: invitation.email } });
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          email: invitation.email,
-          firstName: dto.firstName || invitation.firstName || 'Team',
-          lastName: dto.lastName || invitation.lastName || 'Member',
-          phone: dto.phone || invitation.phone || null,
-          password: hashed,
-        },
-      });
-    } else {
-      // Merge the invitation role into an existing account.
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { password: user.password || hashed, firstName: dto.firstName || user.firstName, lastName: dto.lastName || user.lastName },
-      });
+    // Authenticated acceptance: the provided user must own the invited email.
+    let user: PrismaUser | null = null;
+    if (dto.userId) {
+      user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+      if (!user) throw new BadRequestException('Account not found');
+      if (user.email.toLowerCase() !== invitation.email.toLowerCase()) {
+        throw new ForbiddenException('This invitation was sent to another email address');
+      }
     }
 
-    const existing = await this.prisma.membership.findUnique({
-      where: { userId_tenantId: { userId: user.id, tenantId: invitation.tenantId } },
-    });
-    if (!existing) {
-      await this.prisma.membership.create({
-        data: { userId: user.id, tenantId: invitation.tenantId, role: invitation.role },
+    // Idempotent, atomic acceptance — double-clicks and replays are safe.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.invitation.updateMany({
+        where: { id: invitation.id, status: 'PENDING' },
+        data: { status: 'ACCEPTED', acceptedAt: now, acceptedByUserId: user?.id ?? null },
       });
-    }
+      if (claimed.count === 0) {
+        const current = await tx.invitation.findUnique({ where: { id: invitation.id } });
+        if (current?.status === 'ACCEPTED') {
+          return { alreadyAccepted: true as const, user: null as any };
+        }
+        throw new BadRequestException('This invitation is no longer active');
+      }
 
-    const profile = await this.ensureProfile(user.id, invitation.tenantId, invitation.role);
-    await this.prisma.staffProfile.update({
-      where: { id: profile.id },
-      data: {
+      if (!user) {
+        user = await tx.user.findUnique({ where: { email: invitation.email } });
+        if (user) {
+          const bcrypt = await import('bcrypt');
+          const hashed = dto.password ? await bcrypt.hash(dto.password, 12) : null;
+          await tx.user.update({
+            where: { id: user.id },
+            data: {
+              firstName: dto.firstName || user.firstName,
+              lastName: dto.lastName || user.lastName,
+              ...(hashed ? { password: user.password || hashed } : {}),
+            },
+          });
+        } else {
+          if (!dto.password) {
+            throw new BadRequestException('A password is required to create your account');
+          }
+          const bcrypt = await import('bcrypt');
+          const hashed = await bcrypt.hash(dto.password, 12);
+          user = await tx.user.create({
+            data: {
+              email: invitation.email,
+              firstName: dto.firstName || invitation.firstName || 'Team',
+              lastName: dto.lastName || invitation.lastName || 'Member',
+              phone: dto.phone || invitation.phone || null,
+              password: hashed,
+            },
+          });
+        }
+      }
+
+      // Membership — created idempotently so repeat acceptance never duplicates.
+      const existing = await tx.membership.findUnique({
+        where: { userId_tenantId: { userId: user.id, tenantId: invitation.tenantId } },
+      });
+      if (!existing) {
+        await tx.membership.create({
+          data: { userId: user.id, tenantId: invitation.tenantId, role: invitation.role },
+        });
+      }
+
+      // Staff profile with the invited role + permissions + branches.
+      let profile = await tx.staffProfile.findUnique({
+        where: { userId_tenantId: { userId: user.id, tenantId: invitation.tenantId } },
+      });
+      const profileData = {
         role: invitation.role,
-        status: 'ACTIVE',
+        status: 'ACTIVE' as const,
         department: invitation.department || null,
         jobTitle: invitation.jobTitle || null,
-        permissions: invitation.permissions as any,
-        requirePasswordReset: invitation.permissions ? false : true,
-      },
+        permissions: (invitation.permissions as any) ?? undefined,
+        requirePasswordReset: false,
+      };
+      if (!profile) {
+        profile = await tx.staffProfile.create({
+          data: { userId: user.id, tenantId: invitation.tenantId, dateJoined: now, ...profileData },
+        });
+      } else {
+        profile = await tx.staffProfile.update({ where: { id: profile.id }, data: profileData });
+      }
+      if (invitation.branchIds.length) {
+        await tx.staffBranch.deleteMany({ where: { staffProfileId: profile.id } });
+        await tx.staffBranch.createMany({
+          data: invitation.branchIds.map((branchId, i) => ({
+            staffProfileId: profile.id,
+            branchId,
+            primary: i === 0,
+          })),
+        });
+      }
+
+      return { alreadyAccepted: false as const, user };
     });
-    if (invitation.branchIds.length) {
-      await this.replaceBranches(profile.id, invitation.branchIds);
+
+    if (result.alreadyAccepted) {
+      return { message: 'You are already a member of this workspace.', email: invitation.email, alreadyAccepted: true };
     }
 
-    await this.prisma.invitation.update({
-      where: { id: invitation.id },
-      data: { status: 'ACCEPTED', acceptedAt: new Date() },
-    });
-
+    const acceptedUser = result.user;
     await this.recordActivity({
       tenantId: invitation.tenantId,
-      actor: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
-      targetId: profile.id,
-      targetName: `${user.firstName} ${user.lastName}`.trim(),
+      actor: { id: acceptedUser.id, email: acceptedUser.email, firstName: acceptedUser.firstName, lastName: acceptedUser.lastName },
+      targetId: invitation.id,
+      targetName: `${acceptedUser.firstName} ${acceptedUser.lastName}`.trim(),
       action: 'INVITATION_ACCEPTED', category: 'invitations',
-      message: `${user.firstName} ${user.lastName}`.trim() + ' accepted the invitation',
+      message: `${acceptedUser.firstName} ${acceptedUser.lastName}`.trim() + ' accepted the invitation',
     });
 
-    return { message: 'Welcome aboard! You can now sign in.', email: user.email };
+    return { message: 'Welcome aboard! You can now sign in.', email: acceptedUser.email };
   }
 
   async sendInviteEmail(tenantId: string, invitation: any, actor: Actor) {
     const apiKey = process.env.RESEND_API_KEY;
     const link = invitation.invitationUrl;
+    if (!link) {
+      this.logInvite(tenantId, invitation, actor);
+      return;
+    }
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const businessName = tenant?.name || 'your business';
+    const roleLabel = (invitation.role || 'STAFF').toLowerCase();
+    const inviterName = this.actorName(actor);
+    const expiresDate = new Date(invitation.expiresAt);
+    const expiresLabel = Number.isNaN(expiresDate.getTime())
+      ? 'soon'
+      : expiresDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    const inviteeName = [invitation.firstName, invitation.lastName].filter(Boolean).join(' ') || 'there';
+    const messageHtml = invitation.message
+      ? `<p style="margin:0 0 16px;font-size:14px;color:#334155">${invitation.message}</p>`
+      : '';
     const html = `
-      <div style="font-family:Inter,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1e293b">
-        <p style="font-size:13px;color:#64748b">You've been invited to join a team on <strong>Doloyal</strong>.</p>
-        <p style="font-size:15px">Hi${invitation.firstName ? ' ' + invitation.firstName : ''}, you've been invited as a <strong>${invitation.role.toLowerCase()}</strong>.</p>
-        <a href="${link}" style="display:inline-block;margin:20px 0;padding:12px 20px;background:#2563EB;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Accept invitation</a>
-        <p style="font-size:12px;color:#94a3b8">This link expires on ${new Date(invitation.expiresAt).toLocaleString()}.</p>
+      <div style="font-family:Inter,-apple-system,system-ui,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#ffffff">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:#2563EB;color:#fff;font-weight:800;font-size:16px">D</span>
+          <span style="font-size:17px;font-weight:700;color:#0f172a">Doloyal</span>
+        </div>
+        <div style="border:1px solid #e2e8f0;border-radius:14px;padding:28px">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a">You've been invited to join ${businessName}</h1>
+          <p style="margin:0 0 16px;font-size:14px;color:#475569">Hi ${inviteeName}, ${inviterName} has invited you to collaborate on <strong>${businessName}</strong> as a <strong style="color:#2563EB">${roleLabel}</strong>.</p>
+          ${messageHtml}
+          <a href="${link}" style="display:inline-block;margin:8px 0 20px;padding:12px 24px;background:#2563EB;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px">Accept Invitation</a>
+          <p style="margin:0 0 12px;font-size:12px;color:#94a3b8">This invitation expires on <strong>${expiresLabel}</strong> and can only be used once.</p>
+          <p style="margin:0;font-size:12px;color:#94a3b8">If you didn't expect this invitation, you can safely ignore this email. This link is private and should not be shared.</p>
+        </div>
+        <p style="margin:20px 0 0;text-align:center;font-size:12px;color:#94a3b8">© ${new Date().getFullYear()} Doloyal. Powering smarter customer retention.</p>
       </div>`;
     if (apiKey) {
       try {
@@ -1232,7 +1466,7 @@ export class StaffService {
         await resend.emails.send({
           from: process.env.RESEND_FROM || 'Doloyal <noreply@doloyal.ai>',
           to: invitation.email,
-          subject: `You're invited to join on Doloyal`,
+          subject: `You've been invited to join ${businessName} on Doloyal`,
           html,
         });
         return;
@@ -1249,7 +1483,17 @@ export class StaffService {
     );
   }
 
-  private mapInvitation(r: any, branchNameById?: Map<string, string>): StaffInvitation {
+  private mapInvitation(
+    r: any,
+    branchNameById?: Map<string, string>,
+    userById?: Map<string, { id: string; firstName: string | null; lastName: string | null }>,
+  ): StaffInvitation {
+    const nameOf = (id?: string | null): string | null => {
+      if (!id) return null;
+      const u = userById?.get(id);
+      if (!u) return null;
+      return [u.firstName, u.lastName].filter(Boolean).join(' ').trim() || null;
+    };
     return {
       id: r.id,
       email: r.email,
@@ -1259,16 +1503,24 @@ export class StaffService {
       role: r.role,
       status: r.status,
       branchIds: r.branchIds || [],
-      branchNames: (r.branchIds || [])
-        .map((id: string) => branchNameById?.get(id))
-        .filter(Boolean),
+      branchNames: (r.branchIds || []).map((id: string) => branchNameById?.get(id)).filter(Boolean),
       department: r.department,
       jobTitle: r.jobTitle,
+      message: r.message ?? null,
       token: r.token,
       invitationUrl: r.invitationUrl,
       expiresAt: r.expiresAt?.toISOString(),
-      sentAt: r.sentAt?.toISOString(),
+      sentAt: r.sentAt?.toISOString() ?? null,
+      lastSentAt: r.lastSentAt?.toISOString() ?? r.sentAt?.toISOString() ?? null,
       acceptedAt: r.acceptedAt?.toISOString() ?? null,
+      cancelledAt: r.cancelledAt?.toISOString() ?? null,
+      cancelledById: r.cancelledById ?? null,
+      cancelledByName: nameOf(r.cancelledById),
+      acceptedByUserId: r.acceptedByUserId ?? null,
+      acceptedByName: nameOf(r.acceptedByUserId),
+      invitedById: r.invitedById ?? null,
+      invitedByName: nameOf(r.invitedById),
+      joinedMemberId: null,
       resendCount: r.resendCount,
       createdAt: r.createdAt?.toISOString(),
     };
@@ -1443,6 +1695,7 @@ type InviteMemberLike = {
   jobTitle?: string;
   permissions?: string[];
   notes?: string;
+  message?: string;
   sendWelcomeEmail?: boolean;
   requirePasswordReset?: boolean;
   twoFactorRequired?: boolean;
@@ -1457,7 +1710,8 @@ type BulkActionLike = {
 };
 
 type AcceptInvitationLike = {
-  password: string;
+  password?: string;
+  userId?: string;
   firstName?: string;
   lastName?: string;
   phone?: string;

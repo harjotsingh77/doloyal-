@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { EmailService, type EmailSendResult } from '../integrations/services/email.service';
 
 @Injectable()
 export class BookingNotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async list(tenantId: string) {
     return this.prisma.notification.findMany({
@@ -36,6 +40,10 @@ export class BookingNotificationsService {
 
     const message = this.renderTemplate(template, appointment);
 
+    if (channel === 'EMAIL' && appointment.customer?.email) {
+      return this.sendAppointmentEmail(appointment, type, template?.subject || template?.type || 'Appointment Update', message);
+    }
+
     const record = await this.prisma.notification.create({
       data: {
         tenantId: appointment.tenantId,
@@ -55,6 +63,43 @@ export class BookingNotificationsService {
     return record;
   }
 
+  /**
+   * Send an appointment email through the business's connected Resend account
+   * and persist the Notification record. Never throws — booking flows must not
+   * break because email delivery failed.
+   */
+  async sendAppointmentEmail(appointment: any, type: string, subject: string, body: string, fromEmail?: string) {
+    const customerEmail = appointment.customer?.email;
+    const result: EmailSendResult = customerEmail
+      ? await this.emailService.sendBusinessEmail({
+          tenantId: appointment.tenantId,
+          to: customerEmail,
+          from: fromEmail,
+          subject,
+          html: body,
+          customerId: appointment.customerId,
+          appointmentId: appointment.id,
+          notificationType: type,
+        })
+      : { status: 'FAILED' as const, error: 'Customer has no email address.', to: '', subject };
+
+    return this.prisma.notification.create({
+      data: {
+        tenantId: appointment.tenantId,
+        appointmentId: appointment.id,
+        customerId: appointment.customerId,
+        type,
+        channel: 'EMAIL',
+        recipient: customerEmail || null,
+        subject,
+        body,
+        status: result.status,
+        sentAt: result.status === 'SENT' ? new Date() : null,
+        metadata: { emailLogId: result.id, providerMessageId: result.providerMessageId, error: result.error },
+      },
+    });
+  }
+
   async sendBookingConfirmation(appointment: any) {
     return this.send(appointment.id, 'CONFIRMATION', 'SMS');
   }
@@ -68,6 +113,12 @@ export class BookingNotificationsService {
   }
 
   async createNotificationForAppointment(appointment: any, type: string, channel: string) {
+    if (channel === 'EMAIL') {
+      const template = await this.getDefaultTemplate(appointment, type, channel);
+      const body = this.renderTemplate(template, appointment);
+      return this.sendAppointmentEmail(appointment, type, template.subject, body);
+    }
+
     const record = await this.prisma.notification.create({
       data: {
         tenantId: appointment.tenantId,
@@ -137,13 +188,24 @@ export class BookingNotificationsService {
 
     const messages: Record<string, string> = {
       CONFIRMATION: `Hi ${customerName}, your appointment for ${appointment.serviceName} on ${new Date(appointment.startTime).toLocaleDateString()} at ${new Date(appointment.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} is confirmed!`,
+      BOOKING_CONFIRMATION: `Hi ${customerName}, your appointment for ${appointment.serviceName} on ${new Date(appointment.startTime).toLocaleDateString()} at ${new Date(appointment.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} is confirmed!`,
       REMINDER: `Reminder: You have an appointment for ${appointment.serviceName} on ${new Date(appointment.startTime).toLocaleDateString()} at ${new Date(appointment.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+      REMINDER_24H: `Reminder: Your appointment for ${appointment.serviceName} is tomorrow at ${new Date(appointment.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. We look forward to seeing you!`,
+      REMINDER_2H: `Friendly reminder: Your appointment for ${appointment.serviceName} starts in 2 hours at ${new Date(appointment.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
       CANCELLATION: `Hi ${customerName}, your appointment for ${appointment.serviceName} on ${new Date(appointment.startTime).toLocaleDateString()} has been cancelled.`,
+      CANCELLED: `Hi ${customerName}, your appointment for ${appointment.serviceName} on ${new Date(appointment.startTime).toLocaleDateString()} has been cancelled.`,
+      RESCHEDULED: `Hi ${customerName}, your appointment for ${appointment.serviceName} has been moved to ${new Date(appointment.startTime).toLocaleDateString()} at ${new Date(appointment.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+      THANK_YOU: `Hi ${customerName}, thank you for visiting ${appointment.tenant?.name || 'us'} today! We look forward to seeing you again.`,
     };
 
     return {
       body: messages[type] || `Notification regarding your appointment for ${appointment.serviceName}.`,
-      subject: type === 'CONFIRMATION' ? 'Booking Confirmed' : type === 'REMINDER' ? 'Appointment Reminder' : 'Appointment Cancelled',
+      subject: type === 'CONFIRMATION' || type === 'BOOKING_CONFIRMATION' ? 'Booking Confirmed'
+        : type === 'REMINDER' || type === 'REMINDER_24H' || type === 'REMINDER_2H' ? 'Appointment Reminder'
+        : type === 'RESCHEDULED' ? 'Appointment Updated'
+        : type === 'CANCELLATION' || type === 'CANCELLED' ? 'Appointment Cancelled'
+        : type === 'THANK_YOU' ? 'Thank You'
+        : 'Appointment Update',
       type,
       channel,
     };

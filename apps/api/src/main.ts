@@ -9,6 +9,20 @@ import { LoggingInterceptor } from './common/logging.interceptor';
 import { TransformInterceptor } from './common/transform.interceptor';
 import { getAllowedOrigins } from './common/helpers';
 
+// @nestjs/platform-fastify mishandles handler errors thrown before the first
+// `await` when the request carries a parsed JSON body (the rejection escapes
+// Nest's router and becomes an unhandled rejection). Without these guards a
+// single bad request would take the whole API down. Log and continue instead.
+process.on('unhandledRejection', (reason, promise) => {
+  const message =
+    reason instanceof Error ? `${reason.message}\n${reason.stack}` : String(reason);
+  console.error('[lifecycle] Unhandled promise rejection:', message);
+  console.error('[lifecycle] Promise:', promise);
+});
+process.on('uncaughtException', (error) => {
+  console.error('[lifecycle] Uncaught exception:', error?.stack || error);
+});
+
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
 

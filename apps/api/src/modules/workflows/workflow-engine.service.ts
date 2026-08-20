@@ -11,6 +11,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { EmailService } from '../integrations/services/email.service';
 import {
   getAction,
   getCondition,
@@ -63,7 +64,10 @@ export class WorkflowEngineService {
   /** Simple in-process rate limiter: tenantId -> message count per minute. */
   private rateBuckets = new Map<string, { minute: number; count: number }>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   private allowMessage(tenantId: string, limitPerMinute = 100): boolean {
     const nowMinute = Math.floor(Date.now() / 60000);
@@ -514,6 +518,43 @@ export class WorkflowEngineService {
         const body = render(config.message || config.body || `Hi ${vars.first_name}!`);
         const subject = config.subject ? render(String(config.subject)) : 'Doloyal';
         const recipient = customer?.email || customer?.phone || null;
+
+        if (channel === 'EMAIL') {
+          // Real send through the business's connected Resend OAuth account.
+          if (!customer?.email) {
+            throw new Error('This customer has no email address on file.');
+          }
+          const result = await this.emailService.sendBusinessEmail({
+            tenantId,
+            to: customer.email,
+            from: config.fromEmail ? render(String(config.fromEmail)) : undefined,
+            subject,
+            html: body,
+            customerId: customer?.id || null,
+            workflowId,
+            notificationType: actionType === 'send_email' ? 'WORKFLOW_EMAIL' : actionType.toUpperCase(),
+          });
+          if (result.status !== 'SENT') {
+            throw new Error(result.error || 'Failed to send email.');
+          }
+          // Persist a notification record (real in-app audit of the message).
+          await this.prisma.notification.create({
+            data: {
+              tenantId,
+              customerId: customer?.id || null,
+              type: 'WORKFLOW',
+              channel,
+              recipient,
+              subject,
+              body,
+              status: 'SENT',
+              sentAt: now,
+              metadata: { workflowId, emailLogId: result.id, providerMessageId: result.providerMessageId },
+            },
+          });
+          return { channel, sent: true, messageId: result.providerMessageId, sentAt: now.toISOString(), recipient };
+        }
+
         // Persist a notification record (real in-app audit of the message).
         await this.prisma.notification.create({
           data: {

@@ -94,6 +94,8 @@ export function Sidebar({
             <img
               src="/8bg.png"
               alt="Doloyal"
+              width={32}
+              height={32}
               className="h-8 w-8 rounded-lg object-contain shrink-0"
             />
           </Link>
@@ -102,6 +104,8 @@ export function Sidebar({
             <img
               src="/8bg.png"
               alt="Doloyal"
+              width={32}
+              height={32}
               className="h-8 w-8 rounded-lg object-contain shrink-0"
             />
             <div className="leading-tight">

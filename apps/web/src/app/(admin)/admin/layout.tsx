@@ -40,6 +40,7 @@ import { api } from "@/lib/api";
 import { cn } from "@doloyal/ui";
 import { AdminGlobalSearch } from "./_components/global-search";
 import { AdminNotifications } from "./_components/notifications";
+import { AskDoloyal } from "@/components/ask-doloyal";
 import { relativeTime } from "@doloyal/shared";
 
 const NAV = [
@@ -137,6 +138,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <img
             src="/8bg.png"
             alt="Doloyal Admin"
+            width={32}
+            height={32}
             className="h-8 w-8 rounded-lg object-contain shrink-0"
           />
           <div className="leading-tight">
@@ -200,7 +203,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminGuard>
-      <div className="flex h-screen bg-[rgb(var(--color-background))]">
+      <AskDoloyal>
+        <div className="flex h-screen bg-[rgb(var(--color-background))]">
         {/* Desktop sidebar */}
         <aside className="hidden w-64 shrink-0 border-r border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] lg:block">
           {SidebarContent}
@@ -225,7 +229,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
 
             <Link href="/admin" className="flex items-center gap-2 lg:hidden">
-              <img src="/8bg.png" alt="Doloyal Admin" className="h-7 w-7 rounded-lg object-contain" />
+              <img src="/8bg.png" alt="Doloyal Admin" width={28} height={28} className="h-7 w-7 rounded-lg object-contain" />
               <span className="text-sm font-semibold text-[rgb(var(--color-foreground))]">Doloyal Admin</span>
             </Link>
 
@@ -287,7 +291,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6">{children}</div>
           </main>
         </div>
-      </div>
+        </div>
+      </AskDoloyal>
     </AdminGuard>
   );
 }

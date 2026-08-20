@@ -75,6 +75,39 @@ export class ListStaffQuery {
   pageSize?: number;
 }
 
+export class ListInvitationsQuery {
+  @IsIn([...INVITATION_STATUSES, 'ALL'] as unknown as string[])
+  @IsOptional()
+  status?: string;
+
+  @IsString()
+  @IsOptional()
+  search?: string;
+
+  @IsIn(STAFF_ROLES as unknown as string[])
+  @IsOptional()
+  role?: string;
+
+  @IsString()
+  @IsOptional()
+  dateFrom?: string;
+
+  @IsString()
+  @IsOptional()
+  dateTo?: string;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  page?: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  @IsOptional()
+  pageSize?: number;
+}
+
 export class InviteMemberDto {
   @IsString()
   @MaxLength(60)
@@ -122,6 +155,11 @@ export class InviteMemberDto {
   @MaxLength(2000)
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @MaxLength(1000)
+  @IsOptional()
+  message?: string;
 
   @IsBoolean()
   @IsOptional()
@@ -244,7 +282,12 @@ export class BulkActionDto {
 export class AcceptInvitationDto {
   @IsString()
   @MaxLength(72)
-  password!: string;
+  @IsOptional()
+  password?: string;
+
+  @IsString()
+  @IsOptional()
+  userId?: string;
 
   @IsString()
   @MaxLength(60)

@@ -12,6 +12,12 @@ class CreateAppointmentDto {
   @IsString() @IsOptional() notes?: string;
 }
 
+class UpdateStatusDto {
+  @IsString() @IsNotEmpty() status: string;
+  @IsString() @IsOptional() startTime?: string;
+  @IsString() @IsOptional() endTime?: string;
+}
+
 class ListQueryDto {
   @IsString() @IsOptional() status?: string;
   @IsString() @IsOptional() from?: string;
@@ -38,7 +44,10 @@ export class AppointmentsController {
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: any) {
-    return this.appointmentsService.updateStatus(user.activeTenantId, id, status);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto, @CurrentUser() user: any) {
+    return this.appointmentsService.updateStatus(user.activeTenantId, id, dto.status, {
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+    });
   }
 }

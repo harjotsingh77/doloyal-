@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
-import { PLANS, getPlan } from '@doloyal/shared';
+import { PLANS } from '@doloyal/shared';
 import { paginate, planMonthlyAmount, planLabel } from './admin-util';
 
 @Injectable()
@@ -220,7 +220,7 @@ export class AdminBillingService {
   }
 
   async overview() {
-    const [subs, events, refundLogs, failed, tenantCount] = await Promise.all([
+    const [subs, events, refundLogs] = await Promise.all([
       this.prisma.subscription.findMany({
         include: { tenant: { select: { currency: true } } },
       }),
@@ -234,8 +234,6 @@ export class AdminBillingService {
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
-      this.prisma.subscriptionEvent.count({ where: { type: 'PAYMENT_FAILED' } }),
-      this.prisma.tenant.count(),
     ]);
 
     const contracts = await this.prisma.enterpriseContract.findMany();

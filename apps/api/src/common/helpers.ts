@@ -301,10 +301,21 @@ export function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pi
 
 /**
  * Allowed frontend origins for CORS (comma-separated `CORS_ORIGIN`).
- * Production example: https://www.doloyal.com,http://localhost:3000
+ *
+ * Production example:
+ *   https://doloyal.com,https://www.doloyal.com,http://localhost:3000
+ *
+ * The defaults below deliberately include BOTH the apex (https://doloyal.com)
+ * and the www (https://www.doloyal.com) production origins, so the API keeps
+ * working even if `CORS_ORIGIN` is unset in the deployment environment.
+ * Setting `CORS_ORIGIN` overrides the defaults entirely — always keep the
+ * production origins in the list when you do.
  */
 export function getAllowedOrigins(): string[] {
-  return (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  return (
+    process.env.CORS_ORIGIN ||
+    'https://doloyal.com,https://www.doloyal.com,http://localhost:3000'
+  )
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);

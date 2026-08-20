@@ -224,12 +224,7 @@ export class AdminEngagementService {
   // ─── Campaigns / messaging ────────────────────────────────────────────────
 
   async campaignsOverview() {
-    const [campaigns, notifications, failedNotif] = await Promise.all([
-      this.prisma.campaign.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        include: { tenant: { select: { name: true } } },
-      }),
+    const [notifications, failedNotif] = await Promise.all([
       this.prisma.notification.findMany({
         orderBy: { createdAt: 'desc' },
         take: 200,

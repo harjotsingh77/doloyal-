@@ -30,7 +30,6 @@ export class AdminAnalyticsService {
       this.prisma.aiConversation.groupBy({ by: ['tenantId'] }),
     ]);
 
-    const tenantMap = new Map(tenants.map((t) => [t.id, t]));
     const activeSet = new Set(subscriptions.map((s) => s.tenantId));
     const customerSet = new Set(customers.map((c) => c.tenantId));
     const apptSet = new Set(appointments.map((a) => a.tenantId));

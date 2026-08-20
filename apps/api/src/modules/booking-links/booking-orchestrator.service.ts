@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma.service';
 import { BookingLinksService } from './booking-links.service';
 import { BookingNotificationsService } from './booking-notifications.service';
+import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
 import {
   DEFAULT_AUTOMATIONS,
   DEFAULT_LOYALTY,
@@ -48,6 +49,7 @@ export class BookingOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly bookingLinks: BookingLinksService,
     private readonly notifications: BookingNotificationsService,
+    private readonly googleCalendar: GoogleCalendarIntegrationService,
   ) {}
 
   private calcPaymentAmount(servicePrice: number, paymentCfg: any): {
@@ -189,6 +191,15 @@ export class BookingOrchestratorService {
       },
     });
     if (conflict) throw new BadRequestException('This time slot is no longer available');
+
+    // Google Calendar free/busy guard — rejects slots the business calendar already holds.
+    try {
+      const busy = await this.googleCalendar.isTimeSlotBusy(tenant.id, startTime, endTime);
+      if (busy) throw new BadRequestException('This time slot is no longer available');
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      // Calendar unavailable (not connected / revoked) must not block bookings.
+    }
 
     const phone = dto.phone || dto.customerPhone;
     if (!phone) throw new BadRequestException('Phone is required');
@@ -437,22 +448,21 @@ export class BookingOrchestratorService {
       // non-fatal
     }
 
-    // Calendar event record
+    // Calendar event record — sync the appointment to the tenant's Google Calendar.
     try {
-      await this.prisma.calendarEvent.create({
-        data: {
-          tenantId: tenant.id,
-          appointmentId: appointment.id,
-          provider: 'GOOGLE',
-          externalId: appointment.id,
-          title: service.name,
-          startTime,
-          endTime,
-          status: 'ACTIVE',
-        },
+      await this.googleCalendar.syncAppointmentToCalendar(tenant.id, {
+        id: appointment.id,
+        tenantId: tenant.id,
+        serviceName: service.name,
+        startTime,
+        endTime,
+        notes: dto.notes,
+        customer: customer
+          ? { firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone }
+          : null,
       });
     } catch {
-      // calendar model may vary in demo mode
+      // Calendar sync must never block the booking flow.
     }
 
     // Update link metrics

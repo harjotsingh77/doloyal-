@@ -96,39 +96,83 @@ export default function IntegrationsPage() {
   const [syncLogs, setSyncLogs] = React.useState<any[]>([]);
   const [webhookEvents, setWebhookEvents] = React.useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = React.useState(false);
-
-  React.useEffect(() => {
-    loadAll();
-  }, []);
+  const [calendarId, setCalendarId] = React.useState("");
+  const [savingCalendar, setSavingCalendar] = React.useState(false);
+  const [testEmailTo, setTestEmailTo] = React.useState("");
+  const [sendingTest, setSendingTest] = React.useState(false);
+  const [resendDomains, setResendDomains] = React.useState<any[]>([]);
+  const [loadingDomains, setLoadingDomains] = React.useState(false);
+  const [domainsError, setDomainsError] = React.useState<string | null>(null);
+  const [newDomain, setNewDomain] = React.useState("");
+  const [creatingDomain, setCreatingDomain] = React.useState(false);
 
   const loadAll = async () => {
     try {
       setLoading(true);
       const [provs, list] = await Promise.all([
-        api.listIntegrationProviders(),
-        api.listIntegrations(),
+        api.listIntegrationProviders().catch(() => []),
+        api.listIntegrations().catch(() => []),
       ]);
-      setProviders(provs.filter((p: any) => p.type !== "SMS" && p.type !== "sms" && p.name !== "SMS Provider"));
+      const validProvs = Array.isArray(provs) ? provs : [];
+      setProviders(validProvs.filter((p: any) => p && p.type !== "SMS" && p.type !== "sms" && p.name !== "SMS Provider"));
       const map: Record<string, any> = {};
-      for (const i of list) map[i.type.toLowerCase()] = i;
+      if (Array.isArray(list)) {
+        for (const i of list) {
+          if (i?.type) map[i.type.toLowerCase()] = i;
+        }
+      }
       setIntegrations(map);
-    } catch {
+    } catch (err) {
+      console.error("Failed to load integrations:", err);
       toast.error("Failed to load integrations");
     } finally {
       setLoading(false);
     }
   };
 
+  React.useEffect(() => {
+    loadAll();
+  }, []);
+
+  const loadAllRef = React.useRef<() => Promise<void>>(async () => {});
+  React.useEffect(() => {
+    loadAllRef.current = loadAll;
+  }, [loadAll]);
+
+  React.useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as Record<string, unknown> | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "oauth-success") {
+        const type = String(data.integrationType || "").toUpperCase();
+        const def = providers.find((p) => p.type === type);
+        toast.success(`${def?.name || type} connected successfully`);
+        loadAllRef.current();
+      } else if (data.type === "oauth-error") {
+        toast.error(String(data.error || "Failed to connect integration"));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [providers]);
+
   const providerFor = (type: string) => providers.find((p) => p.type === type);
 
   const openConnect = (type: string) => {
     const integ = integrations[type.toLowerCase()];
     if (integ?.status === "CONNECTED") {
-      setDetailDialog(type);
+      openDetail(type);
+      return;
+    }
+    if (integ?.status === "EXPIRED" || integ?.status === "REAUTH_REQUIRED") {
+      handleOAuth(type);
       return;
     }
     const def = providerFor(type);
-    if (def?.hasOAuth) {
+    // Resend is OAuth-only: there is no API-key connection path for customers.
+    // Route to OAuth even if a stale provider definition reports otherwise.
+    if (def?.hasOAuth || type.toUpperCase() === "RESEND") {
       handleOAuth(type);
       return;
     }
@@ -138,11 +182,60 @@ export default function IntegrationsPage() {
     setConnectDialog(type);
   };
 
+  const openDetail = (type: string) => {
+    setDetailDialog(type);
+    if (type.toUpperCase() === "RESEND") {
+      loadResendDomains();
+    }
+  };
+
+  const loadResendDomains = async () => {
+    setLoadingDomains(true);
+    setDomainsError(null);
+    try {
+      setResendDomains(await api.listResendDomains());
+    } catch (err: any) {
+      setDomainsError(err?.message || "Failed to load sending domains.");
+    } finally {
+      setLoadingDomains(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    setSendingTest(true);
+    try {
+      const res = await api.sendResendTestEmail(testEmailTo || undefined);
+      toast.success(res?.message || "Test email sent");
+      setTestEmailTo("");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send test email");
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const handleCreateDomain = async () => {
+    setCreatingDomain(true);
+    try {
+      await api.createResendDomain(newDomain.trim());
+      toast.success(`Domain ${newDomain.trim()} created — add the DNS records in Resend to verify it.`);
+      setNewDomain("");
+      await loadResendDomains();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create domain");
+    } finally {
+      setCreatingDomain(false);
+    }
+  };
+
   const handleOAuth = async (type: string) => {
     try {
       setConnecting(type);
       const redirect = `${window.location.origin}/app/integrations/callback`;
-      const { url } = await api.getOAuthUrl(type, redirect);
+      const { url, state } = await api.getOAuthUrl(type, redirect);
+      const states = JSON.parse(sessionStorage.getItem("doloyal_oauth_states") || "{}");
+      states[state] = type;
+      sessionStorage.setItem("doloyal_oauth_states", JSON.stringify(states));
       window.open(url, "oauth-popup", "width=600,height=700");
     } catch (err: any) {
       toast.error(err?.message || "Failed to start OAuth");
@@ -153,7 +246,7 @@ export default function IntegrationsPage() {
 
   const handleConnect = async (type: string) => {
     const def = providerFor(type);
-    if (def?.hasOAuth && !apiKey) {
+    if (def?.hasOAuth || type.toUpperCase() === "RESEND" || (!def?.hasApiKey && !def?.hasApiSecret)) {
       handleOAuth(type);
       return;
     }
@@ -241,6 +334,26 @@ export default function IntegrationsPage() {
       toast.error("Failed to load logs");
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const handleSelectCalendar = async (type: string, id: string) => {
+    setSavingCalendar(true);
+    try {
+      await api.updateIntegrationConfig(type, { google_calendar_id: id });
+      setIntegrations((prev) => ({
+        ...prev,
+        [type.toLowerCase()]: {
+          ...prev[type.toLowerCase()],
+          metadata: { ...(prev[type.toLowerCase()]?.metadata || {}), google_calendar_id: id },
+        },
+      }));
+      setCalendarId(id);
+      toast.success("Calendar updated");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update calendar");
+    } finally {
+      setSavingCalendar(false);
     }
   };
 
@@ -356,6 +469,7 @@ export default function IntegrationsPage() {
             const type = def.type.toLowerCase();
             const integ = integrations[type];
             const connected = integ?.status === "CONNECTED";
+            const needsReconnect = integ?.status === "EXPIRED" || integ?.status === "REAUTH_REQUIRED";
             const BrandIcon = getBrandIcon(def.type);
             const connectedDetail =
               connected && integ?.label ? integ.label : connected && integ?.metadata?.accountName ? integ.metadata.accountName : null;
@@ -374,13 +488,14 @@ export default function IntegrationsPage() {
                   )
                 }
                 connected={connected}
+                expired={needsReconnect}
                 connecting={connecting === def.type}
                 syncing={syncing === def.type}
                 supportsSync={def.supportsSync}
                 healthError={integ?.healthStatus === "ERROR"}
                 connectedDetail={connectedDetail}
                 onConnect={() => openConnect(def.type)}
-                onManage={() => setDetailDialog(def.type)}
+                onManage={() => openDetail(def.type)}
                 onSync={() => handleSync(def.type)}
                 onDisconnect={() => requestDisconnect(def.type)}
               />
@@ -446,15 +561,17 @@ export default function IntegrationsPage() {
                       />
                     </div>
                   )}
-                  <div className="space-y-2">
-                    <label htmlFor="integ-label" className="text-sm font-medium">Label (optional)</label>
-                    <Input
-                      id="integ-label"
-                      value={label}
-                      onChange={(e) => setLabel(e.target.value)}
-                      placeholder="e.g. Production"
-                    />
-                  </div>
+                  {!def.hasOAuth && (
+                    <div className="space-y-2">
+                      <label htmlFor="integ-label" className="text-sm font-medium">Label (optional)</label>
+                      <Input
+                        id="integ-label"
+                        value={label}
+                        onChange={(e) => setLabel(e.target.value)}
+                        placeholder="e.g. Production"
+                      />
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="ghost" onClick={() => setConnectDialog(null)} disabled={connecting === connectDialog}>
@@ -536,6 +653,8 @@ export default function IntegrationsPage() {
                       <div className="flex items-center gap-1.5 font-medium">
                         {integ.status === "CONNECTED" ? (
                           <><CheckCircle2 className="h-4 w-4 text-[rgb(var(--color-success))]" /> Connected</>
+                        ) : integ.status === "EXPIRED" || integ.status === "REAUTH_REQUIRED" ? (
+                          <><AlertCircle className="h-4 w-4 text-[rgb(var(--color-warning))]" /> Needs reconnection</>
                         ) : (
                           <><XCircle className="h-4 w-4 text-[rgb(var(--color-danger))]" /> Disconnected</>
                         )}
@@ -562,6 +681,23 @@ export default function IntegrationsPage() {
                       <div className="font-medium">{displayCategory(def.category)}</div>
                     </div>
                   </div>
+                  {integ.status === "REAUTH_REQUIRED" && (
+                      <div className="rounded-lg border border-[rgb(var(--color-warning)/0.4)] bg-[rgb(var(--color-warning)/0.08)] p-3">
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-[rgb(var(--color-warning))]">
+                          <AlertCircle className="h-4 w-4" /> Reauthorization required
+                        </div>
+                        <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">
+                          Your Resend authorization expired or was revoked. Reconnect to keep sending emails from
+                          Doloyal.
+                        </p>
+                      </div>
+                    )}
+                    {integ.metadata?.email && (
+                    <div className="space-y-1 text-sm">
+                      <span className="text-[rgb(var(--color-muted-foreground))]">Connected account</span>
+                      <div className="font-medium">{integ.metadata.email}</div>
+                    </div>
+                  )}
                   {integ.errorLog && (
                     <div className="rounded-lg border border-[rgb(var(--color-danger)/0.3)] bg-[rgb(var(--color-danger)/0.05)] p-3">
                       <div className="flex items-center gap-1.5 text-sm font-medium text-[rgb(var(--color-danger))]">
@@ -570,10 +706,117 @@ export default function IntegrationsPage() {
                       <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">{integ.errorLog}</p>
                     </div>
                   )}
+                  {detailDialog.toUpperCase() === "GOOGLE_CALENDAR" && Array.isArray(integ.metadata?.calendars) && integ.metadata.calendars.length > 0 && (
+                    <div className="space-y-2">
+                      <label htmlFor="integ-calendar" className="text-sm font-medium">Calendar</label>
+                      <Select
+                        value={calendarId || integ.metadata?.google_calendar_id || "primary"}
+                        onValueChange={(v) => handleSelectCalendar(detailDialog, v)}
+                      >
+                        <SelectTrigger id="integ-calendar" className="w-full" disabled={savingCalendar}>
+                          <SelectValue placeholder="Select calendar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {integ.metadata.calendars.map((cal: any) => (
+                            <SelectItem key={cal.id} value={cal.id}>
+                              {cal.summary || cal.id}{cal.primary ? " (Primary)" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                        Appointments and free/busy availability use this calendar.
+                      </p>
+                    </div>
+                  )}
+                  {detailDialog.toUpperCase() === "RESEND" && (
+                    <div className="space-y-4 border-t border-[rgb(var(--color-border))] pt-4">
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium">Send test email</span>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={testEmailTo}
+                            onChange={(e) => setTestEmailTo(e.target.value)}
+                            placeholder={integ.metadata?.email || "you@example.com"}
+                            className="flex-1"
+                            aria-label="Test email recipient"
+                          />
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleSendTestEmail}
+                            loading={sendingTest}
+                            disabled={sendingTest}
+                          >
+                            Send
+                          </Button>
+                        </div>
+                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                          Sends a test email through your connected Resend account.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Sending domains</span>
+                          <Button variant="ghost" size="sm" onClick={loadResendDomains} loading={loadingDomains} disabled={loadingDomains}>
+                            {!loadingDomains ? <RefreshCw className="h-3.5 w-3.5" /> : null}
+                            Refresh
+                          </Button>
+                        </div>
+                        {domainsError ? (
+                          <div className="rounded-lg border border-[rgb(var(--color-warning)/0.4)] bg-[rgb(var(--color-warning)/0.08)] p-3 text-xs text-[rgb(var(--color-foreground))]">
+                            {domainsError}
+                          </div>
+                        ) : loadingDomains ? (
+                          <div className="space-y-1.5">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
+                        ) : resendDomains.length === 0 ? (
+                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                            No sending domains found. Add one below to send from your own verified domain.
+                          </p>
+                        ) : (
+                          <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                            {resendDomains.map((d: any) => (
+                              <div key={d.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+                                <span className="font-medium">{d.name}</span>
+                                <Badge variant={d.status === "verified" ? "success" : "outline"} className="capitalize">
+                                  {d.status}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={newDomain}
+                            onChange={(e) => setNewDomain(e.target.value)}
+                            placeholder="mail.yourdomain.com"
+                            className="flex-1"
+                            aria-label="New sending domain"
+                          />
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCreateDomain}
+                            loading={creatingDomain}
+                            disabled={creatingDomain || !newDomain.trim()}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="primary" size="sm" onClick={() => handleSync(detailDialog)} loading={syncing === detailDialog} disabled={!def.supportsSync}>
-                      <RefreshCw className="h-4 w-4" /> Sync Now
-                    </Button>
+                    {integ.status === "EXPIRED" || integ.status === "REAUTH_REQUIRED" ? (
+                      <Button variant="primary" size="sm" onClick={() => handleOAuth(detailDialog)} loading={connecting === detailDialog}>
+                        <RefreshCw className="h-4 w-4" /> Reconnect
+                      </Button>
+                    ) : (
+                      <Button variant="primary" size="sm" onClick={() => handleSync(detailDialog)} loading={syncing === detailDialog} disabled={!def.supportsSync}>
+                        <RefreshCw className="h-4 w-4" /> Sync Now
+                      </Button>
+                    )}
                     <Button variant="secondary" size="sm" onClick={() => handleTest(detailDialog)} loading={testing === detailDialog}>
                       <Play className="h-4 w-4" /> Test
                     </Button>

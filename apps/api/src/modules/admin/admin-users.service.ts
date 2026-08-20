@@ -44,34 +44,31 @@ export class AdminUsersService {
       };
     }
 
-    const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          memberships: {
-            take: 1,
-            include: {
-              tenant: {
-                select: {
-                  name: true,
-                  subscriptions: { select: { plan: true }, take: 1, orderBy: { createdAt: 'desc' } },
-                },
+    const users = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: {
+        memberships: {
+          take: 1,
+          include: {
+            tenant: {
+              select: {
+                name: true,
+                subscriptions: { select: { plan: true }, take: 1, orderBy: { createdAt: 'desc' } },
               },
             },
           },
-          loginHistory: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            where: { successful: true },
-          },
-          _count: { select: { memberships: true } },
         },
-      }),
-      this.prisma.user.count({ where }),
-    ]);
+        loginHistory: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          where: { successful: true },
+        },
+        _count: { select: { memberships: true } },
+      },
+    });
 
     const items = users.map((u) => {
       const membership = u.memberships[0];
@@ -186,6 +183,7 @@ export class AdminUsersService {
   }
 
   private isSuspended(user: { sessions?: unknown; tokenVersion?: number }) {
+    void user;
     return false;
   }
 }

@@ -21,6 +21,7 @@ import { Roles } from '../../common/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import {
   ListStaffQuery,
+  ListInvitationsQuery,
   InviteMemberDto,
   UpdateStaffDto,
   SetTwoFactorDto,
@@ -43,6 +44,12 @@ export class StaffController {
   @Roles('OWNER', 'MANAGER')
   async stats(@CurrentUser() user: any) {
     return this.staff.getStats(user.activeTenantId);
+  }
+
+  @Get('branches')
+  @Roles('OWNER', 'MANAGER')
+  async branches(@CurrentUser() user: any) {
+    return this.staff.listBranches(user.activeTenantId);
   }
 
   @Get('members')
@@ -224,15 +231,33 @@ export class StaffController {
   @Get('invitations')
   @Roles('OWNER', 'MANAGER')
   async listInvitations(
-    @Query() query: ListStaffQuery,
+    @Query() query: ListInvitationsQuery,
     @CurrentUser() user: any,
   ) {
     return this.staff.listInvitations(user.activeTenantId, {
       status: query.status,
       search: query.search,
+      role: query.role,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
       page: query.page,
       pageSize: query.pageSize,
     });
+  }
+
+  @Get('invitations/counts')
+  @Roles('OWNER', 'MANAGER')
+  async invitationCounts(@CurrentUser() user: any) {
+    return this.staff.getInvitationCounts(user.activeTenantId);
+  }
+
+  @Get('invitations/:id')
+  @Roles('OWNER', 'MANAGER')
+  async invitationDetail(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.staff.getInvitationDetail(user.activeTenantId, id);
   }
 
   @Post('invitations')

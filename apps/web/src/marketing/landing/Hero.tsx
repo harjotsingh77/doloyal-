@@ -239,7 +239,7 @@ export function HeroContent() {
         >
           <button
             onClick={openWaitlistModal}
-            className="group flex w-full sm:w-auto items-center justify-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text.5 sm:text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5 active:scale-95"
+            className="group flex w-full sm:w-auto items-center justify-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text-sm sm:text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5 active:scale-95"
           >
             <TextRoll>Start 1 Month Free</TextRoll>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#232529] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:rotate-45 group-hover:translate-x-0.5">

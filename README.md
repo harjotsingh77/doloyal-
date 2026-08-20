@@ -171,6 +171,7 @@ Fly.io, ECS, or any Docker host).
    - `OPENROUTER_API_KEY` → provider key
    - `SUPABASE_SERVICE_ROLE_KEY` → server-only Supabase key
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` → Google integration
+   - `RESEND_OAUTH_CLIENT_ID` → Resend OAuth client ID (see "Resend" setup below)
 7. Apply migrations once against the production DB (from a machine with the repo):
    ```bash
    pnpm db:deploy   # prisma migrate deploy (safe for production — never reset)
@@ -186,6 +187,36 @@ Fly.io, ECS, or any Docker host).
   - `https://www.doloyal.com/auth/callback`
 - **Google Cloud Console** → OAuth consent screen → add the same authorized redirect URIs.
 - Copy the project URL, anon key, and service-role key into the env vars above.
+
+### Resend (email sending, user-level OAuth)
+
+Every business sends email through its **own connected Resend account** — Doloyal
+never holds a Resend API key. The flow is OAuth 2.1 with PKCE on a **public client**
+(no `client_secret`), so Doloyal needs a registered client ID per environment:
+
+1. Register Doloyal as a Resend OAuth client (Dynamic Client Registration):
+   ```bash
+   node scripts/register-resend-oauth.mjs --app-url https://www.doloyal.com   # prod
+   node scripts/register-resend-oauth.mjs --app-url http://localhost:3000      # local
+   ```
+2. Put the returned `client_id` in the API env as `RESEND_OAUTH_CLIENT_ID`.
+3. Set `RESEND_FROM` (fallback sender for legacy staff-invite emails only).
+
+At runtime, each business authorizes with Resend in **Integrations → Resend → Connect**
+(OAuth popup). Doloyal:
+
+- Exchanges the code with PKCE and stores tokens encrypted per tenant.
+- Auto-refreshes access tokens on demand; refresh tokens rotate (serialized per tenant).
+- Sends transactional emails (bookings, reminders, rebookings, memberships), workflow
+  `send_email` actions, and EMAIL campaigns through the business's Resend account.
+- Records every send in `EmailLog`; marks the connection `REAUTH_REQUIRED` when the
+  authorization expires or is revoked (the UI shows a "Reconnect" prompt).
+- Includes a "Send test email" control and a sending-domains section in the Resend
+  manage dialog. Domain management requires the `full_access` scope; without it the UI
+  surfaces a reconnect prompt instead of over-requesting permissions.
+
+Each business must verify a sending domain in its own Resend dashboard so emails send
+from its own address (Resend rejects unverified senders).
 
 ### CI
 

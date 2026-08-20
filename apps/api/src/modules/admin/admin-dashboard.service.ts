@@ -34,7 +34,6 @@ export class AdminDashboardService {
 
   async overview(range = '30d') {
     const now = new Date();
-    const { start: rStart } = dateRangeFor(range);
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
 
     const [
@@ -42,10 +41,7 @@ export class AdminDashboardService {
       tenants,
       newSignups30d,
       supportOpen,
-      supportTotal,
       websiteRequestsOpen,
-      customersTotal,
-      appointmentsTotal,
       subscriptions,
       contracts,
     ] = await Promise.all([
@@ -71,12 +67,9 @@ export class AdminDashboardService {
       this.prisma.supportTicket.count({
         where: { status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING_FOR_CUSTOMER'] } },
       }),
-      this.prisma.supportTicket.count(),
       this.prisma.websiteProject.count({
         where: { status: { notIn: ['COMPLETED', 'PUBLISHED'] } },
       }),
-      this.prisma.customer.count(),
-      this.prisma.appointment.count(),
       this.prisma.subscription.findMany(),
       this.prisma.enterpriseContract.findMany({
         select: { tenantId: true, contractPrice: true, billingCycle: true },
@@ -637,7 +630,7 @@ export class AdminDashboardService {
   }
 
   private async recentActivity(limit: number) {
-    const [events, refunds, planChanges, tenants, projects] = await Promise.all([
+    const [events, refunds, tenants, projects] = await Promise.all([
       this.prisma.subscriptionEvent.findMany({
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -647,11 +640,6 @@ export class AdminDashboardService {
         orderBy: { createdAt: 'desc' },
         take: limit,
         where: { action: 'billing.refund' },
-      }),
-      this.prisma.adminAuditLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        where: { action: 'subscription.planChanged' },
       }),
       this.prisma.tenant.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       this.prisma.websiteProject.findMany({

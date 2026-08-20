@@ -84,7 +84,7 @@ import { toast } from "sonner";
 
 type ViewMode = "table" | "kanban" | "calendar" | "timeline";
 
-const STATUSES = ["BOOKED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"] as const;
+const STATUSES = ["BOOKED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"] as const;
 
 const STATUS_COLORS: Record<string, "outline" | "accent" | "warning" | "success" | "danger" | "primary"> = {
   BOOKED: "outline",
@@ -1450,7 +1450,7 @@ function DetailContent({
   const handleNotif = async () => {
     setSendingNotif(true);
     try {
-      await api.sendNotification({ appointmentId: selected.id, type: "BOOKING_CONFIRMATION" });
+      await api.sendNotification({ appointmentId: selected.id, type: "BOOKING_CONFIRMATION", channel: "EMAIL" });
       toast.success("Notification sent");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send notification");

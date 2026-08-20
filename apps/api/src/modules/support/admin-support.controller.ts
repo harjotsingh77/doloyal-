@@ -26,6 +26,7 @@ import {
 } from 'class-validator';
 import { SupportService } from './support.service';
 import { SupportRealtimeService } from './support-realtime.service';
+import { adminAiAssistLimiter } from './support-rate-limit';
 
 class UpdateTicketDto {
   @IsString() @IsOptional() subject?: string;
@@ -72,9 +73,28 @@ export class AdminSupportController {
     return this.support.adminGetStats();
   }
 
+  @Get('analytics')
+  analytics() {
+    return this.support.adminGetAnalytics();
+  }
+
+  @Get('conversations/:id')
+  conversation(@Param('id') id: string) {
+    return this.support.adminGetConversation(id);
+  }
+
   @Get('agents')
   agents() {
     return this.support.adminListAgents();
+  }
+
+  @Post('tickets/:id/ai-assist')
+  @HttpCode(HttpStatus.OK)
+  aiAssist(@Param('id') id: string, @CurrentUser() user: any) {
+    if (!adminAiAssistLimiter.allow(`ai-assist:${user.id}`)) {
+      throw new BadRequestException('Too many AI assist requests. Please try again in a moment.');
+    }
+    return this.support.adminAiAssist(user, id);
   }
 
   @Get('tickets')

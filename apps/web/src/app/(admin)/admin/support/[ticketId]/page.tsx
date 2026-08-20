@@ -52,6 +52,7 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@doloyal/ui";
 import { useAuth } from "@/lib/auth";
+import { AiAssist } from "@/components/support/ai-assist";
 
 const STATUS_VARIANT: Record<string, "default" | "primary" | "accent" | "success" | "danger" | "warning" | "outline"> = {
   OPEN: "warning",
@@ -548,6 +549,13 @@ function AdminChat({ ticketId }: { ticketId: string }) {
         </div>
 
         <div className="border-t border-[rgb(var(--color-border))] p-4">
+          <AiAssist
+            ticketId={ticketId}
+            onInsert={(draft) => {
+              setText(draft);
+              scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+            }}
+          />
           {pendingFile ? (
             <div className="mb-2 flex items-center justify-between rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted))] px-3 py-2">
               <div className="flex items-center gap-2 overflow-hidden">

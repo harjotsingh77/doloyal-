@@ -18,7 +18,7 @@ export default function ForgotPasswordPage() {
           <ArrowLeft className="h-4 w-4" /> Back to home
         </Link>
         <div className="rounded-[2rem] border border-[rgb(var(--color-border))] bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_24px_48px_-24px_rgba(15,23,42,0.18)] sm:p-10">
-          <img src="/logo-symbol.png" alt="Doloyal" className="h-10 w-10 object-contain" />
+          <img src="/logo-symbol.png" alt="Doloyal" width={40} height={40} className="h-10 w-10 object-contain" />
           <h1 className="mt-6 text-2xl font-bold tracking-[-0.02em]">Reset your password</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-[rgb(var(--color-muted-foreground))]">
             Enter the email you use to sign in. We&apos;ll send you a secure reset link within a minute.

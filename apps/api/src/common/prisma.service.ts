@@ -36,6 +36,8 @@ const ALL_MODELS = [
   'websiteConversationNote',
   'workflow', 'workflowNode', 'workflowEdge', 'workflowVersion',
   'workflowRun', 'workflowRunStep', 'workflowTemplate', 'workflowAuditLog',
+  'emailLog', 'resendDomain',
+  'supportConversation', 'supportConversationMessage', 'supportTicketEvent',
 ];
 
 function uid() {
@@ -107,6 +109,8 @@ const RELATION_STORE_MAP: Record<string, string> = {
   syncLogs: 'syncLog',
   webhookEvents: 'webhookEvent',
   bookingLink: 'bookingLink',
+  emailLogs: 'emailLog',
+  resendDomains: 'resendDomain',
 };
 
 const HAS_MANY = new Set([
@@ -115,7 +119,7 @@ const HAS_MANY = new Set([
   'rewards', 'redemptions', 'pointsLedger', 'activities',
   'campaigns', 'subscriptions', 'bookingLinks', 'visits', 'notifications',
   'notificationTemplates', 'blockedDateEntries', 'calendarEvents',
-  'branches', 'syncLogs', 'webhookEvents',
+  'branches', 'syncLogs', 'webhookEvents', 'emailLogs', 'resendDomains',
 ]);
 
 const FK_MAP: Record<string, string> = {

@@ -60,7 +60,7 @@ export class AdminBusinessesService {
       ];
     }
 
-    const [tenants, total] = await Promise.all([
+    const [tenants] = await Promise.all([
       this.prisma.tenant.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -92,7 +92,6 @@ export class AdminBusinessesService {
           _count: { select: { customers: true, branches: true } },
         },
       }),
-      this.prisma.tenant.count({ where }),
     ]);
 
     const items = await Promise.all(

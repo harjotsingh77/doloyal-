@@ -17,6 +17,7 @@ export interface IntegrationCardProps {
   category: string;
   icon: React.ReactNode;
   connected: boolean;
+  expired?: boolean;
   connecting?: boolean;
   syncing?: boolean;
   supportsSync?: boolean;
@@ -38,6 +39,7 @@ export function IntegrationCard({
   category,
   icon,
   connected,
+  expired = false,
   connecting = false,
   syncing = false,
   supportsSync = false,
@@ -62,6 +64,11 @@ export function IntegrationCard({
           <Badge variant="success" className="gap-1.5 px-2.5 text-[0.68rem]">
             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
             Connected
+          </Badge>
+        ) : expired ? (
+          <Badge variant="warning" className="gap-1.5 px-2.5 text-[0.68rem]">
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+            Needs reconnection
           </Badge>
         ) : (
           <Badge
@@ -156,6 +163,22 @@ export function IntegrationCard({
               </Button>
             </div>
           </div>
+        ) : expired ? (
+          <Button
+            variant="primary"
+            size="sm"
+            className="w-full"
+            onClick={onConnect}
+            loading={connecting}
+            disabled={connecting}
+          >
+            {connecting ? "Reconnecting..." : (
+              <>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reconnect
+              </>
+            )}
+          </Button>
         ) : (
           <Button
             variant="primary"

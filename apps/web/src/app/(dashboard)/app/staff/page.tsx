@@ -204,6 +204,9 @@ export default function StaffPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button onClick={() => setInviteOpen(true)}>
+              <Plus className="h-4 w-4" /> Invite Member
+            </Button>
             <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} onCreated={refresh} />
           </div>
         }
@@ -413,7 +416,7 @@ export default function StaffPage() {
               )}
             </>
           ) : (
-            <InvitationsPanel onChanged={refresh} />
+            <InvitationsPanel onChanged={refresh} onViewMember={(memberId) => { setManageId(memberId); setManageOpen(true); }} />
           )}
         </CardContent>
       </Card>

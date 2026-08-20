@@ -25,18 +25,15 @@ export class AdminTeamService {
         { lastName: { contains: query.search.trim(), mode: 'insensitive' as const } },
       ];
     }
-    const [members, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          loginHistory: { orderBy: { createdAt: 'desc' }, take: 1, where: { successful: true } },
-        },
-      }),
-      this.prisma.user.count({ where }),
-    ]);
+    const members = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: {
+        loginHistory: { orderBy: { createdAt: 'desc' }, take: 1, where: { successful: true } },
+      },
+    });
     const items = members.map((m) => ({
       id: m.id,
       email: m.email,

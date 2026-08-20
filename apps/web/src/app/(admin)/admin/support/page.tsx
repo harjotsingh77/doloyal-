@@ -38,6 +38,7 @@ import {
   relativeTime,
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { AnalyticsPanel } from "@/components/support/analytics-panel";
 
 const STATUS_VARIANT: Record<string, "default" | "primary" | "accent" | "success" | "danger" | "warning" | "outline"> = {
   OPEN: "warning",
@@ -188,6 +189,8 @@ export default function AdminSupportPage() {
           ))}
         </div>
       )}
+
+      <AnalyticsPanel />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="relative flex-1">

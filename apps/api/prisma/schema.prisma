@@ -40,6 +40,7 @@ enum CustomerStatus {
 enum AppointmentStatus {
   BOOKED
   CONFIRMED
+  CHECKED_IN
   IN_PROGRESS
   COMPLETED
   CANCELLED
@@ -118,6 +119,7 @@ enum RedemptionStatus {
 enum CampaignStatus {
   DRAFT
   SCHEDULED
+  PAUSED
   SENDING
   COMPLETED
   FAILED
@@ -227,6 +229,8 @@ model User {
 
   staffProfiles          StaffProfile[]
   invitationsSent        Invitation[]           @relation("InvitedBy")
+  invitationsCancelled   Invitation[]           @relation("CancelledBy")
+  invitationsAccepted    Invitation[]           @relation("AcceptedBy")
   staffActivities        StaffActivityLog[]     @relation("StaffActivityActor")
   authAuditLogs          AuditLog[]             @relation("AuditActor")
   loginHistory           LoginHistory[]
@@ -236,6 +240,7 @@ model User {
   assignedSupportTickets SupportTicket[]        @relation("SupportAssignedAgent")
   supportNotes           SupportInternalNote[]  @relation("SupportNoteAuthor")
   supportStatusChanges   SupportStatusHistory[] @relation("SupportStatusChangedBy")
+  supportConversations   SupportConversation[]  @relation("SupportConversationOwner")
 
   adminAuditLogs     AdminAuditLog[]          @relation("AdminAuditActor")
   announcementsMade  Announcement[]           @relation("AnnouncementCreator")
@@ -361,10 +366,15 @@ model Tenant {
   aiUsage                AiUsage[]
   supportTickets         SupportTicket[]
   supportMessages        SupportMessage[]
+  supportConversations   SupportConversation[]
+  supportConversationMessages SupportConversationMessage[]
+  supportTicketEvents    SupportTicketEvent[]
   feedbackRequests       FeedbackRequest[]
   enterpriseContract     EnterpriseContract?
   workflows              Workflow[]
   workflowRuns           WorkflowRun[]
+  emailLogs              EmailLog[]
+  resendDomains          ResendDomain[]
 }
 
 model Membership {
@@ -438,31 +448,41 @@ model StaffBranch {
 
 /// Member invitations with a secure token, expiry and full lifecycle tracking.
 model Invitation {
-  id            String           @id @default(uuid())
-  tenantId      String
-  email         String
-  firstName     String?
-  lastName      String?
-  phone         String?
-  role          Role             @default(STAFF)
-  branchIds     String[]         @default([])
-  department    String?
-  jobTitle      String?
-  permissions   Json?
-  notes         String?
-  status        InvitationStatus @default(PENDING)
-  token         String           @unique
-  invitationUrl String?
-  expiresAt     DateTime
-  sentAt        DateTime?
-  acceptedAt    DateTime?
-  resendCount   Int              @default(0)
-  invitedById   String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                String           @id @default(uuid())
+  tenantId          String
+  email             String
+  firstName         String?
+  lastName          String?
+  phone             String?
+  role              Role             @default(STAFF)
+  branchIds         String[]         @default([])
+  department        String?
+  jobTitle          String?
+  permissions       Json?
+  notes             String?
+  /// Optional personal message included in the invitation email.
+  message           String?
+  status            InvitationStatus @default(PENDING)
+  token             String           @unique
+  invitationUrl     String?
+  expiresAt         DateTime
+  sentAt            DateTime?
+  /// When the invitation email was last (re)sent. Powers the resend cooldown.
+  lastSentAt        DateTime?
+  acceptedAt        DateTime?
+  /// The user account that completed acceptance (links to the joined member).
+  acceptedByUserId  String?
+  cancelledAt       DateTime?
+  cancelledById     String?
+  resendCount       Int              @default(0)
+  invitedById       String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invitedBy User?  @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy   User?  @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  cancelledBy User?  @relation("CancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  acceptedBy  User?  @relation("AcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@index([tenantId, email])
@@ -647,6 +667,7 @@ model Customer {
   referralLeaderboardRows ReferralLeaderboard[]
   cashbackTxns            CashbackTransaction[]
   rewardClaims            RewardEngagementClaim[]
+  emailLogs               EmailLog[]
 
   @@unique([tenantId, referralCode])
   @@index([tenantId, phone])
@@ -913,19 +934,26 @@ model CustomerMembership {
 }
 
 model Campaign {
-  id         String         @id @default(uuid())
-  tenantId   String
-  name       String
-  subject    String
-  body       String
-  channel    String         @default("EMAIL")
-  status     CampaignStatus @default(DRAFT)
-  recipients Int            @default(0)
-  sentAt     DateTime?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id           String         @id @default(uuid())
+  tenantId     String
+  name         String
+  subject      String
+  body         String
+  channel      String         @default("EMAIL")
+  audience     String? // All | VIP | At Risk | Inactive
+  status       CampaignStatus @default(DRAFT)
+  recipients   Int            @default(0)
+  sentCount    Int            @default(0)
+  failedCount  Int            @default(0)
+  openRate     Float          @default(0)
+  redeemRate   Float          @default(0)
+  scheduleDate DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  emailLogs EmailLog[]
 }
 
 model Activity {
@@ -1763,6 +1791,9 @@ enum IntegrationStatus {
   DISCONNECTED
   ERROR
   EXPIRED
+  /// The stored OAuth grant is no longer usable (e.g. refresh token was
+  /// revoked). The user must reconnect the provider.
+  REAUTH_REQUIRED
 }
 
 /// A connected third-party service integration for a tenant.
@@ -1785,6 +1816,8 @@ model Integration {
   tokens        IntegrationToken[]
   syncLogs      SyncLog[]
   webhookEvents WebhookEvent[]
+  emailLogs     EmailLog[]
+  resendDomains ResendDomain[]
 
   @@unique([tenantId, type])
   @@index([tenantId])
@@ -1808,6 +1841,60 @@ model IntegrationToken {
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
   @@index([integrationId])
+}
+
+/// Outbound email record for a tenant, sent through a connected provider
+/// (Resend). Kept immutable — historical send history survives disconnects.
+model EmailLog {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  integrationId      String?
+  customerId         String?
+  provider           String    @default("RESEND")
+  providerMessageId  String?
+  fromEmail          String?
+  toEmail            String
+  subject            String?
+  status             String    @default("SENT") // SENT, FAILED
+  error              String?
+  workflowId         String?
+  campaignId         String?
+  appointmentId      String?
+  notificationType   String? // e.g. BOOKING_CONFIRMATION, REMINDER_24H
+  metadata           Json?
+  createdAt          DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration  Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  workflow     Workflow?    @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([customerId])
+}
+
+/// A sending domain registered on the business's Resend account.
+/// Created/managed through the connected business's Resend OAuth connection.
+model ResendDomain {
+  id              String    @id @default(uuid())
+  tenantId        String
+  integrationId   String?
+  domain          String
+  status          String    @default("PENDING") // PENDING, VERIFIED, FAILED
+  resendDomainId  String?
+  dnsRecords      Json?
+  isDefault       Boolean   @default(false)
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration  Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, domain])
+  @@index([tenantId])
 }
 
 model WebsiteSection {
@@ -2340,6 +2427,10 @@ model SupportTicket {
   description     String
   status          SupportStatus   @default(OPEN)
   assignedAgentId String?
+  /// The Ask Doloyal AI conversation this ticket was escalated from (if any).
+  conversationId String?
+  /// The dashboard page the user was on when the ticket was created.
+  currentPage    String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   closedAt        DateTime?
@@ -2347,15 +2438,86 @@ model SupportTicket {
   tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user          User                   @relation("SupportTickets", fields: [userId], references: [id], onDelete: Cascade)
   assignedAgent User?                  @relation("SupportAssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  conversation  SupportConversation?   @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   messages      SupportMessage[]
   attachments   SupportAttachment[]
   internalNotes SupportInternalNote[]
   statusHistory SupportStatusHistory[]
+  events        SupportTicketEvent[]
 
   @@index([tenantId, status])
   @@index([userId, updatedAt])
   @@index([status, updatedAt])
   @@index([assignedAgentId])
+  @@index([conversationId])
+}
+
+/// A persisted Ask Doloyal support conversation (AI + optional human handoff
+/// through the linked ticket). Kept separate from the business AI assistant.
+model SupportConversation {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  title     String   @default("New chat")
+  /// AI | HUMAN — whether a human agent has taken over this thread.
+  mode      String   @default("AI")
+  status    String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  currentPage String?
+  /// Safe snapshot of account context (plan, integrations, feature flags).
+  context   Json?
+  /// Unread AI/agent replies waiting for the user (drives the Ask Doloyal badge).
+  unreadCount Int   @default(0)
+  /// When the user last opened / read the conversation.
+  lastReadAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User                   @relation("SupportConversationOwner", fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportConversationMessage[]
+  tickets  SupportTicket[]
+
+  @@index([tenantId, userId, updatedAt])
+  @@index([userId, updatedAt])
+}
+
+/// Messages inside an Ask Doloyal support conversation.
+model SupportConversationMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  tenantId       String
+  /// USER | AI | SYSTEM
+  senderType     String
+  content        String
+  /// Optional attachments (safe data-URLs or references) attached to a message.
+  attachments    Json?
+  /// Extra signal: suggestedTicketCategory / priority / sources / escalate flag.
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+/// Immutable event log for a support ticket lifecycle.
+model SupportTicketEvent {
+  id        String   @id @default(cuid())
+  ticketId  String
+  tenantId  String
+  actorId   String?
+  actorName String?
+  eventType String // TICKET_CREATED | ADMIN_REPLIED | CUSTOMER_REPLIED | STATUS_CHANGED | ASSIGNED | NOTE_ADDED | RESOLVED | REOPENED
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([tenantId, createdAt])
 }
 
 /// Chat messages exchanged between the customer and the Doloyal support team.
@@ -2704,6 +2866,7 @@ model Workflow {
   versions  WorkflowVersion[]
   runs      WorkflowRun[]
   auditLogs WorkflowAuditLog[]
+  emailLogs EmailLog[]
 
   @@index([tenantId, status])
   @@index([tenantId, updatedAt])

@@ -35,9 +35,9 @@ import type {
   BookingConfirmation,
 } from "@doloyal/shared";
 import { BookingLanding } from "./booking-landing";
+import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const BASE_URL = getApiBaseUrl();
 
 const STEPS = [
   { num: 1, label: "Business" },
@@ -467,6 +467,7 @@ export default function BookingPage() {
   React.useEffect(() => {
     async function loadBusiness() {
       try {
+        assertApiBaseUrlConfigured();
         setBusinessLoading(true);
         setBusinessError(false);
         setBusinessErrorMessage(null);

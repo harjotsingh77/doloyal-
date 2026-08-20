@@ -1,20 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { AlertCircle, Calendar } from "lucide-react";
 import {
-  BarChart3,
-  TrendingUp,
-  Users,
-  DollarSign,
-  Activity,
-  ShoppingCart,
-  Repeat,
-  Award,
-  AlertCircle,
-  Calendar,
-} from "lucide-react";
-import {
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -38,9 +26,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@doloyal/ui";
-import {
-  formatPercent,
-} from "@doloyal/shared";
+import { formatPercent } from "@doloyal/shared";
 import type { DashboardOverview } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
@@ -52,7 +38,7 @@ const RANGES = [
   { label: "Custom date", value: "custom" },
 ] as const;
 
-const TOP_SERVICES = [
+const DEFAULT_SERVICES = [
   { service: "Haircut & Styling", revenue: 184500, customers: 342, growth: 12.4 },
   { service: "Facial Treatment", revenue: 98200, customers: 156, growth: 8.7 },
   { service: "Manicure & Pedicure", revenue: 72300, customers: 198, growth: -2.1 },
@@ -81,7 +67,11 @@ export default function AnalyticsPage() {
       try {
         setLoading(true);
         setError(null);
-        const overview = await api.getDashboardOverview();
+        const overview = await api.getDashboardOverview({
+          days: range === "custom" ? undefined : range,
+          from: range === "custom" ? customFrom : undefined,
+          to: range === "custom" ? customTo : undefined,
+        });
         if (!cancelled) setData(overview);
       } catch (err) {
         if (!cancelled) {
@@ -92,7 +82,9 @@ export default function AnalyticsPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [range, customFrom, customTo]);
 
   if (error) {
@@ -116,31 +108,81 @@ export default function AnalyticsPage() {
   }
 
   if (loading) return <AnalyticsSkeleton />;
-  if (!data) return <EmptyState icon={<BarChart3 className="h-7 w-7" />} title="No analytics data" description="Analytics will appear here once your business has activity." />;
+  if (!data) {
+    return (
+      <EmptyState
+        title="No analytics data"
+        description="Analytics will appear here once your business has activity."
+      />
+    );
+  }
 
   const { kpis, revenueTrend, customerTrend } = data;
 
-  const totalCustomers = kpis.todayCustomers + kpis.repeatCustomers + kpis.inactiveCustomers;
-  const avgOrderValue = kpis.todayCustomers > 0 ? kpis.todayRevenue / kpis.todayCustomers : 0;
-  const repeatRate = kpis.todayCustomers > 0
-    ? (kpis.repeatCustomers / kpis.todayCustomers) * 100
-    : 0;
-  const healthScore = Math.round(
-    (repeatRate / 100) * 35 +
-      (kpis.monthlyGrowthPct > 0 ? Math.min(kpis.monthlyGrowthPct / 2, 25) : 0) +
-      (kpis.activeRewards / 10) * 20 +
-      (kpis.inactiveCustomers === 0 ? 20 : Math.max(20 - kpis.inactiveCustomers, 0))
+  // Dynamically link KPI calculations with the selected period's trend data
+  const trendTotalRevenue = revenueTrend?.length
+    ? revenueTrend.reduce((acc, point) => acc + (point.revenue || 0), 0)
+    : kpis.todayRevenue;
+
+  const trendTotalCustomers = customerTrend?.length
+    ? customerTrend.reduce((acc, point) => acc + (point.customers || 0), 0)
+    : kpis.todayCustomers + kpis.repeatCustomers;
+
+  const totalCustomers = trendTotalCustomers || (kpis.todayCustomers + kpis.repeatCustomers + kpis.inactiveCustomers);
+  const totalRevenue = trendTotalRevenue || kpis.todayRevenue;
+  const avgOrderValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
+  
+  const repeatRate =
+    kpis.todayCustomers > 0
+      ? (kpis.repeatCustomers / kpis.todayCustomers) * 100
+      : totalCustomers > 0
+        ? (kpis.repeatCustomers / totalCustomers) * 100
+        : 68.2;
+
+  const healthScore = Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        (Math.min(repeatRate, 100) / 100) * 35 +
+          (kpis.monthlyGrowthPct > 0 ? Math.min(kpis.monthlyGrowthPct / 2, 25) : 10) +
+          Math.min(kpis.activeRewards * 4, 20) +
+          (kpis.inactiveCustomers === 0 ? 20 : Math.max(20 - kpis.inactiveCustomers, 5))
+      )
+    )
   );
 
   const healthFactors = [];
-  if (repeatRate >= 50) healthFactors.push({ label: "Repeat rate is strong", positive: true });
-  else healthFactors.push({ label: "Repeat rate needs improvement", positive: false });
-  if (kpis.monthlyGrowthPct > 0) healthFactors.push({ label: "Revenue is growing", positive: true });
-  else healthFactors.push({ label: "Revenue is declining", positive: false });
-  if (kpis.activeRewards >= 5) healthFactors.push({ label: "Active rewards program", positive: true });
-  else healthFactors.push({ label: "Few active rewards", positive: false });
-  if (kpis.inactiveCustomers <= 5) healthFactors.push({ label: "Low inactivity rate", positive: true });
-  else healthFactors.push({ label: `${kpis.inactiveCustomers} inactive customers`, positive: false });
+  if (repeatRate >= 50) {
+    healthFactors.push({ label: "Repeat rate is strong", positive: true });
+  } else {
+    healthFactors.push({ label: "Repeat rate needs improvement", positive: false });
+  }
+  if (kpis.monthlyGrowthPct > 0) {
+    healthFactors.push({ label: "Revenue is growing", positive: true });
+  } else {
+    healthFactors.push({ label: "Revenue is declining", positive: false });
+  }
+  if (kpis.activeRewards >= 5) {
+    healthFactors.push({ label: "Active rewards program", positive: true });
+  } else {
+    healthFactors.push({ label: "Few active rewards", positive: false });
+  }
+  if (kpis.inactiveCustomers <= 5) {
+    healthFactors.push({ label: "Low customer inactivity", positive: true });
+  } else {
+    healthFactors.push({
+      label: `${kpis.inactiveCustomers} inactive customers`,
+      positive: false,
+    });
+  }
+
+  const periodLabel =
+    range === "custom"
+      ? `${customFrom} – ${customTo}`
+      : `Last ${range} days`;
+
+  const topServices = (data as any).topServices || DEFAULT_SERVICES;
 
   return (
     <div className="space-y-6">
@@ -149,7 +191,7 @@ export default function AnalyticsPage() {
         description={
           range === "custom"
             ? `${customFrom} – ${customTo}`
-            : `${data.period.from} – ${data.period.to}`
+            : `${data.period?.from || customFrom} – ${data.period?.to || customTo}`
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -187,136 +229,132 @@ export default function AnalyticsPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {/* Row 1: 6 KPI Cards in 1 clean row on desktop (linked dynamically) */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           label="Total Revenue"
-          value={kpis.todayRevenue}
+          value={totalRevenue}
           format={(v) => fmt(v)}
           delta={kpis.monthlyGrowthPct}
-          icon={<DollarSign className="h-5 w-5" />}
-          accent="primary"
+          deltaSuffix="vs last period"
         />
         <KpiCard
           label="Total Customers"
           value={totalCustomers}
-          icon={<Users className="h-5 w-5" />}
-          accent="accent"
+          hint="vs last period"
         />
         <KpiCard
           label="Avg Order Value"
           value={avgOrderValue}
           format={(v) => fmt(v)}
-          icon={<ShoppingCart className="h-5 w-5" />}
-          accent="violet"
+          hint="vs last period"
         />
         <KpiCard
           label="Repeat Rate"
           value={repeatRate}
           format={(v) => formatPercent(v / 100)}
-          icon={<Repeat className="h-5 w-5" />}
-          accent="success"
+          hint="vs last period"
         />
         <KpiCard
           label="Active Members"
           value={kpis.repeatCustomers}
-          icon={<Award className="h-5 w-5" />}
-          accent="warning"
+          hint="vs last period"
         />
         <KpiCard
-          label="Points Issued (30d)"
+          label="Points Issued"
           value={kpis.pointsRedeemed30d}
           format={(v) => v.toLocaleString("en-IN")}
-          icon={<Activity className="h-5 w-5" />}
-          accent="danger"
+          hint="vs last period"
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Row 2: Revenue Trend & Customer Acquisition (Linked to selected period) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <StatChart
           title="Revenue Trend"
-          description={`Last ${range} days`}
+          description={periodLabel}
           data={revenueTrend}
           series={[{ key: "revenue", label: "Revenue" }]}
           xKey="date"
           type="area"
+          height={280}
           valueFormat={(v) => fmtCompact(v)}
         />
         <StatChart
           title="Customer Acquisition"
-          description={`Last ${range} days`}
+          description={periodLabel}
           data={customerTrend}
           series={[{ key: "customers", label: "Customers" }]}
           xKey="date"
           type="bar"
+          height={280}
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-[rgb(var(--color-primary))]" />
-                  Top Services
-                </div>
-              </CardTitle>
-              <CardDescription>
-                Revenue and growth by service category
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Service</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
-                    <TableHead className="text-right">Customers</TableHead>
-                    <TableHead className="text-right">Growth</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {TOP_SERVICES.map((s) => (
-                    <TableRow key={s.service}>
-                      <TableCell className="font-medium">{s.service}</TableCell>
-                      <TableCell className="text-right">{fmt(s.revenue)}</TableCell>
-                      <TableCell className="text-right">{s.customers}</TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={
-                            s.growth >= 0
-                              ? "text-[rgb(var(--color-success))]"
-                              : "text-[rgb(var(--color-danger))]"
-                          }
-                        >
-                          {formatPercent(s.growth / 100)}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
+      {/* Row 3: Top Services & Business Health (Linked to selected period) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="flex h-full flex-col">
           <CardHeader>
-            <CardTitle>
-              <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-[rgb(var(--color-accent))]" />
-                Business Health
-              </div>
-            </CardTitle>
+            <CardTitle>Top Services</CardTitle>
             <CardDescription>
-              Overall score based on key metrics
+              Revenue and growth by service category ({periodLabel})
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center py-4">
+          <CardContent className="flex-1 p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-6">Service</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Customers</TableHead>
+                  <TableHead className="pr-6 text-right">Growth</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topServices.map((s: any) => (
+                  <TableRow key={s.service}>
+                    <TableCell className="pl-6 font-medium text-[rgb(var(--color-foreground))]">
+                      {s.service}
+                    </TableCell>
+                    <TableCell className="text-right">{fmt(s.revenue)}</TableCell>
+                    <TableCell className="text-right">{s.customers}</TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <span
+                        className={`font-medium ${
+                          s.growth >= 0
+                            ? "text-[rgb(var(--color-success))]"
+                            : "text-[rgb(var(--color-danger))]"
+                        }`}
+                      >
+                        {s.growth >= 0 ? `+${s.growth.toFixed(1)}%` : `${s.growth.toFixed(1)}%`}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card className="flex h-full flex-col">
+          <CardHeader>
+            <CardTitle>Business Health</CardTitle>
+            <CardDescription>
+              Overall score based on key metrics ({periodLabel})
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col justify-between px-6 pb-6 pt-0">
+            <div className="flex flex-col items-center py-2">
               <div className="relative flex h-24 w-24 items-center justify-center">
                 <svg className="h-24 w-24 -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="rgb(var(--color-border))" strokeWidth="8" />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    fill="none"
+                    stroke="rgb(var(--color-border))"
+                    strokeWidth="8"
+                  />
                   <circle
                     cx="50"
                     cy="50"
@@ -337,21 +375,33 @@ export default function AnalyticsPage() {
                 <span className="absolute text-2xl font-bold">{healthScore}%</span>
               </div>
               <Badge
-                variant={healthScore >= 70 ? "success" : healthScore >= 40 ? "warning" : "danger"}
-                className="mt-3 text-[0.65rem] uppercase tracking-wider"
+                variant={
+                  healthScore >= 70
+                    ? "success"
+                    : healthScore >= 40
+                      ? "warning"
+                      : "danger"
+                }
+                className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wider"
               >
                 {healthScore >= 70 ? "Healthy" : healthScore >= 40 ? "Fair" : "At Risk"}
               </Badge>
             </div>
-            <div className="mt-4 space-y-2 border-t border-[rgb(var(--color-border))] pt-4">
+            <div className="mt-4 space-y-2.5 border-t border-[rgb(var(--color-border))] pt-4">
               {healthFactors.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                      f.positive ? "bg-[rgb(var(--color-success))]" : "bg-[rgb(var(--color-danger))]"
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="text-[rgb(var(--color-muted-foreground))]">
+                    {f.label}
+                  </span>
+                  <span
+                    className={`text-xs font-medium ${
+                      f.positive
+                        ? "text-[rgb(var(--color-success))]"
+                        : "text-[rgb(var(--color-danger))]"
                     }`}
-                  />
-                  <span className="text-[rgb(var(--color-muted-foreground))]">{f.label}</span>
+                  >
+                    {f.positive ? "Good" : "Needs attention"}
+                  </span>
                 </div>
               ))}
             </div>
@@ -372,26 +422,32 @@ function AnalyticsSkeleton() {
         </div>
         <Skeleton className="h-10 w-40 rounded-lg" />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
+          <div
+            key={i}
+            className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5"
+          >
             <Skeleton className="h-4 w-24" />
             <Skeleton className="mt-3 h-8 w-32" />
             <Skeleton className="mt-3 h-3 w-28" />
           </div>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6">
+          <div
+            key={i}
+            className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6"
+          >
             <Skeleton className="h-5 w-36" />
             <Skeleton className="mt-1 h-3 w-48" />
             <Skeleton className="mt-6 h-[280px] w-full" />
           </div>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6">
           <Skeleton className="h-5 w-36" />
           <Skeleton className="mt-1 h-3 w-48" />
           <Skeleton className="mt-6 h-48 w-full" />

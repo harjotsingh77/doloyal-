@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, Headers, BadRequestException } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service';
+import { EmailService } from './services/email.service';
+import { ResendIntegrationService } from './services/resend.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from '../auth/public.decorator';
+import { Roles } from '../../common/roles.decorator';
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { INTEGRATION_DEFINITIONS } from './integration-definitions';
 
@@ -19,9 +22,22 @@ class UpdateConfigDto {
   @IsNotEmpty() config: Record<string, unknown>;
 }
 
+class ResendTestEmailDto {
+  @IsString() @IsOptional() to?: string;
+}
+
+class ResendCreateDomainDto {
+  @IsString() @IsNotEmpty() domain: string;
+  @IsString() @IsOptional() region?: string;
+}
+
 @Controller('integrations')
 export class IntegrationsController {
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly emailService: EmailService,
+    private readonly resendService: ResendIntegrationService,
+  ) {}
 
   @Get('providers')
   listProviders() {
@@ -65,6 +81,7 @@ export class IntegrationsController {
     return this.integrationsService.getWebhookEvents(user.activeTenantId, type.toUpperCase());
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Post('connect')
   async connect(@Body() dto: ConnectIntegrationDto, @CurrentUser() user: any) {
     const type = dto.type.toUpperCase();
@@ -78,11 +95,13 @@ export class IntegrationsController {
     });
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Post(':type/disconnect')
   async disconnect(@Param('type') type: string, @CurrentUser() user: any) {
     return this.integrationsService.disconnect(user.activeTenantId, type.toUpperCase());
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Post(':type/reconnect')
   async reconnect(@Param('type') type: string, @Body() dto: ConnectIntegrationDto, @CurrentUser() user: any) {
     return this.integrationsService.reconnect(user.activeTenantId, type.toUpperCase(), user.id, {
@@ -98,31 +117,75 @@ export class IntegrationsController {
     return this.integrationsService.testConnection(user.activeTenantId, type.toUpperCase());
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Post(':type/sync')
   async sync(@Param('type') type: string, @CurrentUser() user: any) {
     return this.integrationsService.sync(user.activeTenantId, type.toUpperCase());
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Patch(':type/config')
   updateConfig(@Param('type') type: string, @Body() dto: UpdateConfigDto, @CurrentUser() user: any) {
     return this.integrationsService.updateConfig(user.activeTenantId, type.toUpperCase(), dto.config);
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Post('oauth/:type/url')
-  getOAuthUrl(@Param('type') type: string, @Query('redirect_uri') redirectUri: string) {
-    return this.integrationsService.getOAuthUrl(type.toUpperCase(), redirectUri || 'http://localhost:3000/app/integrations/callback');
+  getOAuthUrl(@Param('type') type: string, @Query('redirect_uri') redirectUri: string | undefined, @CurrentUser() user: any) {
+    return this.integrationsService.getOAuthUrl(type.toUpperCase(), redirectUri, user);
   }
 
+  @Roles('OWNER', 'MANAGER')
   @Post('oauth/:type/callback')
   async handleOAuthCallback(
     @Param('type') type: string,
-    @Body() body: { code: string; redirect_uri?: string },
+    @Body() body: { code: string; state?: string; redirect_uri?: string },
+    @CurrentUser() user: any,
   ) {
     return this.integrationsService.handleOAuthCallback(
+      user.activeTenantId,
+      user.id,
       type.toUpperCase(),
       body.code,
-      body.redirect_uri || 'http://localhost:3000/app/integrations/callback',
+      body.state,
+      body.redirect_uri,
     );
+  }
+
+  @Roles('OWNER', 'MANAGER')
+  @Post('resend/test-email')
+  async sendResendTestEmail(@Body() dto: ResendTestEmailDto, @CurrentUser() user: any) {
+    const integration = await this.integrationsService.get(user.activeTenantId, 'RESEND');
+    if (!integration || !integration.connected) {
+      throw new BadRequestException('Resend is not connected. Connect Resend before sending a test email.');
+    }
+    const to = dto.to || user.email;
+    if (!to) throw new BadRequestException('A recipient email is required.');
+
+    const result = await this.emailService.sendBusinessEmail({
+      tenantId: user.activeTenantId,
+      to,
+      subject: 'Doloyal test email',
+      text: 'This is a test email from Doloyal, sent through your connected Resend account.',
+      notificationType: 'TEST',
+    });
+
+    if (result.status === 'FAILED') {
+      throw new BadRequestException(`Test email failed to send: ${result.error}`);
+    }
+    return { success: true, message: `Test email sent to ${to}`, providerMessageId: result.providerMessageId };
+  }
+
+  @Roles('OWNER', 'MANAGER')
+  @Get('resend/domains')
+  async listResendDomains(@CurrentUser() user: any) {
+    return this.resendService.listDomains(user.activeTenantId);
+  }
+
+  @Roles('OWNER', 'MANAGER')
+  @Post('resend/domains')
+  async createResendDomain(@Body() dto: ResendCreateDomainDto, @CurrentUser() user: any) {
+    return this.resendService.createDomain(user.activeTenantId, dto.domain, dto.region);
   }
 
   @Public()

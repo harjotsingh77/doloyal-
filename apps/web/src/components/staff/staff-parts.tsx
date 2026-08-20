@@ -4,7 +4,9 @@ import * as React from "react";
 import {
   Users, Shield, IdCard, Plus, Search, Send, Copy, Check, Mail,
   UserMinus, Trash2, RotateCcw, Camera, Lock, KeyRound, Activity,
-  ScrollText, History, StickyNote, Ban, UserCheck,
+  ScrollText, History, StickyNote, Ban, UserCheck, ExternalLink,
+  ChevronRight, RefreshCw, MapPin, Building2, CalendarClock, UserPlus,
+  Link2, Clock, ShieldCheck, CheckCircle2, XCircle, AlertTriangle, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -19,8 +21,9 @@ import {
 } from "@doloyal/ui";
 import {
   ROLE_LABELS, STAFF_STATUS_LABELS, INVITATION_STATUS_LABELS,
-  STAFF_PERMISSION_MODULES, permissionModuleFor,
+  STAFF_PERMISSION_MODULES, permissionModuleFor, roleAccessPreview,
   type StaffMember, type StaffStats, type StaffInvitation,
+  type StaffInvitationDetail, type InvitationCounts, type InvitationActivityItem,
   type StaffProfileDetail, type EmployeeNote, type StaffActivityItem,
   type StaffAuditLogEntry, type LoginHistoryEntry, type StaffMemberList,
 } from "@doloyal/shared";
@@ -207,6 +210,95 @@ const ROLE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
   { value: "STAFF", label: "Staff", hint: "Day-to-day operations" },
 ];
 
+function BranchPicker({ selected, onChange }: {
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [branches, setBranches] = React.useState<Array<{ id: string; name: string }>>([]);
+  React.useEffect(() => {
+    api.getStaffBranches().then(setBranches).catch(() => { /* branches optional */ });
+  }, []);
+  const toggle = (id: string) =>
+    onChange(selected.includes(id) ? selected.filter((b) => b !== id) : [...selected, id]);
+  const all = branches.map((b) => b.id);
+  const isAll = all.length > 0 && all.every((id) => selected.includes(id));
+  return (
+    <div className="space-y-2">
+      {branches.length === 0 ? (
+        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+          No locations available. They will be added to the workspace default.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[rgb(var(--color-muted-foreground))]">
+              {selected.length === 0 ? "No locations selected" : `${selected.length} of ${branches.length} selected`}
+            </span>
+            <button
+              type="button"
+              className="text-xs font-medium text-[rgb(var(--color-primary))] hover:underline"
+              onClick={() => onChange(isAll ? [] : all)}
+            >
+              {isAll ? "Deselect all" : "Select all locations"}
+            </button>
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {branches.map((b) => {
+              const active = selected.includes(b.id);
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => toggle(b.id)}
+                  className={`flex items-center gap-2 rounded-[var(--radius)] border px-2.5 py-2 text-left text-sm transition-colors ${
+                    active
+                      ? "border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.06)] text-[rgb(var(--color-foreground))]"
+                      : "border-[rgb(var(--color-border))] text-[rgb(var(--color-muted-foreground))] hover:border-[rgb(var(--color-primary)/0.4)]"
+                  }`}
+                >
+                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                    active ? "border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary))] text-white" : "border-[rgb(var(--color-border))]"
+                  }`}>
+                    {active && <Check className="h-3 w-3" />}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-muted-foreground))]" />
+                    <span className="truncate">{b.name}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RoleAccessPreview({ role }: { role: string }) {
+  const preview = roleAccessPreview(role as "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF");
+  if (!preview) return null;
+  return (
+    <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-2))] p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--color-muted-foreground))]">
+        <ShieldCheck className="h-3.5 w-3.5" /> What this role can access
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {preview.can.map((m) => (
+          <Badge key={m} variant="outline" className="text-[0.65rem]">
+            <span className="font-medium">{m}</span>
+          </Badge>
+        ))}
+      </div>
+      {preview.cannot.length > 0 && (
+        <p className="mt-2 text-[0.65rem] text-[rgb(var(--color-muted-foreground))]">
+          No access to: {preview.cannot.join(", ").toLowerCase()}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -215,8 +307,9 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
   const blank = {
     firstName: "", lastName: "", email: "", phone: "",
     role: "STAFF", department: "", jobTitle: "", notes: "",
+    branchIds: [] as string[], message: "",
     permissions: [] as string[],
-    sendWelcomeEmail: true, requirePasswordReset: false, twoFactorRequired: false, saveDraft: false,
+    sendWelcomeEmail: true, saveDraft: false,
   };
   const [form, setForm] = React.useState(blank);
   const [submitting, setSubmitting] = React.useState(false);
@@ -229,6 +322,8 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
 
   const onPerm = (next: string[]) => set("permissions", next);
 
+  const rolePreview = roleAccessPreview(form.role as "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF");
+
   const handleSubmit = async () => {
     if (!form.email.trim()) return toast.error("Email is required");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) return toast.error("Enter a valid email address");
@@ -238,11 +333,14 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
         firstName: form.firstName, lastName: form.lastName,
         email: form.email.trim(), phone: form.phone,
         role: form.role as "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF",
-        branchIds: [],
+        branchIds: form.branchIds,
         department: form.department, jobTitle: form.jobTitle, notes: form.notes,
+        message: form.message,
         permissions: form.permissions,
-        sendWelcomeEmail: form.sendWelcomeEmail, requirePasswordReset: form.requirePasswordReset,
-        twoFactorRequired: form.twoFactorRequired, saveDraft: form.saveDraft,
+        sendWelcomeEmail: form.sendWelcomeEmail,
+        requirePasswordReset: false,
+        twoFactorRequired: false,
+        saveDraft: form.saveDraft,
       });
       setResult(inv);
       toast.success(form.saveDraft || !form.sendWelcomeEmail ? "Invitation saved as draft" : "Invitation sent");
@@ -264,7 +362,7 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
     } catch { /* ignore */ }
   };
 
-  const showLink = result && result.invitationUrl && (!form.sendWelcomeEmail || form.saveDraft);
+  const showLink = Boolean(result?.invitationUrl);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
@@ -273,38 +371,40 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
           <DialogTitle>{result ? "Invitation ready" : "Invite team member"}</DialogTitle>
           <DialogDescription>
             {result
-              ? "Team member will be added to your workspace below."
-              : "Send an email invitation or a shareable link for a new team member to join."}
+              ? "Your invitation link is ready to share."
+              : "Send an email invitation for a new team member to join your workspace."}
           </DialogDescription>
         </DialogHeader>
 
         {result ? (
           <div className="space-y-4">
-            <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-2))] p-4">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback>{(form.email || "?").charAt(0).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{result.email}</p>
-                  <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                    {ROLE_LABELS[result.role]} · {INVITATION_STATUS_LABELS[result.status]}
-                  </p>
-                </div>
-                <Badge variant={statusBadge(result.status)}>{INVITATION_STATUS_LABELS[result.status]}</Badge>
+            <div className="flex items-center gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-2))] p-4">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback>{(result.email || "?").charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{result.email}</p>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                  {ROLE_LABELS[result.role]} · {INVITATION_STATUS_LABELS[result.status]}
+                </p>
               </div>
+              <Badge variant={statusBadge(result.status)}>{INVITATION_STATUS_LABELS[result.status]}</Badge>
             </div>
 
             {showLink && (
               <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-2))] p-4">
-                <p className="mb-2 text-sm font-medium text-[rgb(var(--color-foreground))]">Invitation link</p>
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-[rgb(var(--color-foreground))]">
+                  <Link2 className="h-4 w-4" /> Invitation link
+                </p>
                 <div className="flex items-center gap-2">
                   <Input readOnly value={result.invitationUrl ?? ""} className="flex-1 text-xs" />
                   <Button size="icon" variant="secondary" onClick={copyLink}>
                     {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="mt-2 text-xs text-[rgb(var(--color-muted-foreground))]">Expires {fmtDateTime(result.expiresAt)}</p>
+                <p className="mt-2 text-xs text-[rgb(var(--color-muted-foreground))]">
+                  Expires {fmtDateTime(result.expiresAt)} · {form.sendWelcomeEmail && !form.saveDraft ? "An email was sent to " + result.email + "." : "Share this link with the invitee."}
+                </p>
               </div>
             )}
 
@@ -313,9 +413,11 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
                 {form.sendWelcomeEmail && !form.saveDraft ? (
                   <span className="flex items-center gap-2"><Mail className="h-4 w-4" /> A welcome email has been queued.</span>
                 ) : null}
-                {form.requirePasswordReset ? <span className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> Password reset required on first sign in.</span> : null}
-                {form.twoFactorRequired ? <span className="flex items-center gap-2"><Lock className="h-4 w-4" /> Two-factor authentication required.</span> : null}
+                {form.branchIds.length ? (
+                  <span className="flex items-center gap-2"><Building2 className="h-4 w-4" /> Will be added to {form.branchIds.length} location{form.branchIds.length > 1 ? "s" : ""}.</span>
+                ) : null}
                 {form.permissions.length ? <span className="flex items-center gap-2"><Shield className="h-4 w-4" /> {form.permissions.length} custom permissions granted.</span> : null}
+                {!rolePreview.cannot.length && <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Full access granted with the {ROLE_LABELS[form.role as keyof typeof ROLE_LABELS]} role.</span>}
               </div>
             </div>
 
@@ -353,28 +455,37 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
                     <Input placeholder="+1 (555) 000-0000" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
                   </Field>
                 </div>
+                <Field label="Role" required>
+                  <Select value={form.role} onValueChange={(v) => set("role", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ROLE_OPTIONS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          <div><div>{r.label}</div><div className="text-xs text-[rgb(var(--color-muted-foreground))]">{r.hint}</div></div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <RoleAccessPreview role={form.role} />
+                <Field label="Location access" hint="Which branches this member will work at.">
+                  <BranchPicker selected={form.branchIds} onChange={(v) => set("branchIds", v)} />
+                </Field>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Role" required>
-                    <Select value={form.role} onValueChange={(v) => set("role", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ROLE_OPTIONS.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
-                            <div><div>{r.label}</div><div className="text-xs text-[rgb(var(--color-muted-foreground))]">{r.hint}</div></div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
                   <Field label="Department">
                     <Input placeholder="Operations" value={form.department} onChange={(e) => set("department", e.target.value)} />
                   </Field>
+                  <Field label="Job title">
+                    <Input placeholder="Stylist, Manager, ..." value={form.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} />
+                  </Field>
                 </div>
-                <Field label="Job title">
-                  <Input placeholder="Stylist, Manager, ..." value={form.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} />
-                </Field>
-                <Field label="Notes">
-                  <Textarea placeholder="Optional private note about this member." value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+                <Field label="Personal message" hint="Shown inside the invitation email.">
+                  <Textarea
+                    placeholder="e.g. Welcome to the team! Looking forward to having you on board."
+                    value={form.message}
+                    onChange={(e) => set("message", e.target.value)}
+                    maxLength={1000}
+                  />
                 </Field>
               </TabsContent>
 
@@ -383,18 +494,14 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
               </TabsContent>
             </Tabs>
 
-            <div className="grid gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-4 sm:grid-cols-3">
+            <div className="grid gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-4 sm:grid-cols-2">
               <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-[rgb(var(--color-foreground))]">
                 <span>Send welcome email</span>
                 <Switch checked={form.sendWelcomeEmail} onCheckedChange={(v) => set("sendWelcomeEmail", v)} />
               </label>
               <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-[rgb(var(--color-foreground))]">
-                <span>Require password reset</span>
-                <Switch checked={form.requirePasswordReset} onCheckedChange={(v) => set("requirePasswordReset", v)} />
-              </label>
-              <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-[rgb(var(--color-foreground))]">
-                <span>Require 2FA</span>
-                <Switch checked={form.twoFactorRequired} onCheckedChange={(v) => set("twoFactorRequired", v)} />
+                <span>Save as draft</span>
+                <Switch checked={form.saveDraft} onCheckedChange={(v) => set("saveDraft", v)} />
               </label>
             </div>
 
@@ -786,30 +893,371 @@ function NoteRow({ note, onDelete }: { note: EmployeeNote; onDelete: () => void 
   );
 }
 
-// ─── Invitations panel ─────────────────────────────────────────────────────
+// ─── Invitation detail drawer ───────────────────────────────────────────────
 
-export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
-  const [tab, setTab] = React.useState<"PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELLED">("PENDING");
-  const [items, setItems] = React.useState<StaffInvitation[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [search, setSearch] = React.useState("");
-  const [busyId, setBusyId] = React.useState<string | null>(null);
-  const [copiedId, setCopiedId] = React.useState<string | null>(null);
-  const [inviteOpen, setInviteOpen] = React.useState(false);
+function useCooldown(seconds: number | undefined) {
+  const [left, setLeft] = React.useState(seconds ?? 0);
+  React.useEffect(() => {
+    setLeft(seconds ?? 0);
+    if (!seconds) return;
+    const t = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [seconds]);
+  return left;
+}
 
-  const load = React.useCallback(async () => {
+export function InvitationDetailDrawer({ invitationId, open, onOpenChange, onChanged, onViewMember }: {
+  invitationId: string | null;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onChanged: () => void;
+  onViewMember?: (memberId: string) => void;
+}) {
+  const [detail, setDetail] = React.useState<StaffInvitationDetail | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [busy, setBusy] = React.useState<"resend" | "cancel" | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  const cooldown = useCooldown(detail?.resendCooldownSeconds);
+
+  const load = React.useCallback(async (id: string) => {
     try {
       setLoading(true);
-      const res = await api.listStaffInvitations({ status: tab, search: search || undefined, pageSize: 100 });
-      setItems(res.items);
+      setDetail(await api.getStaffInvitationDetail(id));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load invitations");
+      toast.error(err instanceof Error ? err.message : "Failed to load invitation");
     } finally {
       setLoading(false);
     }
-  }, [tab, search]);
+  }, []);
+
+  React.useEffect(() => {
+    if (open && invitationId) load(invitationId);
+  }, [open, invitationId, load]);
+
+  const copyLink = async () => {
+    if (!invitationId || !detail) return;
+    try {
+      const fresh = detail.invitationUrl ? detail : await api.getInvitationLink(invitationId);
+      const target = detail.invitationUrl ?? fresh.invitationUrl;
+      if (!target) return toast.error("No invitation link available");
+      await navigator.clipboard.writeText(target);
+      setCopied(true);
+      toast.success("Link copied");
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to get link");
+    }
+  };
+
+  const resend = async () => {
+    if (!invitationId || cooldown > 0) return;
+    try {
+      setBusy("resend");
+      const updated = await api.resendInvitation(invitationId);
+      setDetail(updated);
+      toast.success("Invitation resent");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to resend");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const cancel = async () => {
+    if (!invitationId || !detail) return;
+    if (!window.confirm(`Cancel the invitation to ${detail.email}? The invite link will stop working.`)) return;
+    try {
+      setBusy("cancel");
+      const updated = await api.cancelInvitation(invitationId);
+      setDetail(updated);
+      toast.success("Invitation cancelled");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const viewMember = () => {
+    if (detail?.joinedMemberId && onViewMember) {
+      onViewMember(detail.joinedMemberId);
+      onOpenChange(false);
+    }
+  };
+
+  const StatusBanner = ({ d }: { d: StaffInvitationDetail }) => {
+    if (d.status === "PENDING") {
+      return (
+        <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.08)] p-3.5">
+          <HourglassIcon className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-warning))]" />
+          <div>
+            <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">Waiting for the invitee</p>
+            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+              {d.hasExistingAccount ? "This email already has a Doloyal account — they can accept with one click. " : ""}
+              Invitation expires {fmtDateTime(d.expiresAt)}.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (d.status === "ACCEPTED") {
+      return (
+        <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-success)/0.35)] bg-[rgb(var(--color-success)/0.08)] p-3.5">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-success))]" />
+          <div>
+            <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">Invitation accepted</p>
+            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+              {d.acceptedByName ? `${d.acceptedByName} joined the team on ` : "Joined the team on "}{fmtDateTime(d.acceptedAt)}.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (d.status === "EXPIRED") {
+      return (
+        <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.3)] p-3.5">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-muted-foreground))]" />
+          <div>
+            <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">Invitation expired</p>
+            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+              The invite link is no longer active. Resend to send a fresh invitation.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.08)] p-3.5">
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-danger))]" />
+        <div>
+          <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">Invitation cancelled</p>
+          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+            {d.cancelledByName ? `Cancelled by ${d.cancelledByName} on ` : "Cancelled on "}{fmtDateTime(d.cancelledAt)}. The link has been disabled.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const DetailRow = ({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) => (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-[rgb(var(--color-muted-foreground))]">{label}</span>
+      <span className={`text-sm text-[rgb(var(--color-foreground))] ${mono ? "break-all font-mono text-xs" : ""}`}>{value || "—"}</span>
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        hideClose
+        className="!left-auto !top-0 !translate-x-0 !translate-y-0 right-0 h-full w-[min(100vw,480px)] !max-w-none !max-h-none !rounded-none !p-0 overflow-y-auto"
+      >
+        {loading && !detail ? (
+          <div className="space-y-4 p-6">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        ) : !detail ? (
+          <div className="p-6">
+            <EmptyState icon={<Mail className="h-6 w-6" />} title="Invitation not found" description="This invitation could not be loaded." />
+          </div>
+        ) : (
+          <div className="flex h-full flex-col">
+            <div className="border-b border-[rgb(var(--color-border))] p-5">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-11 w-11">
+                  <AvatarFallback className="text-sm">{(detail.firstName?.[0] ?? detail.email.charAt(0) ?? "?").toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-[rgb(var(--color-foreground))]">
+                    {[detail.firstName, detail.lastName].filter(Boolean).join(" ") || "Pending invite"}
+                  </p>
+                  <p className="truncate text-xs text-[rgb(var(--color-muted-foreground))]">{detail.email}</p>
+                </div>
+                <button
+                  className="rounded-md p-1 text-[rgb(var(--color-muted-foreground))] opacity-70 transition-opacity hover:opacity-100"
+                  onClick={() => onOpenChange(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <Badge variant={roleBadge(detail.role)} className="text-[0.65rem]">{ROLE_LABELS[detail.role]}</Badge>
+                <Badge variant={statusBadge(detail.status)} className="text-[0.65rem]">{INVITATION_STATUS_LABELS[detail.status]}</Badge>
+                {detail.resendCount > 0 && <Badge variant="outline" className="text-[0.6rem]">Resent {detail.resendCount}×</Badge>}
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-4 p-5">
+              <StatusBanner d={detail} />
+
+              <div className="grid grid-cols-2 gap-4">
+                <DetailRow label="Role" value={ROLE_LABELS[detail.role]} />
+                <DetailRow label="Invited by" value={detail.invitedByName} />
+                <DetailRow label="Sent" value={detail.sentAt ? fmtDateTime(detail.sentAt) : "Draft (not sent)"} />
+                <DetailRow label="Last sent" value={detail.lastSentAt ? relTime(detail.lastSentAt) : "—"} />
+                <DetailRow label="Expires" value={detail.expiresAt ? fmtDateTime(detail.expiresAt) : "—"} />
+                <DetailRow label="Accepted" value={detail.acceptedAt ? fmtDateTime(detail.acceptedAt) : "—"} />
+              </div>
+
+              {detail.branchNames && detail.branchNames.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-[rgb(var(--color-muted-foreground))]">Locations</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detail.branchNames.map((b) => (
+                      <Badge key={b} variant="outline" className="text-[0.65rem]">
+                        <MapPin className="mr-1 h-3 w-3" /> {b}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(detail.department || detail.jobTitle || detail.phone) && (
+                <div className="grid grid-cols-2 gap-4">
+                  {detail.department && <DetailRow label="Department" value={detail.department} />}
+                  {detail.jobTitle && <DetailRow label="Job title" value={detail.jobTitle} />}
+                  {detail.phone && <DetailRow label="Phone" value={detail.phone} />}
+                </div>
+              )}
+
+              {detail.message && (
+                <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-2))] p-3.5">
+                  <p className="mb-1 flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[rgb(var(--color-muted-foreground))]">
+                    <Mail className="h-3.5 w-3.5" /> Message to invitee
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-[rgb(var(--color-foreground))]">{detail.message}</p>
+                </div>
+              )}
+
+              {detail.activity.length > 0 && (
+                <div>
+                  <p className="mb-2 flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[rgb(var(--color-muted-foreground))]">
+                    <Activity className="h-3.5 w-3.5" /> Timeline
+                  </p>
+                  <div className="space-y-1.5">
+                    {detail.activity.map((a: InvitationActivityItem) => (
+                      <div key={a.id} className="flex items-start gap-2.5 rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-2.5">
+                        <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${a.action.includes("CANCELL") ? "bg-[rgb(var(--color-danger))]" : a.action.includes("ACCEPT") ? "bg-[rgb(var(--color-success))]" : "bg-[rgb(var(--color-primary))]"}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-[rgb(var(--color-foreground))]">{a.message}</p>
+                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                            {a.actorName ? `${a.actorName} · ` : ""}{relTime(a.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4">
+              {(detail.status === "PENDING" || detail.status === "EXPIRED" || detail.status === "CANCELLED") && (
+                <Button variant="secondary" size="sm" onClick={copyLink} disabled={!detail.invitationUrl && detail.status === "PENDING" && !detail.hasExistingAccount}>
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy link
+                </Button>
+              )}
+              {detail.status === "PENDING" && (
+                <Button variant="secondary" size="sm" onClick={cancel} loading={busy === "cancel"}>
+                  <Ban className="h-4 w-4" /> Cancel
+                </Button>
+              )}
+              {(detail.status === "PENDING" || detail.status === "EXPIRED" || detail.status === "CANCELLED") && (
+                <Button size="sm" onClick={resend} loading={busy === "resend"} disabled={cooldown > 0} className="ml-auto">
+                  <RefreshCw className="h-4 w-4" /> {detail.status === "PENDING" ? "Resend" : "Invite again"}
+                </Button>
+              )}
+              {detail.status === "ACCEPTED" && detail.joinedMemberId && (
+                <Button size="sm" onClick={viewMember} className="ml-auto">
+                  <UserCheck className="h-4 w-4" /> View member
+                </Button>
+              )}
+              {cooldown > 0 && (
+                <p className="w-full text-right text-xs text-[rgb(var(--color-muted-foreground))]">
+                  Resend available in {Math.ceil(cooldown)}s
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function HourglassIcon({ className }: { className?: string }) {
+  return <CalendarClock className={className} />;
+}
+
+// ─── Invitations panel ─────────────────────────────────────────────────────
+
+const INVITE_TABS: Array<{ value: "ALL" | "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELLED"; label: string }> = [
+  { value: "ALL", label: "All" },
+  { value: "PENDING", label: "Pending" },
+  { value: "ACCEPTED", label: "Accepted" },
+  { value: "EXPIRED", label: "Expired" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
+const INVITE_ROLE_FILTERS = [
+  { value: "ALL", label: "All roles" },
+  { value: "MANAGER", label: "Manager" },
+  { value: "RECEPTIONIST", label: "Receptionist" },
+  { value: "STAFF", label: "Staff" },
+];
+
+export function InvitationsPanel({ onChanged, onViewMember }: {
+  onChanged: () => void;
+  onViewMember?: (memberId: string) => void;
+}) {
+  const [tab, setTab] = React.useState<"ALL" | "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELLED">("ALL");
+  const [items, setItems] = React.useState<StaffInvitation[]>([]);
+  const [counts, setCounts] = React.useState<InvitationCounts | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [search, setSearch] = React.useState("");
+  const [roleFilter, setRoleFilter] = React.useState("ALL");
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [detailId, setDetailId] = React.useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = React.useState(false);
+
+  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
+    try {
+      if (!opts?.silent) setLoading(true);
+      const res = await api.listStaffInvitations({
+        status: tab, search: search || undefined, role: roleFilter !== "ALL" ? roleFilter : undefined,
+        pageSize: 100,
+      });
+      setItems(res.items);
+      setCounts(res.counts);
+    } catch (err) {
+      if (!opts?.silent) toast.error(err instanceof Error ? err.message : "Failed to load invitations");
+    } finally {
+      if (!opts?.silent) setLoading(false);
+    }
+  }, [tab, search, roleFilter]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => { load({ silent: true }); }, 400);
+    return () => clearTimeout(t);
+  }, [search, roleFilter, tab, load]);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => { load({ silent: true }); }, 20000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const openDetail = (inv: StaffInvitation) => {
+    setDetailId(inv.id);
+    setDetailOpen(true);
+  };
 
   const copyLink = async (inv: StaffInvitation) => {
     try {
@@ -831,6 +1279,7 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
       await api.resendInvitation(id);
       toast.success("Invitation resent");
       load();
+      onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend");
     } finally {
@@ -839,7 +1288,7 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
   };
 
   const cancel = async (inv: StaffInvitation) => {
-    if (!window.confirm(`Cancel the invitation to ${inv.email}?`)) return;
+    if (!window.confirm(`Cancel the invitation to ${inv.email}? The invite link will stop working.`)) return;
     try {
       setBusyId(inv.id);
       await api.cancelInvitation(inv.id);
@@ -853,6 +1302,8 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
     }
   };
 
+  const countFor = (v: string) => counts ? counts[v as keyof InvitationCounts] : 0;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -862,36 +1313,50 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
             Sent, pending and accepted team invitations.
           </CardDescription>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-muted-foreground))]" />
-            <Input placeholder="Search invitations..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-52 pl-8" />
-          </div>
-          <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} onCreated={onChanged} />
-        </div>
+        <Button onClick={() => setInviteOpen(true)}>
+          <Plus className="h-4 w-4" /> Invite member
+        </Button>
       </CardHeader>
       <CardContent className="p-0">
         <div className="border-b border-[rgb(var(--color-border))] px-6">
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
             <TabsList className="w-full justify-start">
-              <TabsTrigger value="PENDING">Pending</TabsTrigger>
-              <TabsTrigger value="ACCEPTED">Accepted</TabsTrigger>
-              <TabsTrigger value="EXPIRED">Expired</TabsTrigger>
-              <TabsTrigger value="CANCELLED">Cancelled</TabsTrigger>
+              {INVITE_TABS.map((t) => (
+                <TabsTrigger key={t.value} value={t.value}>
+                  {t.label}
+                  {counts && (
+                    <span className={`ml-1.5 rounded-full px-1.5 text-[0.6rem] font-semibold ${tab === t.value ? "bg-white/20" : "bg-[rgb(var(--color-muted))]"}`}>
+                      {countFor(t.value)}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
         </div>
+        <div className="flex flex-wrap items-center gap-3 border-b border-[rgb(var(--color-border))] px-6 py-4">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-muted-foreground))]" />
+            <Input placeholder="Search name, email or invitation id..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
+          </div>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {INVITE_ROLE_FILTERS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="p-6">
-          {loading ? (
+          {loading && !items.length ? (
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : items.length === 0 ? (
             <EmptyState
               icon={<Mail className="h-6 w-6" />}
-              title={`No ${tab.toLowerCase()} invitations`}
-              description="Invite team members to your workspace to get started."
-              action={<Button onClick={() => setInviteOpen(true)}><Plus className="h-4 w-4" /> Invite member</Button>}
+              title={`No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}invitations`}
+              description={tab === "PENDING" ? "Invite team members to your workspace to get started." : "Nothing here yet. Invitations in this state will appear here."}
+              action={tab === "PENDING" || tab === "ALL" ? <Button onClick={() => setInviteOpen(true)}><Plus className="h-4 w-4" /> Invite member</Button> : undefined}
             />
           ) : (
             <Table>
@@ -900,20 +1365,30 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
                   <TableHead>Member</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Locations</TableHead>
                   <TableHead>Expires</TableHead>
-                  <TableHead>Resends</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((inv) => (
-                  <TableRow key={inv.id}>
+                  <TableRow key={inv.id} className="group cursor-pointer" onClick={() => openDetail(inv)}>
                     <TableCell>
-                      <div className="min-w-0">
-                        <p className="font-medium text-[rgb(var(--color-foreground))]">
-                          {inv.firstName ? `${inv.firstName} ${inv.lastName ?? ""}`.trim() : "Pending invite"}
-                        </p>
-                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{inv.email}</p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-[0.65rem] font-medium">
+                            {((inv.firstName?.[0] ?? inv.email.charAt(0)) || "?").toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-1 font-medium text-[rgb(var(--color-foreground))]">
+                            {inv.firstName ? `${inv.firstName} ${inv.lastName ?? ""}`.trim() : "Pending invite"}
+                            {inv.status === "ACCEPTED" && inv.acceptedByName && (
+                              <span className="text-[0.6rem] font-normal text-[rgb(var(--color-success))]">joined</span>
+                            )}
+                          </p>
+                          <p className="truncate text-xs text-[rgb(var(--color-muted-foreground))]">{inv.email}</p>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -921,32 +1396,49 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
                     </TableCell>
                     <TableCell>
                       <Badge variant={statusBadge(inv.status)} className="text-[0.65rem]">{INVITATION_STATUS_LABELS[inv.status]}</Badge>
+                      <p className="mt-0.5 text-[0.6rem] text-[rgb(var(--color-muted-foreground))]">
+                        {inv.status === "PENDING" && inv.expiresAt ? `expires ${fmtDate(inv.expiresAt)}` : inv.sentAt ? `sent ${relTime(inv.sentAt)}` : ""}
+                      </p>
+                    </TableCell>
+                    <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {inv.branchNames && inv.branchNames.length ? inv.branchNames.slice(0, 2).join(", ") + (inv.branchNames.length > 2 ? ` +${inv.branchNames.length - 2}` : "") : "—"}
                     </TableCell>
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{fmtDate(inv.expiresAt)}</TableCell>
-                    <TableCell className="text-[rgb(var(--color-muted-foreground))]">{inv.resendCount}</TableCell>
-                    <TableCell>
-                      {(inv.status === "PENDING") && (
-                        <div className="flex items-center gap-1">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" loading={busyId === inv.id}>Actions</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>{inv.email}</DropdownMenuLabel>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" loading={busyId === inv.id}>Actions</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>{inv.email}</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => openDetail(inv)}>
+                            <ChevronRight className="h-4 w-4" /> View details
+                          </DropdownMenuItem>
+                          {(inv.status === "PENDING" || inv.status === "EXPIRED" || inv.status === "CANCELLED") && (
+                            <>
                               <DropdownMenuItem onClick={() => copyLink(inv)}>
                                 {copiedId === inv.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy link
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => resend(inv.id)}>
-                                <Send className="h-4 w-4" /> Resend invitation
+                                <RefreshCw className="h-4 w-4" /> {inv.status === "PENDING" ? "Resend invitation" : "Invite again"}
                               </DropdownMenuItem>
+                            </>
+                          )}
+                          {inv.status === "ACCEPTED" && inv.joinedMemberId && onViewMember && (
+                            <DropdownMenuItem onClick={() => onViewMember(inv.joinedMemberId!)}>
+                              <UserCheck className="h-4 w-4" /> View member
+                            </DropdownMenuItem>
+                          )}
+                          {inv.status === "PENDING" && (
+                            <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="text-[rgb(var(--color-danger))]" onClick={() => cancel(inv)}>
                                 <Ban className="h-4 w-4" /> Cancel
                               </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      )}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -955,6 +1447,15 @@ export function InvitationsPanel({ onChanged }: { onChanged: () => void }) {
           )}
         </div>
       </CardContent>
+
+      <InvitationDetailDrawer
+        invitationId={detailId}
+        open={detailOpen}
+        onOpenChange={(o) => { setDetailOpen(o); if (!o) setDetailId(null); }}
+        onChanged={() => { load(); onChanged(); }}
+        onViewMember={onViewMember}
+      />
+      <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} onCreated={() => { load(); onChanged(); }} />
     </Card>
   );
 }

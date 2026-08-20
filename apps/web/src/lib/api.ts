@@ -21,9 +21,9 @@ import type {
 } from "@doloyal/shared";
 import type { ApiResponse, Paginated } from "@doloyal/shared";
 import { MOCK } from "./mock-data";
+import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+const BASE_URL = getApiBaseUrl();
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
   (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -42,11 +42,16 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  assertApiBaseUrlConfigured();
   const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) ?? {}),
   };
+  // Fastify rejects `Content-Type: application/json` on requests with an empty
+  // body ("Body cannot be empty..."), so only send it when there is a JSON body.
+  if (typeof options.body === "string" && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -103,8 +108,18 @@ async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mo
 export const api = {
   getMe: () => withFallback(() => request<AuthUser>("/auth/me"), "getMe"),
 
-  getDashboardOverview: () =>
-    withFallback(() => request<DashboardOverview>("/dashboard/overview"), "getDashboardOverview"),
+  getDashboardOverview: (params?: { days?: string | number; from?: string; to?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.days) searchParams.set("days", String(params.days));
+    if (params?.from) searchParams.set("from", params.from);
+    if (params?.to) searchParams.set("to", params.to);
+    const qs = searchParams.toString();
+    return withFallback(
+      () => request<DashboardOverview>(`/dashboard/overview${qs ? `?${qs}` : ""}`),
+      "getDashboardOverview",
+      params,
+    );
+  },
 
   listCustomers: (params?: CustomerQuery) => {
     const searchParams = new URLSearchParams();
@@ -132,6 +147,7 @@ export const api = {
 
   importCustomers: (file: File) =>
     withFallback(async () => {
+      assertApiBaseUrlConfigured();
       const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
       const form = new FormData();
       form.append("file", file);
@@ -171,6 +187,7 @@ export const api = {
 
   exportCustomers: () =>
     withFallback(async () => {
+      assertApiBaseUrlConfigured();
       const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -506,8 +523,9 @@ export const api = {
 
   /** Subscribe to referral realtime events (SSE). Returns an EventSource. */
   subscribeReferralEvents: () => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const base = BASE_URL;
     const url = `${base}/referrals/events`;
     // EventSource cannot set Authorization headers in browsers; token query fallback for SSE.
     const withAuth = token ? `${url}?access_token=${encodeURIComponent(token)}` : url;
@@ -602,6 +620,7 @@ export const api = {
 
   /** Upload a project file as multipart → stored as a data-URL in the DB. */
   uploadWebsiteProjectFile: async (projectId: string, file: File, category = "CHAT_ATTACHMENT") => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const form = new FormData();
     form.append("file", file);
@@ -624,8 +643,9 @@ export const api = {
 
   /** Subscribe to website-services realtime events (SSE). */
   subscribeWebsiteProjectEvents: () => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const base = BASE_URL;
     const withAuth = token
       ? `${base}/website-projects/events?access_token=${encodeURIComponent(token)}`
       : `${base}/website-projects/events`;
@@ -686,6 +706,7 @@ export const api = {
     }),
 
   adminUploadWebsiteProjectFile: async (projectId: string, file: File, category = "REFERENCE") => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const form = new FormData();
     form.append("file", file);
@@ -708,8 +729,9 @@ export const api = {
 
   /** Subscribe to admin website-services realtime events (SSE). */
   subscribeAdminWebsiteProjectEvents: () => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const base = BASE_URL;
     const withAuth = token
       ? `${base}/admin/website-projects/events?access_token=${encodeURIComponent(token)}`
       : `${base}/admin/website-projects/events`;
@@ -1019,6 +1041,7 @@ export const api = {
     },
     path: "/assistant/chat/stream" | "/assistant/regenerate" = "/assistant/chat/stream",
   ) => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "text/event-stream" };
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -1322,6 +1345,7 @@ export const api = {
 
   uploadTenantImage: (file: File, kind: "logo" | "cover" | "favicon") =>
     withFallback(async () => {
+      assertApiBaseUrlConfigured();
       const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
       const form = new FormData();
       form.append("file", file);
@@ -1475,24 +1499,36 @@ export const api = {
   staffOffline: () =>
     request<{ online: boolean }>("/staff/presence/offline", { method: "POST", body: "{}" }),
 
-  listStaffInvitations: (params?: { status?: string; search?: string; page?: number; pageSize?: number }) => {
+  listStaffInvitations: (params?: { status?: string; search?: string; role?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.search) q.set("search", params.search);
+    if (params?.role) q.set("role", params.role);
+    if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+    if (params?.dateTo) q.set("dateTo", params.dateTo);
     if (params?.page) q.set("page", String(params.page));
     if (params?.pageSize) q.set("pageSize", String(params.pageSize));
     const qs = q.toString();
-    return request<{ items: import("@doloyal/shared").StaffInvitation[]; total: number; page: number; pageSize: number; totalPages: number }>(`/staff/invitations${qs ? `?${qs}` : ""}`);
+    return request<{ items: import("@doloyal/shared").StaffInvitation[]; total: number; page: number; pageSize: number; totalPages: number; counts: import("@doloyal/shared").InvitationCounts }>(`/staff/invitations${qs ? `?${qs}` : ""}`);
   },
+
+  getStaffInvitationDetail: (id: string) =>
+    request<import("@doloyal/shared").StaffInvitationDetail>(`/staff/invitations/${id}`),
+
+  getStaffInvitationCounts: () =>
+    request<import("@doloyal/shared").InvitationCounts>("/staff/invitations/counts"),
+
+  getStaffBranches: () =>
+    request<Array<{ id: string; name: string; address?: string | null }>>("/staff/branches"),
 
   inviteMember: (data: import("@doloyal/shared").InviteMemberInput) =>
     request<import("@doloyal/shared").StaffInvitation>("/staff/invitations", { method: "POST", body: JSON.stringify(data) }),
 
   resendInvitation: (id: string) =>
-    request<import("@doloyal/shared").StaffInvitation>(`/staff/invitations/${id}/resend`, { method: "POST", body: "{}" }),
+    request<import("@doloyal/shared").StaffInvitationDetail>(`/staff/invitations/${id}/resend`, { method: "POST", body: "{}" }),
 
   cancelInvitation: (id: string) =>
-    request<import("@doloyal/shared").StaffInvitation>(`/staff/invitations/${id}/cancel`, { method: "POST", body: "{}" }),
+    request<import("@doloyal/shared").StaffInvitationDetail>(`/staff/invitations/${id}/cancel`, { method: "POST", body: "{}" }),
 
   getInvitationLink: (id: string) =>
     request<{ invitationUrl: string; expiresAt: string }>(`/staff/invitations/${id}/link`),
@@ -1501,6 +1537,7 @@ export const api = {
     request<{ action: string; total: number; succeeded: number; failed: number; results: Array<{ id: string; ok: boolean; message?: string }> }>("/staff/bulk", { method: "POST", body: JSON.stringify(data) }),
 
   exportStaff: async (format: "csv" | "xlsx" = "csv") => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -1517,6 +1554,7 @@ export const api = {
   },
 
   uploadStaffPhoto: async (id: string, file: File) => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const form = new FormData();
     form.append("file", file);
@@ -1537,10 +1575,10 @@ export const api = {
     request<import("@doloyal/shared").StaffProfileDetail>(`/staff/members/${id}/photo`, { method: "DELETE" }),
 
   getInvitationForAccept: (token: string) =>
-    request<{ id: string; email: string; firstName?: string | null; lastName?: string | null; phone?: string | null; role: string; branchIds: string[]; department?: string | null; jobTitle?: string | null; businessName: string; expiresAt: string }>(`/staff/invitations/by-token/${encodeURIComponent(token)}`),
+    request<{ id: string; email: string; firstName?: string | null; lastName?: string | null; phone?: string | null; role: string; branchIds: string[]; branchNames: string[]; department?: string | null; jobTitle?: string | null; message?: string | null; businessName: string; expiresAt: string; hasExistingAccount: boolean }>(`/staff/invitations/by-token/${encodeURIComponent(token)}`),
 
-  acceptInvitation: (token: string, data: { password: string; firstName?: string; lastName?: string; phone?: string }) =>
-    request<{ message: string; email: string }>(`/staff/invitations/by-token/${encodeURIComponent(token)}/accept`, { method: "POST", body: JSON.stringify(data) }),
+  acceptInvitation: (token: string, data: { password?: string; userId?: string; firstName?: string; lastName?: string; phone?: string }) =>
+    request<{ message: string; email: string; alreadyAccepted?: boolean }>(`/staff/invitations/by-token/${encodeURIComponent(token)}/accept`, { method: "POST", body: JSON.stringify(data) }),
 
   // Booking Links ---------------------------------------------------------
   listBookingLinks: (opts?: { bustCache?: boolean }) => {
@@ -1598,7 +1636,7 @@ export const api = {
   listNotifications: () =>
     withFallback(() => request<NotificationRecord[]>("/notifications"), "listNotifications"),
 
-  sendNotification: (data: { appointmentId: string; type: string; channel?: string }) =>
+  sendNotification: (data: { appointmentId: string; type: string; channel: string }) =>
     withFallback(() => request<void>("/notifications/send", { method: "POST", body: JSON.stringify(data) }), "sendNotification", data),
 
   listNotificationTemplates: () =>
@@ -1761,7 +1799,7 @@ export const api = {
   // ─── Integrations ────────────────────────────────────────────────────────
 
   listIntegrationProviders: () =>
-    request<any[]>("/integrations/providers"),
+    withFallback(() => request<any[]>("/integrations/providers"), "listIntegrationProviders"),
 
   listIntegrations: (tenantId?: string) =>
     withFallback(() => request<any[]>("/integrations"), "listIntegrations", tenantId),
@@ -1799,8 +1837,31 @@ export const api = {
   getOAuthUrl: (type: string, redirectUri?: string) =>
     request<{ url: string; state: string }>(`/integrations/oauth/${type}/url?redirect_uri=${encodeURIComponent(redirectUri || `${APP_BASE_URL}/app/integrations/callback`)}`, { method: "POST" }),
 
-  handleOAuthCallback: (type: string, code: string, redirectUri?: string) =>
-    request<any>(`/integrations/oauth/${type}/callback`, { method: "POST", body: JSON.stringify({ code, redirect_uri: redirectUri || `${APP_BASE_URL}/app/integrations/callback` }) }),
+  handleOAuthCallback: (type: string, code: string, redirectUri?: string, state?: string) =>
+    request<any>(`/integrations/oauth/${type}/callback`, { method: "POST", body: JSON.stringify({ code, redirect_uri: redirectUri || `${APP_BASE_URL}/app/integrations/callback`, ...(state ? { state } : {}) }) }),
+
+  sendResendTestEmail: (to?: string) =>
+    request<any>("/integrations/resend/test-email", { method: "POST", body: JSON.stringify({ to }) }),
+
+  listResendDomains: () =>
+    request<any[]>("/integrations/resend/domains"),
+
+  createResendDomain: (domain: string, region?: string) =>
+    request<any>("/integrations/resend/domains", { method: "POST", body: JSON.stringify({ domain, region }) }),
+
+  // ─── Campaigns ───────────────────────────────────────────────────────────
+
+  listCampaigns: () =>
+    request<any[]>("/campaigns"),
+
+  createCampaign: (data: { name: string; subject?: string; body: string; channel: "EMAIL" | "SMS" | "WHATSAPP"; audience?: string; scheduleDate?: string }) =>
+    request<any>("/campaigns", { method: "POST", body: JSON.stringify(data) }),
+
+  setCampaignStatus: (id: string, status: string) =>
+    request<any>(`/campaigns/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  sendCampaign: (id: string) =>
+    request<any>(`/campaigns/${id}/send`, { method: "POST" }),
 
   // ─── Website Connections ─────────────────────────────────────────────────
 
@@ -1911,6 +1972,7 @@ export const api = {
     }),
 
   uploadSupportTicketFile: async (ticketId: string, file: File) => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const form = new FormData();
     form.append("file", file);
@@ -1934,13 +1996,54 @@ export const api = {
 
   /** Subscribe to customer support realtime events (SSE). */
   subscribeSupportEvents: () => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const base = BASE_URL;
     const withAuth = token
       ? `${base}/support/events?access_token=${encodeURIComponent(token)}`
       : `${base}/support/events`;
     return new EventSource(withAuth);
   },
+
+  // ─── Ask Doloyal: AI support conversations ──────────────────────────────
+
+  listSupportConversations: () =>
+    request<import("@doloyal/shared").SupportConversation[]>("/support/conversations"),
+
+  getSupportConversation: (conversationId: string) =>
+    request<import("@doloyal/shared").SupportConversationDetail>(`/support/conversations/${conversationId}`),
+
+  createSupportConversation: (data: { title?: string; currentPage?: string }) =>
+    request<import("@doloyal/shared").SupportConversation>("/support/conversations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  renameSupportConversation: (conversationId: string, title: string) =>
+    request<import("@doloyal/shared").SupportConversation>(`/support/conversations/${conversationId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
+  readSupportConversation: (conversationId: string) =>
+    request<{ ok: boolean }>(`/support/conversations/${conversationId}/read`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  archiveSupportConversation: (conversationId: string) =>
+    request<{ ok: boolean }>(`/support/conversations/${conversationId}`, {
+      method: "DELETE",
+    }),
+
+  getSupportUnreadBadge: () =>
+    request<import("@doloyal/shared").SupportUnreadBadge>("/support/conversations/unread"),
+
+  askDoloyal: (data: import("@doloyal/shared").AskDoloyalChatInput) =>
+    request<import("@doloyal/shared").AskDoloyalChatResponse>("/support/conversations/chat", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   // ─── Admin: Help & Support ────────────────────────────────────────────────
 
@@ -2019,6 +2122,7 @@ export const api = {
     }),
 
   adminUploadSupportTicketFile: async (ticketId: string, file: File) => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const form = new FormData();
     form.append("file", file);
@@ -2042,13 +2146,30 @@ export const api = {
 
   /** Subscribe to admin support realtime events (SSE). */
   subscribeAdminSupportEvents: () => {
+    assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+    const base = BASE_URL;
     const withAuth = token
       ? `${base}/admin/support/events?access_token=${encodeURIComponent(token)}`
       : `${base}/admin/support/events`;
     return new EventSource(withAuth);
   },
+
+  adminGetSupportAnalytics: () =>
+    request<import("@doloyal/shared").AdminSupportAnalytics>("/admin/support/analytics"),
+
+  adminGetSupportConversation: (conversationId: string) =>
+    request<import("@doloyal/shared").SupportConversationDetail & {
+      user?: { id: string; firstName?: string | null; lastName?: string | null; email: string } | null;
+      tenant?: { id: string; name: string; slug?: string | null } | null;
+      tickets?: { id: string; ticketNumber: string; status: string }[];
+    }>(`/admin/support/conversations/${conversationId}`),
+
+  adminAiAssistTicket: (ticketId: string) =>
+    request<import("@doloyal/shared").AdminAiAssistResult>(`/admin/support/tickets/${ticketId}/ai-assist`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 
   // ─── Admin Control Center ──────────────────────────────────────────────
 

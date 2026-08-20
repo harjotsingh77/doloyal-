@@ -408,6 +408,7 @@ export const inviteMemberSchema = z.object({
   jobTitle: z.string().max(120).optional().or(z.literal("")),
   permissions: z.array(z.string()).default([]),
   notes: z.string().max(2000).optional().or(z.literal("")),
+  message: z.string().max(1000).optional().or(z.literal("")),
   sendWelcomeEmail: z.boolean().default(true),
   requirePasswordReset: z.boolean().default(false),
   twoFactorRequired: z.boolean().default(false),

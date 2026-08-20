@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { SupportRealtimeService } from './support-realtime.service';
+import { SupportAiService } from './support-ai.service';
 
 export const SUPPORT_STATUSES = [
   'OPEN',
@@ -59,6 +60,7 @@ export class SupportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: SupportRealtimeService,
+    private readonly ai: SupportAiService,
   ) {}
 
   // ─── helpers ───────────────────────────────────────────────────────────────
@@ -84,7 +86,27 @@ export class SupportService {
       const m = r.ticketNumber.match(/(\d+)$/);
       if (m) max = Math.max(max, parseInt(m[1], 10));
     }
-    return `DL-${String(max + 1).padStart(6, '0')}`;
+    return `DOY-${String(max + 1).padStart(4, '0')}`;
+  }
+
+  private async recordTicketEvent(
+    ticket: { id: string; tenantId: string },
+    eventType: string,
+    actor?: any,
+    metadata?: Record<string, unknown>,
+  ) {
+    return this.prisma.supportTicketEvent.create({
+      data: {
+        ticketId: ticket.id,
+        tenantId: ticket.tenantId,
+        actorId: actor?.id || null,
+        actorName: actor
+          ? `${actor.firstName || ''} ${actor.lastName || ''}`.trim() || actor.email || null
+          : null,
+        eventType,
+        metadata: (metadata as any) || undefined,
+      },
+    });
   }
 
   private async getOwnedTicket(ticketId: string, userId: string) {
@@ -189,6 +211,14 @@ export class SupportService {
       );
     }
 
+    let conversation: any = null;
+    if (dto.conversationId) {
+      conversation = await this.prisma.supportConversation.findFirst({
+        where: { id: dto.conversationId, tenantId: user.activeTenantId, userId: user.id },
+      });
+      if (!conversation) throw new NotFoundException('Conversation not found');
+    }
+
     const ticketNumber = await this.nextTicketNumber();
     const ticket = await this.prisma.supportTicket.create({
       data: {
@@ -199,6 +229,8 @@ export class SupportService {
         category: dto.category || 'Other',
         priority: priority as any,
         description: dto.description.trim(),
+        conversationId: conversation?.id || null,
+        currentPage: dto.currentPage?.trim() ? dto.currentPage.trim() : conversation?.currentPage || null,
       },
       include: ticketInclude('CUSTOMER'),
     });
@@ -212,6 +244,29 @@ export class SupportService {
         note: 'Ticket created',
       },
     });
+
+    await this.recordTicketEvent(ticket, 'TICKET_CREATED', user, {
+      subject: ticket.subject,
+      category: ticket.category,
+      fromConversation: !!conversation,
+    });
+
+    // Human handoff — move the AI conversation into HUMAN mode and announce it.
+    if (conversation) {
+      await this.prisma.supportConversation.update({
+        where: { id: conversation.id },
+        data: { mode: 'HUMAN', updatedAt: new Date() },
+      });
+      await this.prisma.supportConversationMessage.create({
+        data: {
+          conversationId: conversation.id,
+          tenantId: user.activeTenantId,
+          senderType: 'SYSTEM',
+          content: `Ticket ${ticketNumber} created — a human support agent has taken over this conversation.`,
+          metadata: { ticketId: ticket.id, ticketNumber } as any,
+        },
+      });
+    }
 
     this.realtime.publish(user.activeTenantId, ticket.id, 'ADMIN', 'ticket.created', {
       ticketId: ticket.id,
@@ -262,6 +317,12 @@ export class SupportService {
       },
     });
 
+    await this.recordTicketEvent(
+      { id: ticketId, tenantId: ticket.tenantId },
+      'CUSTOMER_REPLIED',
+      user,
+    );
+
     // Reopen a resolved ticket when the customer replies.
     let reopened = false;
     if (ticket.status === 'RESOLVED') {
@@ -278,6 +339,12 @@ export class SupportService {
           note: 'Customer replied to a resolved ticket',
         },
       });
+      await this.recordTicketEvent(
+        { id: ticketId, tenantId: ticket.tenantId },
+        'REOPENED',
+        user,
+        { oldStatus: 'RESOLVED', newStatus: 'OPEN' },
+      );
       reopened = true;
     }
 
@@ -308,6 +375,232 @@ export class SupportService {
       data: { readAt: new Date() },
     });
     return { updated: result.count };
+  }
+
+  // ─── Ask Doloyal: conversations ────────────────────────────────────────────
+
+  private async assertOwnedConversation(user: any, conversationId: string) {
+    const conv = await this.prisma.supportConversation.findFirst({
+      where: {
+        id: conversationId,
+        tenantId: user.activeTenantId,
+        userId: user.id,
+        status: 'ACTIVE',
+      },
+    });
+    if (!conv) throw new NotFoundException('Conversation not found');
+    return conv;
+  }
+
+  async listConversations(user: any) {
+    const conversations = await this.prisma.supportConversation.findMany({
+      where: { tenantId: user.activeTenantId, userId: user.id, status: 'ACTIVE' },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+      include: {
+        _count: { select: { messages: true } },
+        tickets: { select: { id: true, ticketNumber: true, status: true }, take: 1 },
+      },
+    });
+    const lastMessages = await this.prisma.supportConversationMessage.findMany({
+      where: { conversationId: { in: conversations.map((c) => c.id) } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastByConv = new Map<string, (typeof lastMessages)[number]>();
+    for (const m of lastMessages) lastByConv.set(m.conversationId, m);
+
+    return conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      mode: c.mode,
+      currentPage: c.currentPage,
+      unreadCount: c.unreadCount,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      messageCount: c._count.messages,
+      lastMessage: lastByConv.get(c.id)
+        ? {
+            id: lastByConv.get(c.id)!.id,
+            senderType: lastByConv.get(c.id)!.senderType,
+            content: lastByConv.get(c.id)!.content,
+            createdAt: lastByConv.get(c.id)!.createdAt,
+          }
+        : null,
+      ticket: c.tickets[0]
+        ? { id: c.tickets[0].id, ticketNumber: c.tickets[0].ticketNumber, status: c.tickets[0].status }
+        : null,
+    }));
+  }
+
+  async getConversation(user: any, conversationId: string) {
+    const conv = await this.assertOwnedConversation(user, conversationId);
+    const messages = await this.prisma.supportConversationMessage.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const ticket = await this.prisma.supportTicket.findFirst({
+      where: { conversationId },
+      select: { id: true, ticketNumber: true, status: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return {
+      ...conv,
+      ticket,
+      messages: messages.map((m) => ({
+        id: m.id,
+        senderType: m.senderType,
+        content: m.content,
+        metadata: m.metadata as any,
+        createdAt: m.createdAt,
+      })),
+    };
+  }
+
+  async createConversation(user: any, dto: any) {
+    const context = await this.ai.buildContextSnapshot(user.activeTenantId);
+    const conv = await this.prisma.supportConversation.create({
+      data: {
+        tenantId: user.activeTenantId,
+        userId: user.id,
+        title: dto.title?.trim()?.slice(0, 120) || 'New chat',
+        currentPage: dto.currentPage?.trim()?.slice(0, 300) || null,
+        context: context as any,
+      },
+    });
+    return conv;
+  }
+
+  async renameConversation(user: any, conversationId: string, title: string) {
+    await this.assertOwnedConversation(user, conversationId);
+    const next = title.trim().slice(0, 120);
+    if (!next) throw new BadRequestException('Title is required');
+    return this.prisma.supportConversation.update({
+      where: { id: conversationId },
+      data: { title: next, updatedAt: new Date() },
+    });
+  }
+
+  async archiveConversation(user: any, conversationId: string) {
+    await this.assertOwnedConversation(user, conversationId);
+    await this.prisma.supportConversation.update({
+      where: { id: conversationId },
+      data: { status: 'ARCHIVED', updatedAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Mark all AI/agent messages in a conversation as read. */
+  async readConversation(user: any, conversationId: string) {
+    await this.assertOwnedConversation(user, conversationId);
+    await this.prisma.supportConversation.update({
+      where: { id: conversationId },
+      data: { unreadCount: 0, lastReadAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Total unread AI/agent replies across the user's active conversations. */
+  async getUnreadBadge(user: any) {
+    const agg = await this.prisma.supportConversation.aggregate({
+      where: { tenantId: user.activeTenantId, userId: user.id, status: 'ACTIVE' },
+      _sum: { unreadCount: true },
+    });
+    return { unread: agg._sum.unreadCount || 0 };
+  }
+
+  async chat(user: any, dto: any) {
+    if (!dto.message?.trim()) throw new BadRequestException('message is required');
+
+    let conv: any;
+    if (dto.conversationId) {
+      conv = await this.assertOwnedConversation(user, dto.conversationId);
+      if (conv.mode === 'HUMAN') {
+        throw new BadRequestException(
+          'A human support agent is handling this conversation. Continue in your support ticket.',
+        );
+      }
+    } else {
+      const context = await this.ai.buildContextSnapshot(user.activeTenantId);
+      conv = await this.prisma.supportConversation.create({
+        data: {
+          tenantId: user.activeTenantId,
+          userId: user.id,
+          title: this.autoTitle(dto.message),
+          currentPage: dto.currentPage?.trim()?.slice(0, 300) || null,
+          context: context as any,
+        },
+      });
+    }
+
+    await this.prisma.supportConversationMessage.create({
+      data: {
+        conversationId: conv.id,
+        tenantId: user.activeTenantId,
+        senderType: 'USER',
+        content: dto.message.trim(),
+      },
+    });
+
+    const context =
+      (conv.context as any) ||
+      (await this.ai.buildContextSnapshot(user.activeTenantId));
+    const result = await this.ai.answer(user.activeTenantId, conv.id, dto.message.trim(), {
+      ...context,
+      currentPage: dto.currentPage?.trim()?.slice(0, 300) || conv.currentPage || undefined,
+    });
+
+    const aiMessage = await this.prisma.supportConversationMessage.create({
+      data: {
+        conversationId: conv.id,
+        tenantId: user.activeTenantId,
+        senderType: 'AI',
+        content: result.text,
+        metadata: {
+          escalate: result.escalate,
+          suggestedCategory: result.suggestedCategory,
+          suggestedPriority: result.suggestedPriority,
+          suggestedSubject: result.suggestedSubject,
+          sources: result.sources,
+          provider: result.provider,
+          model: result.model,
+        } as any,
+      },
+    });
+
+    await this.prisma.supportConversation.update({
+      where: { id: conv.id },
+      data: {
+        title: conv.title === 'New chat' ? this.autoTitle(dto.message) : conv.title,
+        unreadCount: { increment: 1 },
+        updatedAt: new Date(),
+      },
+    });
+
+    this.realtime.publish(user.activeTenantId, conv.id, 'CUSTOMER', 'conversation.updated', {
+      conversationId: conv.id,
+      messageId: aiMessage.id,
+      unread: true,
+    });
+
+    return {
+      conversationId: conv.id,
+      messageId: aiMessage.id,
+      message: result.text,
+      escalate: result.escalate,
+      suggestedCategory: result.suggestedCategory,
+      suggestedPriority: result.suggestedPriority,
+      suggestedSubject: result.suggestedSubject,
+      sources: result.sources,
+      mode: conv.mode,
+      provider: result.provider,
+      model: result.model,
+    };
+  }
+
+  private autoTitle(message: string) {
+    const clean = message.replace(/\s+/g, ' ').trim();
+    if (!clean) return 'New chat';
+    return clean.length > 48 ? `${clean.slice(0, 45)}…` : clean;
   }
 
   // ─── customer: files ───────────────────────────────────────────────────────
@@ -495,6 +788,13 @@ export class SupportService {
       },
     });
 
+    await this.recordTicketEvent(
+      { id: ticketId, tenantId: ticket.tenantId },
+      dto.status === 'RESOLVED' || dto.status === 'CLOSED' ? 'RESOLVED' : 'STATUS_CHANGED',
+      admin,
+      { oldStatus: ticket.status, newStatus: dto.status, note: dto.note || null },
+    );
+
     this.realtime.publish(ticket.tenantId, ticketId, 'BOTH', 'ticket.status_changed', {
       ticketId,
       tenantId: ticket.tenantId,
@@ -522,6 +822,13 @@ export class SupportService {
       data: { assignedAgentId: target.id },
       include: ticketInclude('ADMIN'),
     });
+
+    await this.recordTicketEvent(
+      { id: ticketId, tenantId: ticket.tenantId },
+      'ASSIGNED',
+      admin,
+      { assignedAgentId: target.id, assignedAgentName: `${target.firstName || ''} ${target.lastName || ''}`.trim() || target.email },
+    );
 
     this.realtime.publish(ticket.tenantId, ticketId, 'BOTH', 'ticket.assigned', {
       ticketId,
@@ -566,6 +873,35 @@ export class SupportService {
       },
     });
 
+    await this.recordTicketEvent(
+      { id: ticketId, tenantId: ticket.tenantId },
+      'ADMIN_REPLIED',
+      admin,
+    );
+
+    // Human handoff — surface the agent reply inside the Ask Doloyal chat.
+    if (ticket.conversationId && dto.message?.trim()) {
+      await this.prisma.supportConversationMessage.create({
+        data: {
+          conversationId: ticket.conversationId,
+          tenantId: ticket.tenantId,
+          senderType: 'AI',
+          content: dto.message.trim(),
+          metadata: { agentReply: true, ticketId } as any,
+        },
+      });
+      await this.prisma.supportConversation.update({
+        where: { id: ticket.conversationId },
+        data: { mode: 'HUMAN', unreadCount: { increment: 1 }, updatedAt: new Date() },
+      });
+      this.realtime.publish(ticket.tenantId, ticket.conversationId, 'CUSTOMER', 'conversation.updated', {
+        conversationId: ticket.conversationId,
+        messageId: message.id,
+        agentReply: true,
+        unread: true,
+      });
+    }
+
     this.realtime.publish(ticket.tenantId, ticketId, 'CUSTOMER', 'message.created', {
       ticketId,
       messageId: message.id,
@@ -591,9 +927,9 @@ export class SupportService {
   // ─── admin: notes ──────────────────────────────────────────────────────────
 
   async adminAddNote(admin: any, ticketId: string, note: string) {
-    await this.adminGetTicket(ticketId);
+    const ticket = await this.adminGetTicket(ticketId);
     if (!note?.trim()) throw new BadRequestException('note is required');
-    return this.prisma.supportInternalNote.create({
+    const created = await this.prisma.supportInternalNote.create({
       data: {
         ticketId,
         adminId: admin.id,
@@ -601,6 +937,12 @@ export class SupportService {
         note: note.trim(),
       },
     });
+    await this.recordTicketEvent(
+      { id: ticketId, tenantId: ticket.tenantId },
+      'NOTE_ADDED',
+      admin,
+    );
+    return created;
   }
 
   async adminListNotes(ticketId: string) {
@@ -625,5 +967,142 @@ export class SupportService {
         fileSize: dto.sizeBytes ? Number(dto.sizeBytes) : null,
       },
     });
+  }
+
+  // ─── admin: analytics ──────────────────────────────────────────────────────
+
+  async adminGetAnalytics() {
+    const since = new Date(Date.now() - 30 * 86400000);
+    const dayStart = (d: Date) =>
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+    const tickets = await this.prisma.supportTicket.findMany({
+      where: { createdAt: { gte: since } },
+      select: { id: true, createdAt: true, closedAt: true, category: true, priority: true, conversationId: true },
+    });
+
+    const messages = await this.prisma.supportMessage.findMany({
+      where: { ticketId: { in: tickets.map((t) => t.id) } },
+      select: { ticketId: true, senderRole: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const firstAdminByTicket = new Map<string, string>();
+    for (const m of messages) {
+      if (m.senderRole === 'ADMIN' && !firstAdminByTicket.has(m.ticketId)) {
+        firstAdminByTicket.set(m.ticketId, m.createdAt.toISOString());
+      }
+    }
+
+    const createdByDay = new Map<number, number>();
+    const resolvedByDay = new Map<number, number>();
+    let sumFirstResponse = 0;
+    let firstResponseCount = 0;
+    let sumResolution = 0;
+    let resolutionCount = 0;
+    const categoryCount = new Map<string, number>();
+    const priorityCount = new Map<string, number>();
+    let escalatedFromChat = 0;
+
+    for (const t of tickets) {
+      const createdKey = dayStart(t.createdAt);
+      createdByDay.set(createdKey, (createdByDay.get(createdKey) || 0) + 1);
+
+      if (t.closedAt) {
+        const resolvedKey = dayStart(t.closedAt);
+        resolvedByDay.set(resolvedKey, (resolvedByDay.get(resolvedKey) || 0) + 1);
+        sumResolution += t.closedAt.getTime() - t.createdAt.getTime();
+        resolutionCount++;
+      }
+
+      const firstAdmin = firstAdminByTicket.get(t.id);
+      if (firstAdmin) {
+        sumFirstResponse += new Date(firstAdmin).getTime() - t.createdAt.getTime();
+        firstResponseCount++;
+      }
+
+      categoryCount.set(t.category || 'Other', (categoryCount.get(t.category || 'Other') || 0) + 1);
+      priorityCount.set(t.priority, (priorityCount.get(t.priority) || 0) + 1);
+      if (t.conversationId) escalatedFromChat++;
+    }
+
+    // AI conversation analytics (Ask Doloyal).
+    const aiMessages = await this.prisma.supportConversationMessage.findMany({
+      where: {
+        createdAt: { gte: since },
+        senderType: 'AI',
+      },
+      select: { metadata: true },
+    });
+    const aiTotal = aiMessages.length;
+    const aiEscalations = aiMessages.filter(
+      (m: any) => (m.metadata as any)?.escalate === true,
+    ).length;
+    const totalConversations = await this.prisma.supportConversation.count({
+      where: { createdAt: { gte: since } },
+    });
+
+    const days: { date: string; created: number; resolved: number }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const key = dayStart(new Date(since.getTime() + i * 86400000));
+      days.push({
+        date: new Date(key).toISOString().slice(0, 10),
+        created: createdByDay.get(key) || 0,
+        resolved: resolvedByDay.get(key) || 0,
+      });
+    }
+
+    return {
+      range: '30d',
+      tickets: {
+        created: tickets.length,
+        resolved: resolutionCount,
+        avgFirstResponseHours:
+          firstResponseCount > 0 ? Math.round((sumFirstResponse / firstResponseCount) / 36e5 * 10) / 10 : null,
+        avgResolutionHours:
+          resolutionCount > 0 ? Math.round((sumResolution / resolutionCount) / 36e5 * 10) / 10 : null,
+        byCategory: Array.from(categoryCount.entries()).map(([category, count]) => ({ category, count })),
+        byPriority: Array.from(priorityCount.entries()).map(([priority, count]) => ({ priority, count })),
+        daily: days,
+      },
+      ai: {
+        conversations: totalConversations,
+        aiAnswers: aiTotal,
+        escalated: aiEscalations,
+        escalationRate: aiTotal > 0 ? Math.round((aiEscalations / aiTotal) * 1000) / 10 : 0,
+        aiResolutionRate: aiTotal > 0 ? Math.round(((aiTotal - aiEscalations) / aiTotal) * 1000) / 10 : 0,
+        chatEscalationRate:
+          totalConversations > 0 ? Math.round((escalatedFromChat / totalConversations) * 1000) / 10 : 0,
+      },
+    };
+  }
+
+  // ─── admin: AI assist ──────────────────────────────────────────────────────
+
+  async adminGetConversation(conversationId: string) {
+    const conv = await this.prisma.supportConversation.findFirst({
+      where: { id: conversationId },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        tenant: { select: { id: true, name: true, slug: true } },
+        tickets: { select: { id: true, ticketNumber: true, status: true } },
+        messages: { orderBy: { createdAt: 'asc' as const } },
+      },
+    });
+    if (!conv) throw new NotFoundException('Conversation not found');
+    return conv;
+  }
+
+  async adminAiAssist(admin: any, ticketId: string) {
+    const ticket = await this.adminGetTicket(ticketId);
+    const messages = await this.prisma.supportMessage.findMany({
+      where: { ticketId },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: { senderRole: true, message: true },
+    });
+    const lastCustomer = messages.find((m) => m.senderRole === 'CUSTOMER')?.message || '';
+    const context = await this.ai.buildContextSnapshot(ticket.tenantId);
+    return this.ai.assistAgent(ticket, lastCustomer, context);
   }
 }

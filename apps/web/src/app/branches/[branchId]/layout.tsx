@@ -19,6 +19,7 @@ import { getBranch } from "@/lib/branches";
 import { initials } from "@doloyal/shared";
 import { Sidebar } from "@/components/sidebar";
 import { CurrencySelect } from "@/components/currency-select";
+import { AskDoloyal } from "@/components/ask-doloyal";
 import {
   BranchSwitcher,
   WorkspaceModeBadge,
@@ -77,7 +78,8 @@ export default function BranchWorkspaceLayout({
 
   return (
     <AuthGuard>
-      <div className="flex h-screen overflow-hidden bg-[rgb(var(--color-background))]">
+      <AskDoloyal>
+        <div className="flex h-screen overflow-hidden bg-[rgb(var(--color-background))]">
         <Sidebar
           collapsed={collapsed}
           onToggle={() => setCollapsed(!collapsed)}
@@ -150,7 +152,8 @@ export default function BranchWorkspaceLayout({
             <div className="p-4 lg:p-8">{children}</div>
           </main>
         </div>
-      </div>
+        </div>
+      </AskDoloyal>
     </AuthGuard>
   );
 }

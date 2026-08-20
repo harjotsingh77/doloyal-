@@ -14,9 +14,7 @@ import {
   getAction,
   getTrigger,
   getCondition,
-  isSupportedTrigger,
   isSupportedAction,
-  isSupportedCondition,
   SUPPORTED_OPERATORS,
   WIRED_TRIGGERS,
 } from './workflow-capability.registry';

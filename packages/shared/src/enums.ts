@@ -336,6 +336,26 @@ export const STAFF_ROLE_DEFAULT_PERMISSIONS: Record<
   ],
 };
 
+/**
+ * Compact access summary for the invite modal: which modules a role can and
+ * cannot reach, derived from the real role→permission defaults.
+ */
+export function roleAccessPreview(role: Role): { can: string[]; cannot: string[] } {
+  const allModules = STAFF_PERMISSION_MODULES;
+  if (role === "OWNER") {
+    return { can: allModules.map((m) => m.module), cannot: [] };
+  }
+  const granted = new Set(STAFF_ROLE_DEFAULT_PERMISSIONS[role as "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF"] ?? []);
+  const can: string[] = [];
+  const cannot: string[] = [];
+  for (const m of allModules) {
+    const hasAny = m.permissions.some((p) => granted.has(p.key));
+    if (hasAny) can.push(m.module);
+    else cannot.push(m.module);
+  }
+  return { can, cannot };
+}
+
 export const LOYALTY_MODES = ["CURRENCY", "VISIT", "HYBRID", "SUBSCRIPTION"] as const;
 export type LoyaltyMode = (typeof LOYALTY_MODES)[number];
 

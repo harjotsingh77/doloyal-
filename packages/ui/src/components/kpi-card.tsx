@@ -17,6 +17,7 @@ export interface KpiCardProps {
   hint?: string;
   loading?: boolean;
   delay?: number;
+  className?: string;
 }
 
 const ACCENT_BG: Record<NonNullable<KpiCardProps["accent"]>, string> = {
@@ -65,6 +66,7 @@ export function KpiCard({
   hint,
   loading,
   delay = 0,
+  className,
 }: KpiCardProps) {
   const isNumeric = typeof value === "number";
   const animated = useCountUp(isNumeric ? (value as number) : 0);
@@ -81,8 +83,9 @@ export function KpiCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay, ease: [0.16, 1, 0.3, 1] }}
+      className={cn("h-full", className)}
     >
-      <Card interactive className="relative overflow-hidden p-5">
+      <Card interactive className="relative flex h-full flex-col justify-between overflow-hidden p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-[0.8rem] font-medium text-[rgb(var(--color-muted-foreground))]">

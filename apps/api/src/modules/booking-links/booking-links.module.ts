@@ -5,8 +5,10 @@ import { BookingNotificationsService } from './booking-notifications.service';
 import { BookingAnalyticsService } from './booking-analytics.service';
 import { BookingOrchestratorService } from './booking-orchestrator.service';
 import { AiSchedulingService } from './ai-scheduling.service';
+import { IntegrationsModule } from '../integrations/integrations.module';
 
 @Module({
+  imports: [IntegrationsModule],
   controllers: [BookingLinksController],
   providers: [
     BookingLinksService,

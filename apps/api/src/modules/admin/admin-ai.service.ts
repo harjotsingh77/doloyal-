@@ -29,7 +29,6 @@ export class AdminAiService {
 
     const tenantMap = new Map(tenants.map((t) => [t.id, t.name]));
     const totalQueries = usage.length;
-    const totalTokens = usage.reduce((s, u) => s + u.tokensIn + u.tokensOut, 0);
 
     // Estimate cost: gpt-4o-mini ≈ $0.15/M in + $0.60/M out; treat as INR.
     const costIn = (usage.reduce((s, u) => s + u.tokensIn, 0) / 1_000_000) * 0.15;
@@ -82,8 +81,7 @@ export class AdminAiService {
       aiRequestVolume,
       usageByPlan: Object.entries(byPlan).map(([plan, v]) => ({ plan, queries: v.queries, tokens: v.tokens })),
       costEstimate,
-      topBusinesses: Object.entries(usageByTenant)
-        .map(([_, v]) => v)
+      topBusinesses: Object.values(usageByTenant)
         .sort((a, b) => b.queries - a.queries)
         .slice(0, 10),
     };

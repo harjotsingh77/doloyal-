@@ -759,46 +759,78 @@ export const MOCK: Record<string, (...args: any[]) => any> = {
     activeTenantId: "t1", activeRole: "OWNER",
   }),
 
-  getDashboardOverview: (): DashboardOverview => ({
-    generatedAt: NOW.toISOString(),
-    period: { from: DD(30), to: DD(0) },
-    kpis: {
-      todayRevenue: 28500, todayCustomers: 12, repeatCustomers: 8,
-      newCustomers: 4, inactiveCustomers: 23, activeRewards: 6,
-      pointsRedeemed30d: 4500, membershipSales30d: 15000,
-      appointmentsToday: 7, pendingReviews: 3, monthlyGrowthPct: 12.5,
-    },
-    revenueTrend: gen30Days(i => ({
-      date: DD(i), revenue: Math.round(15000 + Math.random() * 18000),
-      customers: Math.round(5 + Math.random() * 15),
-    })),
-    customerTrend: gen30Days(i => ({
-      date: DD(i), revenue: Math.round(10000 + Math.random() * 12000),
-      customers: Math.round(3 + Math.random() * 10),
-    })),
-    topCustomers: getCustomers().slice(0, 5).map((c) => ({
-      id: c.id, name: c.name, phone: c.phone,
-      lifetimeValue: c.lifetimeValue, visitCount: c.visitCount,
-      loyaltyBand: c.loyaltyBand, churnRisk: c.churnRisk,
-    })),
-    topRewards: [
-      { id: "r1", name: "Free Haircut", pointsCost: 500, redeemedCount: 42 },
-      { id: "r2", name: "20% Off Spa", pointsCost: 800, redeemedCount: 28 },
-      { id: "r3", name: "Free Facial", pointsCost: 1200, redeemedCount: 19 },
-      { id: "r4", name: "Premium Hair Color", pointsCost: 2000, redeemedCount: 11 },
-      { id: "r5", name: "Free Manicure", pointsCost: 600, redeemedCount: 35 },
-    ],
-    recentActivity: [
-      { id: "a1", type: "INVOICE_PAID", message: "Vikram Singh paid ₹3,200 for Hair Color + Styling", customerId: "c4", customerName: "Vikram Singh", amount: 3200, createdAt: D(0) },
-      { id: "a2", type: "POINTS_EARNED", message: "Priya Sharma earned 150 points on visit", customerId: "c1", customerName: "Priya Sharma", amount: null, createdAt: D(0) },
-      { id: "a3", type: "CUSTOMER_ADDED", message: "New customer Deepak Verma added", customerId: "c8", customerName: "Deepak Verma", amount: null, createdAt: D(1) },
-      { id: "a4", type: "REWARD_REDEEMED", message: "Rajesh Kumar redeemed Free Haircut", customerId: "c2", customerName: "Rajesh Kumar", amount: null, createdAt: D(1) },
-      { id: "a5", type: "APPOINTMENT_BOOKED", message: "Sneha Reddy booked Hair Spa for tomorrow", customerId: "c7", customerName: "Sneha Reddy", amount: null, createdAt: D(1) },
-      { id: "a6", type: "MEMBERSHIP_SOLD", message: "Ananya Patel purchased Gold Membership", customerId: "c3", customerName: "Ananya Patel", amount: 999, createdAt: D(2) },
-      { id: "a7", type: "INVOICE_PAID", message: "Arun Joshi paid ₹1,500 for Haircut + Beard", customerId: "c6", customerName: "Arun Joshi", amount: 1500, createdAt: D(2) },
-      { id: "a8", type: "CAMPAIGN_SENT", message: "Weekend Offer campaign sent to 45 customers", customerId: null, customerName: null, amount: null, createdAt: D(3) },
-    ],
-  }),
+  getDashboardOverview: (params?: { days?: string | number; from?: string; to?: string }): DashboardOverview => {
+    let numDays = 30;
+    if (params?.days) numDays = parseInt(String(params.days), 10) || 30;
+    else if (params?.from && params?.to) {
+      const diff = Math.round((new Date(params.to).getTime() - new Date(params.from).getTime()) / 86400000);
+      numDays = Math.max(1, diff);
+    }
+    const daysArr = Array.from({ length: numDays }, (_, i) => numDays - 1 - i);
+    const revenueTrend = daysArr.map((daysAgo) => ({
+      date: DD(daysAgo),
+      revenue: Math.round(15000 + Math.sin(daysAgo * 0.5) * 6000 + (daysAgo % 7 === 0 ? 8000 : 0)),
+      customers: Math.round(5 + Math.sin(daysAgo * 0.3) * 4 + (daysAgo % 7 === 0 ? 5 : 0)),
+    }));
+    const customerTrend = daysArr.map((daysAgo) => ({
+      date: DD(daysAgo),
+      revenue: Math.round(10000 + Math.sin(daysAgo * 0.4) * 4000),
+      customers: Math.max(1, Math.round(3 + Math.sin(daysAgo * 0.5) * 3 + (daysAgo % 5 === 0 ? 3 : 0))),
+    }));
+
+    const totalRev = revenueTrend.reduce((acc, p) => acc + p.revenue, 0);
+    const totalCust = customerTrend.reduce((acc, p) => acc + p.customers, 0);
+    const repeatCust = Math.max(1, Math.round(totalCust * 0.65));
+
+    return {
+      generatedAt: NOW.toISOString(),
+      period: { from: params?.from || DD(numDays), to: params?.to || DD(0) },
+      kpis: {
+        todayRevenue: totalRev,
+        todayCustomers: totalCust,
+        repeatCustomers: repeatCust,
+        newCustomers: Math.max(1, totalCust - repeatCust),
+        inactiveCustomers: Math.max(1, Math.round(23 * (numDays / 30))),
+        activeRewards: 6,
+        pointsRedeemed30d: Math.round(4500 * (numDays / 30)),
+        membershipSales30d: Math.round(15000 * (numDays / 30)),
+        appointmentsToday: Math.round(7 * (numDays / 30)),
+        pendingReviews: 3,
+        monthlyGrowthPct: 12.5,
+      },
+      revenueTrend,
+      customerTrend,
+      topServices: [
+        { service: "Haircut & Styling", revenue: Math.round(184500 * (numDays / 30)), customers: Math.round(342 * (numDays / 30)), growth: 12.4 },
+        { service: "Facial Treatment", revenue: Math.round(98200 * (numDays / 30)), customers: Math.round(156 * (numDays / 30)), growth: 8.7 },
+        { service: "Manicure & Pedicure", revenue: Math.round(72300 * (numDays / 30)), customers: Math.round(198 * (numDays / 30)), growth: -2.1 },
+        { service: "Massage Therapy", revenue: Math.round(65400 * (numDays / 30)), customers: Math.round(112 * (numDays / 30)), growth: 15.3 },
+        { service: "Hair Coloring", revenue: Math.round(54100 * (numDays / 30)), customers: Math.round(89 * (numDays / 30)), growth: 5.6 },
+      ],
+      topCustomers: getCustomers().slice(0, 5).map((c) => ({
+        id: c.id, name: c.name, phone: c.phone,
+        lifetimeValue: c.lifetimeValue, visitCount: c.visitCount,
+        loyaltyBand: c.loyaltyBand, churnRisk: c.churnRisk,
+      })),
+      topRewards: [
+        { id: "r1", name: "Free Haircut", pointsCost: 500, redeemedCount: 42 },
+        { id: "r2", name: "20% Off Spa", pointsCost: 800, redeemedCount: 28 },
+        { id: "r3", name: "Free Facial", pointsCost: 1200, redeemedCount: 19 },
+        { id: "r4", name: "Premium Hair Color", pointsCost: 2000, redeemedCount: 11 },
+        { id: "r5", name: "Free Manicure", pointsCost: 600, redeemedCount: 35 },
+      ],
+      recentActivity: [
+        { id: "a1", type: "INVOICE_PAID", message: "Vikram Singh paid ₹3,200 for Hair Color + Styling", customerId: "c4", customerName: "Vikram Singh", amount: 3200, createdAt: D(0) },
+        { id: "a2", type: "POINTS_EARNED", message: "Priya Sharma earned 150 points on visit", customerId: "c1", customerName: "Priya Sharma", amount: null, createdAt: D(0) },
+        { id: "a3", type: "CUSTOMER_ADDED", message: "New customer Deepak Verma added", customerId: "c8", customerName: "Deepak Verma", amount: null, createdAt: D(1) },
+        { id: "a4", type: "REWARD_REDEEMED", message: "Rajesh Kumar redeemed Free Haircut", customerId: "c2", customerName: "Rajesh Kumar", amount: null, createdAt: D(1) },
+        { id: "a5", type: "APPOINTMENT_BOOKED", message: "Sneha Reddy booked Hair Spa for tomorrow", customerId: "c7", customerName: "Sneha Reddy", amount: null, createdAt: D(1) },
+        { id: "a6", type: "MEMBERSHIP_SOLD", message: "Ananya Patel purchased Gold Membership", customerId: "c3", customerName: "Ananya Patel", amount: 999, createdAt: D(2) },
+        { id: "a7", type: "INVOICE_PAID", message: "Arun Joshi paid ₹1,500 for Haircut + Beard", customerId: "c6", customerName: "Arun Joshi", amount: 1500, createdAt: D(2) },
+        { id: "a8", type: "CAMPAIGN_SENT", message: "Weekend Offer campaign sent to 45 customers", customerId: null, customerName: null, amount: null, createdAt: D(3) },
+      ],
+    };
+  },
 
   listCustomers: (params?: CustomerQuery): Paginated<Customer> => {
     let items = [...getCustomers()];
@@ -1990,7 +2022,14 @@ export const MOCK: Record<string, (...args: any[]) => any> = {
   removeDomain: (id: string, domainId: string): void => {},
 
   // ─── Integrations ────────────────────────────────────────────────────────
-  // ─── Integrations ────────────────────────────────────────────────────────
+
+  listIntegrationProviders: (): any[] => [
+    { type: "GOOGLE_CALENDAR", name: "Google Calendar", description: "Sync appointments, events, and staff schedules.", category: "Calendar", icon: "Calendar", hasApiKey: false, hasApiSecret: false, hasOAuth: true, hasWebhook: false, supportsSync: true },
+    { type: "STRIPE", name: "Stripe", description: "Accept payments and manage customer subscriptions.", category: "Payments", icon: "CreditCard", hasApiKey: true, hasApiSecret: false, hasOAuth: false, hasWebhook: true, supportsSync: true },
+    { type: "RAZORPAY", name: "Razorpay", description: "Accept UPI, cards, net banking, and online payments.", category: "Payments", icon: "CreditCard", hasApiKey: true, hasApiSecret: true, hasOAuth: false, hasWebhook: true, supportsSync: true },
+    { type: "RESEND", name: "Resend", description: "Send transactional and automated emails.", category: "Email", icon: "Mail", hasApiKey: false, hasApiSecret: false, hasOAuth: true, hasWebhook: true, supportsSync: false },
+    { type: "WHATSAPP", name: "WhatsApp Business", description: "Send automated WhatsApp messages to customers.", category: "Messaging", icon: "MessageCircle", hasApiKey: true, hasApiSecret: false, hasOAuth: false, hasWebhook: false, supportsSync: false },
+  ],
 
   listIntegrations: (): any[] => getIntegrations(),
 

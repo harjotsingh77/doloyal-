@@ -30,6 +30,7 @@ import { WebsiteProjectsModule } from './modules/website-projects/website-projec
 import { SupportModule } from './modules/support/support.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { WorkflowsModule } from './modules/workflows/workflow.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { WorkflowsModule } from './modules/workflows/workflow.module';
     SupportModule,
     AdminModule,
     WorkflowsModule,
+    CampaignsModule,
   ],
   providers: [
     Reflector,
