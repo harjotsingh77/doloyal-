@@ -134,6 +134,7 @@ enum ActivityType {
   TIER_UPGRADED
   CAMPAIGN_SENT
   NOTE_ADDED
+  WHATSAPP_RECEIVED
 }
 
 enum SupportStatus {

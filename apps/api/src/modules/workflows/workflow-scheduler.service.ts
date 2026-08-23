@@ -1,10 +1,12 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { WorkflowEngineService } from './workflow-engine.service';
+import { SchedulerLockService } from '../../common/scheduler-lock.service';
 
 /**
  * Drives the workflow scheduler: resumes due delays/retries and evaluates
  * scan-style triggers (inactive / birthday / membership expiring).
- * Runs server-side only — never in the browser.
+ * Runs server-side only — never in the browser. A Postgres advisory lock
+ * keeps exactly one dispatcher active across API replicas.
  */
 @Injectable()
 export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -12,7 +14,10 @@ export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(private readonly engine: WorkflowEngineService) {}
+  constructor(
+    private readonly engine: WorkflowEngineService,
+    private readonly lock: SchedulerLockService,
+  ) {}
 
   onModuleInit() {
     this.timer = setInterval(() => void this.tick(), 60_000);
@@ -25,6 +30,8 @@ export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
 
   private async tick() {
     if (this.running) return;
+    const lockKey = 'scheduler:workflows:tick';
+    if (!(await this.lock.tryAcquire(lockKey))) return;
     this.running = true;
     try {
       const result = await this.engine.processDueRuns();
@@ -35,6 +42,7 @@ export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`Workflow scheduler tick failed: ${err?.message}`);
     } finally {
       this.running = false;
+      await this.lock.release(lockKey);
     }
   }
 }

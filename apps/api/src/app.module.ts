@@ -3,6 +3,7 @@ import { APP_GUARD, Reflector } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './common/prisma.module';
 import { SupabaseModule } from './common/supabase.module';
+import { CommonModule } from './common/common.module';
 import { HealthModule } from './common/health.module';
 import { MockAuthGuard } from './common/mock-auth.guard';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
@@ -41,6 +42,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     }),
     PrismaModule,
     SupabaseModule,
+    CommonModule,
     HealthModule,
     AuthModule,
     TenantsModule,

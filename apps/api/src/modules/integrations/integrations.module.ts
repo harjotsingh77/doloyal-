@@ -7,6 +7,7 @@ import { ResendIntegrationService } from './services/resend.service';
 import { EmailService } from './services/email.service';
 import { StripeIntegrationService } from './services/stripe.service';
 import { RazorpayIntegrationService } from './services/razorpay.service';
+import { WhatsAppIntegrationService } from './services/whatsapp.service';
 import { EncryptionService } from '../../common/encryption.service';
 
 @Module({
@@ -19,6 +20,7 @@ import { EncryptionService } from '../../common/encryption.service';
     EmailService,
     StripeIntegrationService,
     RazorpayIntegrationService,
+    WhatsAppIntegrationService,
     EncryptionService,
   ],
   exports: [
@@ -28,6 +30,7 @@ import { EncryptionService } from '../../common/encryption.service';
     EmailService,
     StripeIntegrationService,
     RazorpayIntegrationService,
+    WhatsAppIntegrationService,
   ],
 })
 export class IntegrationsModule {}

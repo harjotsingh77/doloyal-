@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
+import { WhatsAppIntegrationService } from './services/whatsapp.service';
 import { getIntegrationDef } from './integration-definitions';
 import * as crypto from 'crypto';
 
@@ -35,6 +36,7 @@ export class IntegrationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
+    private readonly whatsapp: WhatsAppIntegrationService,
   ) {}
 
   /** Builds a Stripe client from the tenant's stored (encrypted) key. */
@@ -86,6 +88,7 @@ export class IntegrationsService {
     expiresAt?: string;
     metadata?: Record<string, unknown>;
     label?: string;
+    webhookSecret?: string;
   }) {
     const def = getIntegrationDef(type);
     if (!def) throw new BadRequestException(`Unknown integration type: ${type}`);
@@ -98,6 +101,27 @@ export class IntegrationsService {
       );
     }
 
+    // WhatsApp requires a live-verified phone number id before accepting a
+    // connection — this keeps "Connected" truthful.
+    let whatsappVerifiedName: string | undefined;
+    if (type === 'WHATSAPP') {
+      const accessToken = credentials.accessToken || credentials.apiKey;
+      const phoneNumberId = String((credentials.metadata as any)?.phoneNumberId || '').trim();
+      if (!accessToken) {
+        throw new BadRequestException('A WhatsApp Business access token is required.');
+      }
+      if (!phoneNumberId) {
+        throw new BadRequestException('A WhatsApp Phone Number ID is required.');
+      }
+      const verification = await this.whatsapp.verifyCredentials(accessToken, phoneNumberId);
+      if (!verification.valid) {
+        throw new BadRequestException(
+          `WhatsApp credentials rejected by Meta: ${verification.error}. Check the token and Phone Number ID.`,
+        );
+      }
+      whatsappVerifiedName = verification.verifiedName;
+    }
+
     const existing = await this.prisma.integration.findUnique({
       where: { tenantId_type: { tenantId, type: type as any } },
     });
@@ -107,7 +131,7 @@ export class IntegrationsService {
         where: { id: existing.id },
         data: {
           status: 'CONNECTED',
-          label: credentials.label || existing.label,
+          label: credentials.label || existing.label || whatsappVerifiedName,
           metadata: (credentials.metadata || existing.metadata) as any,
           userId,
           errorLog: null,
@@ -124,19 +148,21 @@ export class IntegrationsService {
         userId,
         type: type as any,
         status: 'CONNECTED',
-        label: credentials.label || null,
+        label: credentials.label || whatsappVerifiedName || null,
         metadata: credentials.metadata as any,
       },
       update: {
         status: 'CONNECTED',
         userId,
-        label: credentials.label || undefined,
+        ...(credentials.label || whatsappVerifiedName
+          ? { label: credentials.label || whatsappVerifiedName }
+          : {}),
         metadata: credentials.metadata as any,
         errorLog: null,
       },
     });
 
-    if (credentials.apiKey || credentials.accessToken) {
+    if (credentials.apiKey || credentials.accessToken || credentials.webhookSecret) {
       await this.upsertToken(integration.id, credentials);
     }
 
@@ -430,6 +456,8 @@ export class IntegrationsService {
     try {
       if (type === 'STRIPE') {
         await this.processStripeEvent(match.tenantId, body);
+      } else if (type === 'WHATSAPP') {
+        await this.whatsapp.processWebhookPayload(match.tenantId, body);
       }
     } catch (err: any) {
       this.logger.warn(`Webhook ${eventType} processing failed for tenant ${match.tenantId}: ${err?.message}`);
@@ -475,6 +503,27 @@ export class IntegrationsService {
         data: { status: 'PAID', paidAt: new Date() },
       }),
     ]);
+  }
+
+  /** Decrypted webhook secrets for all connected integrations of a type (webhook handshake). */
+  async getWebhookSecretsForType(type: string): Promise<string[]> {
+    const rows = await this.prisma.integration.findMany({
+      where: { type: type as any, status: 'CONNECTED' },
+      include: { tokens: true },
+    });
+    const secrets: string[] = [];
+    for (const row of rows) {
+      for (const token of row.tokens) {
+        if (token.webhookSecret) {
+          try {
+            secrets.push(this.encryption.decrypt(token.webhookSecret));
+          } catch {
+            // skip undecryptable
+          }
+        }
+      }
+    }
+    return secrets;
   }
 
   async getOAuthUrl(type: string, redirectUri: string | undefined, user: any) {
@@ -991,7 +1040,8 @@ export class IntegrationsService {
 
   private async upsertToken(integrationId: string, credentials: {
     apiKey?: string; apiSecret?: string; accessToken?: string;
-    refreshToken?: string; scope?: string; expiresAt?: string;
+    refreshToken?: string; scope?: string; expiresAt?: string; webhookSecret?: string;
+    metadata?: Record<string, unknown>;
   }) {
     const existingToken = await this.prisma.integrationToken.findFirst({
       where: { integrationId },
@@ -1002,8 +1052,10 @@ export class IntegrationsService {
     if (credentials.apiSecret) data.apiSecret = this.encryption.encrypt(credentials.apiSecret);
     if (credentials.accessToken) data.accessToken = this.encryption.encrypt(credentials.accessToken);
     if (credentials.refreshToken) data.refreshToken = this.encryption.encrypt(credentials.refreshToken);
+    if (credentials.webhookSecret) data.webhookSecret = this.encryption.encrypt(credentials.webhookSecret);
     if (credentials.scope) data.scope = credentials.scope;
     if (credentials.expiresAt) data.expiresAt = new Date(credentials.expiresAt);
+    if (credentials.metadata !== undefined) data.metadata = credentials.metadata as any;
 
     if (existingToken) {
       await this.prisma.integrationToken.update({ where: { id: existingToken.id }, data });
@@ -1036,6 +1088,16 @@ export class IntegrationsService {
       case 'STRIPE':
         if (apiKey?.startsWith('sk_')) return { message: `Stripe account verified` };
         throw new Error('Invalid Stripe key format');
+      case 'WHATSAPP': {
+        const metadata = (token.metadata || {}) as Record<string, any>;
+        if (!apiKey) throw new Error('Missing WhatsApp access token');
+        if (!metadata.phoneNumberId) throw new Error('Missing Phone Number ID');
+        const verification = await this.whatsapp.verifyCredentials(apiKey, String(metadata.phoneNumberId));
+        if (!verification.valid) throw new Error(verification.error || 'WhatsApp credentials rejected by Meta');
+        return {
+          message: `WhatsApp verified: ${verification.verifiedName || ''} (${verification.displayPhoneNumber || metadata.phoneNumberId})`,
+        };
+      }
       case 'RAZORPAY':
         if (apiKey && apiSecret) return { message: 'Razorpay credentials valid' };
         throw new Error('Missing Razorpay credentials');

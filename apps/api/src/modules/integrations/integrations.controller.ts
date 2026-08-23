@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, Headers, Req, BadRequestException } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import { Controller, Get, Post, Patch, Param, Body, Query, Headers, Req, Res, BadRequestException } from '@nestjs/common';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { IntegrationsService } from './integrations.service';
+import { WhatsAppIntegrationService } from './services/whatsapp.service';
 import { EmailService } from './services/email.service';
 import { ResendIntegrationService } from './services/resend.service';
 import { CurrentUser } from '../../common/current-user.decorator';
@@ -17,6 +18,7 @@ class ConnectIntegrationDto {
   @IsString() @IsOptional() refreshToken?: string;
   @IsString() @IsOptional() label?: string;
   @IsOptional() metadata?: Record<string, unknown>;
+  @IsString() @IsOptional() webhookSecret?: string;
 }
 
 class UpdateConfigDto {
@@ -93,6 +95,7 @@ export class IntegrationsController {
       refreshToken: dto.refreshToken,
       label: dto.label,
       metadata: dto.metadata,
+      webhookSecret: dto.webhookSecret,
     });
   }
 
@@ -187,6 +190,32 @@ export class IntegrationsController {
   @Post('resend/domains')
   async createResendDomain(@Body() dto: ResendCreateDomainDto, @CurrentUser() user: any) {
     return this.resendService.createDomain(user.activeTenantId, dto.domain, dto.region);
+  }
+
+  @Public()
+  @Get('webhook/:type')
+  async verifyWebhook(
+    @Param('type') type: string,
+    @Query() query: Record<string, string>,
+    @Res() res: FastifyReply,
+  ) {
+    // Meta Cloud API handshake: echo hub.challenge when the token matches.
+    if (type.toUpperCase() === 'WHATSAPP') {
+      const candidates = new Set<string>();
+      if (process.env.META_WEBHOOK_VERIFY_TOKEN) {
+        candidates.add(process.env.META_WEBHOOK_VERIFY_TOKEN);
+      }
+      const rows = await this.integrationsService.getWebhookSecretsForType('WHATSAPP');
+      for (const secret of rows) candidates.add(secret);
+      for (const candidate of candidates) {
+        const challenge = WhatsAppIntegrationService.verifyWebhookHandshake(query, candidate);
+        if (challenge !== null) {
+          return res.type('text/plain').send(challenge);
+        }
+      }
+      return res.status(403).send('Forbidden');
+    }
+    return res.status(404).send('Not Found');
   }
 
   @Public()

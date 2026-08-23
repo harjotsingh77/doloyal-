@@ -12,6 +12,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../integrations/services/email.service';
+import { WhatsAppIntegrationService } from '../integrations/services/whatsapp.service';
 import {
   getAction,
   getCondition,
@@ -67,6 +68,7 @@ export class WorkflowEngineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly whatsapp: WhatsAppIntegrationService,
   ) {}
 
   private allowMessage(tenantId: string, limitPerMinute = 100): boolean {
@@ -555,22 +557,43 @@ export class WorkflowEngineService {
           return { channel, sent: true, messageId: result.providerMessageId, sentAt: now.toISOString(), recipient };
         }
 
-        // Persist a notification record (real in-app audit of the message).
-        await this.prisma.notification.create({
-          data: {
-            tenantId,
-            customerId: customer?.id || null,
-            type: 'WORKFLOW',
-            channel,
-            recipient,
-            subject,
-            body,
-            status: 'SENT',
-            sentAt: now,
-            metadata: { workflowId },
-          },
-        });
-        return { channel, simulated: true, sentAt: now.toISOString(), recipient };
+        if (channel === 'WHATSAPP') {
+          if (!customer?.phone) {
+            throw new Error('This customer has no phone number on file.');
+          }
+          const templateName = String(config.template || '').trim();
+          const result = templateName
+            ? await this.whatsapp.sendTemplate(tenantId, customer.phone, render(templateName), {
+                bodyParams: [String(config.templateParam1 ? render(String(config.templateParam1)) : vars.first_name)],
+              })
+            : await this.whatsapp.sendSessionText(tenantId, customer.phone, body);
+
+          await this.prisma.notification.create({
+            data: {
+              tenantId,
+              customerId: customer?.id || null,
+              type: 'WORKFLOW',
+              channel,
+              recipient: customer.phone,
+              subject,
+              body,
+              status: result.ok ? 'SENT' : 'FAILED',
+              sentAt: result.ok ? now : null,
+              metadata: {
+                workflowId,
+                ...(result.providerMessageId ? { providerMessageId: result.providerMessageId } : {}),
+                ...(result.error ? { error: result.error } : {}),
+              },
+            },
+          });
+          if (!result.ok) {
+            throw new Error(result.error || 'WhatsApp delivery failed.');
+          }
+          return { channel, sent: true, messageId: result.providerMessageId, sentAt: now.toISOString(), recipient: customer.phone };
+        }
+
+        // SMS has no live provider yet — fail loudly instead of faking success.
+        throw new Error('SMS sending is not available yet. Use the EMAIL or WHATSAPP channels.');
       }
 
       case 'create_reward': {

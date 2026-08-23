@@ -40,6 +40,7 @@ import {
   TabsTrigger,
 } from "@doloyal/ui";
 import { api } from "@/lib/api";
+import { getApiBaseUrl } from "@/lib/api-base";
 import { toast } from "sonner";
 import { IntegrationCard } from "@/components/integrations/integration-card";
 import { getBrandIcon } from "@/components/integrations/brand-icons";
@@ -89,6 +90,9 @@ export default function IntegrationsPage() {
   const [apiKey, setApiKey] = React.useState("");
   const [apiSecret, setApiSecret] = React.useState("");
   const [label, setLabel] = React.useState("");
+  const [whatsappPhoneId, setWhatsappPhoneId] = React.useState("");
+  const [whatsappWabaId, setWhatsappWabaId] = React.useState("");
+  const [whatsappAppSecret, setWhatsappAppSecret] = React.useState("");
   const [connecting, setConnecting] = React.useState<string | null>(null);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [syncing, setSyncing] = React.useState<string | null>(null);
@@ -256,6 +260,15 @@ export default function IntegrationsPage() {
       if (apiKey) body.apiKey = apiKey;
       if (apiSecret) body.apiSecret = apiSecret;
       if (label) body.label = label;
+      if (type === "WHATSAPP") {
+        // WhatsApp Cloud API: the "API key" input holds the permanent access token.
+        body.accessToken = apiKey;
+        body.metadata = {
+          ...(whatsappPhoneId ? { phoneNumberId: whatsappPhoneId.trim() } : {}),
+          ...(whatsappWabaId ? { wabaId: whatsappWabaId.trim() } : {}),
+        };
+        if (whatsappAppSecret) body.webhookSecret = whatsappAppSecret;
+      }
       const result = await api.connectIntegration(body);
       if (result) {
         setIntegrations((prev) => ({ ...prev, [type.toLowerCase()]: result }));
@@ -538,7 +551,55 @@ export default function IntegrationsPage() {
                       Click Connect to authorize via {def.name}&apos;s OAuth flow.
                     </p>
                   )}
-                  {def.hasApiKey && (
+                  {def.type === "WHATSAPP" && (
+                    <>
+                      <div className="space-y-2">
+                        <label htmlFor="wa-token" className="text-sm font-medium">Permanent Access Token</label>
+                        <Input
+                          id="wa-token"
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder="EAAG... (System User token with whatsapp_business_messaging)"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="wa-phone-id" className="text-sm font-medium">Phone Number ID</label>
+                        <Input
+                          id="wa-phone-id"
+                          value={whatsappPhoneId}
+                          onChange={(e) => setWhatsappPhoneId(e.target.value)}
+                          placeholder="123456789012345"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="wa-waba-id" className="text-sm font-medium">WhatsApp Business Account ID (optional)</label>
+                        <Input
+                          id="wa-waba-id"
+                          value={whatsappWabaId}
+                          onChange={(e) => setWhatsappWabaId(e.target.value)}
+                          placeholder="For browsing approved templates"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="wa-app-secret" className="text-sm font-medium">Meta App Secret (for delivery receipts)</label>
+                        <Input
+                          id="wa-app-secret"
+                          type="password"
+                          value={whatsappAppSecret}
+                          onChange={(e) => setWhatsappAppSecret(e.target.value)}
+                          placeholder="Verifies webhook signatures from Meta"
+                        />
+                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                          Webhook URL for your Meta app:{" "}
+                          <code className="rounded bg-[rgb(var(--color-surface-2))] px-1 py-0.5">
+                            {typeof window !== "undefined" ? new URL(getApiBaseUrl()).origin : ""}/integrations/webhook/whatsapp
+                          </code>
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  {def.hasApiKey && def.type !== "WHATSAPP" && (
                     <div className="space-y-2">
                       <label htmlFor="integ-api-key" className="text-sm font-medium">API Key</label>
                       <Input
@@ -549,7 +610,7 @@ export default function IntegrationsPage() {
                       />
                     </div>
                   )}
-                  {def.hasApiSecret && (
+                  {def.hasApiSecret && def.type !== "WHATSAPP" && (
                     <div className="space-y-2">
                       <label htmlFor="integ-api-secret" className="text-sm font-medium">API Secret</label>
                       <Input

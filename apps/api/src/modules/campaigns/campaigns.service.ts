@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../integrations/services/email.service';
+import { WhatsAppIntegrationService } from '../integrations/services/whatsapp.service';
 
 export interface CreateCampaignInput {
   name: string;
@@ -25,6 +26,7 @@ export class CampaignsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly whatsapp: WhatsAppIntegrationService,
   ) {}
 
   async list(tenantId: string) {
@@ -56,6 +58,13 @@ export class CampaignsService {
     });
   }
 
+  /** Scheduler entry point — resolves the tenant from the campaign row. */
+  async sendByScheduler(id: string) {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id } });
+    if (!campaign || campaign.status !== 'SCHEDULED') return;
+    return this.send(campaign.tenantId, id);
+  }
+
   async setStatus(tenantId: string, id: string, status: string) {
     const campaign = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
@@ -77,34 +86,42 @@ export class CampaignsService {
   }
 
   /**
-   * Send a campaign through the business's own Resend OAuth account (EMAIL
-   * channel). SMS/WhatsApp remain simulated until those providers ship.
+   * Send a campaign through a REAL provider channel:
+   *  - EMAIL via the business's own Resend OAuth account
+   *  - WHATSAPP via the Meta Cloud API (template name goes in `subject`)
+   * SMS remains unavailable until a Twilio integration ships — it fails
+   * loudly instead of pretending to succeed.
    */
   async send(tenantId: string, id: string) {
     const campaign = await this.prisma.campaign.findFirst({
       where: { id, tenantId },
     });
     if (!campaign) throw new NotFoundException('Campaign not found');
-    if (campaign.channel !== 'EMAIL') {
-      await this.prisma.campaign.update({
-        where: { id },
-        data: { status: 'COMPLETED', sentAt: new Date(), sentCount: campaign.recipients },
-      });
-      return {
-        channel: campaign.channel,
-        status: 'COMPLETED',
-        sent: campaign.recipients,
-        message: `${campaign.channel} campaigns are simulated in this build.`,
-      };
+
+    if (campaign.channel === 'SMS') {
+      throw new BadRequestException(
+        'SMS sending is not available yet. Use the EMAIL or WHATSAPP channels.',
+      );
     }
 
-    await this.requireResendConnected(tenantId);
+    const audienceWhere = AUDIENCE_WHERE[campaign.audience || 'All'] || {};
 
-    const customers = await this.prisma.customer.findMany({
-      where: { tenantId, ...AUDIENCE_WHERE[campaign.audience || 'All'] },
-      select: { id: true, firstName: true, lastName: true, email: true },
-    });
-    const withEmail = customers.filter((c: any) => c.email);
+    let customers: any[];
+    if (campaign.channel === 'EMAIL') {
+      await this.requireResendConnected(tenantId);
+      customers = await this.prisma.customer.findMany({
+        where: { tenantId, ...audienceWhere },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      customers = customers.filter((c) => c.email);
+    } else {
+      // WHATSAPP
+      customers = await this.prisma.customer.findMany({
+        where: { tenantId, ...audienceWhere },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      });
+      customers = customers.filter((c) => c.phone);
+    }
 
     await this.prisma.campaign.update({
       where: { id },
@@ -114,27 +131,76 @@ export class CampaignsService {
     let sent = 0;
     let failed = 0;
     const batchSize = 20;
-    for (let i = 0; i < withEmail.length; i += batchSize) {
-      const batch = withEmail.slice(i, i + batchSize);
-      const results = await Promise.all(
-        batch.map((c: any) =>
-          this.emailService.sendBusinessEmail({
-            tenantId,
-            to: c.email,
-            subject: campaign.subject,
-            html: campaign.body,
-            customerId: c.id,
-            campaignId: campaign.id,
-            notificationType: 'CAMPAIGN',
-          }),
-        ),
-      );
-      for (const r of results) {
-        if (r.status === 'SENT') sent += 1;
-        else failed += 1;
+
+    for (let i = 0; i < customers.length; i += batchSize) {
+      const batch = customers.slice(i, i + batchSize);
+
+      if (campaign.channel === 'EMAIL') {
+        const results = await Promise.all(
+          batch.map((c: any) =>
+            this.emailService.sendBusinessEmail({
+              tenantId,
+              to: c.email,
+              subject: campaign.subject,
+              html: campaign.body,
+              customerId: c.id,
+              campaignId: campaign.id,
+              notificationType: 'CAMPAIGN',
+            }),
+          ),
+        );
+        for (const r of results) {
+          if (r.status === 'SENT') sent += 1;
+          else failed += 1;
+        }
+      } else {
+        // WHATSAPP — real sends through the tenant's connected Cloud API.
+        const templateName = (campaign.subject || '').trim();
+        const firstName = null as string | null;
+        void firstName;
+        for (const c of batch) {
+          try {
+            let result;
+            if (templateName) {
+              result = await this.whatsapp.sendTemplate(tenantId, c.phone, templateName, {
+                bodyParams: [c.firstName || 'there'].slice(0, 5),
+              });
+            } else {
+              result = await this.whatsapp.sendSessionText(
+                tenantId,
+                c.phone,
+                this.renderCampaignBody(campaign.body, c),
+              );
+            }
+            await this.prisma.notification.create({
+              data: {
+                tenantId,
+                customerId: c.id,
+                type: 'CAMPAIGN',
+                channel: 'WHATSAPP',
+                recipient: c.phone,
+                subject: campaign.name,
+                body: campaign.body,
+                status: result.ok ? 'SENT' : 'FAILED',
+                sentAt: result.ok ? new Date() : null,
+                metadata: {
+                  campaignId: campaign.id,
+                  ...(result.providerMessageId ? { providerMessageId: result.providerMessageId } : {}),
+                  ...(result.error ? { error: result.error } : {}),
+                },
+              },
+            }).catch(() => undefined);
+            if (result.ok) sent += 1;
+            else failed += 1;
+          } catch (err: any) {
+            failed += 1;
+            this.logger.warn(`WhatsApp campaign send failed (${c.id}): ${err?.message}`);
+          }
+        }
       }
+
       // Simple pacing so bursts stay within provider rate limits.
-      if (i + batchSize < withEmail.length) {
+      if (i + batchSize < customers.length) {
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
     }
@@ -145,19 +211,28 @@ export class CampaignsService {
       data: { status, sentAt: new Date(), sentCount: sent, failedCount: failed },
     });
 
-    this.logger.log(`Campaign ${id} sent: ${sent} delivered, ${failed} failed (tenant=${tenantId})`);
+    this.logger.log(`Campaign ${id} (${campaign.channel}) sent: ${sent} delivered, ${failed} failed (tenant=${tenantId})`);
     return {
-      channel: 'EMAIL',
+      channel: campaign.channel,
       status,
       audience: campaign.audience,
-      recipients: withEmail.length,
+      recipients: customers.length,
       sent,
       failed,
       message:
         failed > 0 && sent === 0
-          ? 'Campaign failed to send. Check your Resend connection and sender.'
-          : `Campaign sent to ${sent} customer${sent === 1 ? '' : 's'} via Resend.`,
+          ? campaign.channel === 'EMAIL'
+            ? 'Campaign failed to send. Check your Resend connection and sender.'
+            : 'WhatsApp delivery failed. Check your WhatsApp connection, phone number and templates.'
+          : `Campaign sent to ${sent} customer${sent === 1 ? '' : 's'} via ${campaign.channel === 'EMAIL' ? 'Resend' : 'WhatsApp'}.`,
     };
+  }
+
+  private renderCampaignBody(body: string, customer: { firstName?: string | null; lastName?: string | null }): string {
+    return String(body)
+      .replace(/\{\{\s*firstName\s*\}\}/gi, customer.firstName || 'there')
+      .replace(/\{\{\s*lastName\s*\}\}/gi, customer.lastName || '')
+      .replace(/\{\{\s*name\s*\}\}/gi, [customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'there');
   }
 
   private async countAudience(tenantId: string, audience: string): Promise<number> {
