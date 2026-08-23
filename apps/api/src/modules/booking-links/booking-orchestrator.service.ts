@@ -3,6 +3,8 @@ import { PrismaService } from '../../common/prisma.service';
 import { BookingLinksService } from './booking-links.service';
 import { BookingNotificationsService } from './booking-notifications.service';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
+import { StripeIntegrationService } from '../integrations/services/stripe.service';
+import { RazorpayIntegrationService } from '../integrations/services/razorpay.service';
 import {
   DEFAULT_AUTOMATIONS,
   DEFAULT_LOYALTY,
@@ -50,6 +52,8 @@ export class BookingOrchestratorService {
     private readonly bookingLinks: BookingLinksService,
     private readonly notifications: BookingNotificationsService,
     private readonly googleCalendar: GoogleCalendarIntegrationService,
+    private readonly stripeIntegration: StripeIntegrationService,
+    private readonly razorpayIntegration: RazorpayIntegrationService,
   ) {}
 
   private calcPaymentAmount(servicePrice: number, paymentCfg: any): {
@@ -78,40 +82,26 @@ export class BookingOrchestratorService {
     return { amount: servicePrice, status: 'PENDING', mode };
   }
 
-  private async createPaymentIntent(tenantId: string, amount: number, method?: string, currency = 'INR') {
+  private async createPaymentIntent(
+    tenantId: string,
+    amount: number,
+    method?: string,
+    currency = 'INR',
+    appointmentId?: string,
+  ) {
     const type = method === 'RAZORPAY' ? 'RAZORPAY' : 'STRIPE';
-    const integration = await this.prisma.integration.findFirst({
-      where: { tenantId, type: type as any, status: 'CONNECTED' },
-      include: { tokens: true },
-    }).catch(() => null);
 
-    if (!integration) {
-      return {
-        provider: type,
-        clientSecret: null,
-        orderId: null,
-        simulated: true,
-        message: `${type} not connected — use Pay at Store or connect in Integrations`,
-      };
-    }
-
-    const token = (integration as any).tokens?.[0];
-    const apiKey = token?.apiKey || token?.accessToken;
-
-    if (type === 'STRIPE' && apiKey) {
+    if (type === 'STRIPE') {
       try {
-        const Stripe = (await import('stripe')).default;
-        const stripe = new Stripe(apiKey);
-        const intent = await stripe.paymentIntents.create({
-          amount: Math.round(amount * 100),
-          currency: currency.toLowerCase(),
-          automatic_payment_methods: { enabled: true },
-          metadata: { tenantId },
+        const intent = await this.stripeIntegration.createPaymentIntent(tenantId, amount, currency, {
+          purpose: 'booking_deposit',
+          ...(appointmentId ? { appointmentId } : {}),
         });
         return {
           provider: 'STRIPE',
           clientSecret: intent.client_secret,
           orderId: intent.id,
+          amount: Math.round(amount * 100),
           simulated: false,
         };
       } catch (err: any) {
@@ -119,25 +109,37 @@ export class BookingOrchestratorService {
           provider: 'STRIPE',
           clientSecret: null,
           orderId: null,
-          simulated: true,
-          message: err?.message || 'Stripe payment failed',
+          simulated: false,
+          failed: true,
+          message: err?.message || 'Stripe is not connected — choose Pay at Store or connect Stripe in Integrations',
         };
       }
     }
 
-    if (type === 'RAZORPAY') {
+    // Razorpay — create a REAL order via the stored integration credentials.
+    try {
+      const order = await this.razorpayIntegration.createOrder(
+        tenantId,
+        amount,
+        currency.toUpperCase(),
+        `bkng_${Date.now().toString(36)}`,
+      );
       return {
         provider: 'RAZORPAY',
-        clientSecret: null,
-        orderId: `order_${Date.now().toString(36)}`,
-        keyId: apiKey || null,
-        amount: Math.round(amount * 100),
-        currency,
-        simulated: !apiKey,
+        orderId: order.id,
+        amount: Number(order.amount),
+        currency: order.currency,
+        simulated: false,
+      };
+    } catch (err: any) {
+      return {
+        provider: 'RAZORPAY',
+        orderId: null,
+        simulated: false,
+        failed: true,
+        message: err?.message || 'Razorpay is not connected — choose Pay at Store or connect Razorpay in Integrations',
       };
     }
-
-    return { provider: type, clientSecret: null, orderId: null, simulated: true };
   }
 
   async book(slug: string, dto: any, meta?: { ipHash?: string }) {
@@ -504,7 +506,13 @@ export class BookingOrchestratorService {
         pay.amount,
         dto.paymentMethod,
         tenant.currency || 'INR',
+        appointment.id,
       );
+      if (paymentIntent?.failed) {
+        // A real gateway was configured but refused the charge — surface it
+        // instead of silently confirming an unpaid booking.
+        throw new BadRequestException(paymentIntent.message || 'Online payment could not be initiated');
+      }
     }
 
     return {
@@ -532,15 +540,91 @@ export class BookingOrchestratorService {
     };
   }
 
-  async confirmPayment(tenantId: string, appointmentId: string, status: 'PAID' | 'FAILED' = 'PAID') {
+  /**
+   * Confirms an online booking payment. NEVER trusts client-declared status:
+   * Stripe is verified by fetching the PaymentIntent from the API, Razorpay by
+   * HMAC signature verification plus an independent payment fetch that checks
+   * order linkage, capture status and exact amount.
+   */
+  async confirmPayment(
+    tenantId: string,
+    appointmentId: string,
+    payment: { provider: 'STRIPE' | 'RAZORPAY'; paymentIntentId?: string; razorpayOrderId?: string; razorpayPaymentId?: string; razorpaySignature?: string },
+  ) {
     const appointment = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, tenantId },
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
+    const expectedAmountPaise = Math.round(Number(appointment.paymentAmount || 0) * 100);
+    if (expectedAmountPaise <= 0) {
+      throw new BadRequestException('This appointment has no online payment due');
+    }
+
+    if (payment.provider === 'STRIPE') {
+      if (!payment.paymentIntentId) throw new BadRequestException('paymentIntentId is required');
+
+      const stripe = await this.stripeIntegration.getClient(tenantId, 'STRIPE');
+      if (!stripe) throw new BadRequestException('Stripe is not connected');
+
+      const intent = await stripe.paymentIntents.retrieve(payment.paymentIntentId);
+      const paidEnough =
+        intent.status === 'succeeded' &&
+        Number(intent.amount) >= expectedAmountPaise &&
+        intent.metadata?.appointmentId === appointmentId;
+      if (!paidEnough) {
+        throw new BadRequestException(`Payment not completed (status: ${intent.status})`);
+      }
+    } else {
+      if (!payment.razorpayOrderId || !payment.razorpayPaymentId || !payment.razorpaySignature) {
+        throw new BadRequestException('Razorpay order id, payment id and signature are required');
+      }
+
+      const integration = await this.prisma.integration.findFirst({
+        where: { tenantId, type: 'RAZORPAY', status: 'CONNECTED' },
+        include: { tokens: true },
+      });
+      const raw = (integration?.tokens?.[0] as any) || {};
+      const keySecret = raw.apiSecret;
+      if (!keySecret) throw new BadRequestException('Razorpay is not connected');
+
+      const crypto = await import('crypto');
+      const expectedSig = crypto
+        .createHmac('sha256', keySecret)
+        .update(`${payment.razorpayOrderId}|${payment.razorpayPaymentId}`)
+        .digest('hex');
+      if (expectedSig !== payment.razorpaySignature) {
+        throw new BadRequestException('Invalid payment signature');
+      }
+
+      // Independent verification against Razorpay's API.
+      const client = await this.razorpayIntegration.getClient(tenantId);
+      if (client) {
+        const rpPayment = await client.payments.fetch(payment.razorpayPaymentId).catch(() => null);
+        if (
+          !rpPayment ||
+          rpPayment.status !== 'captured' ||
+          rpPayment.order_id !== payment.razorpayOrderId ||
+          Number(rpPayment.amount) < expectedAmountPaise
+        ) {
+          throw new BadRequestException('Payment could not be verified with Razorpay');
+        }
+      }
+    }
+
+    await this.prisma.invoice.updateMany({
+      where: {
+        tenantId,
+        customerId: appointment.customerId,
+        status: 'PENDING',
+        ...(appointment.paymentAmount != null ? { total: appointment.paymentAmount } : {}),
+      },
+      data: { status: 'PAID', paidAt: new Date() },
+    });
+
     return this.prisma.appointment.update({
       where: { id: appointmentId },
-      data: { paymentStatus: status === 'PAID' ? 'PAID' : 'PENDING' },
+      data: { paymentStatus: 'PAID' },
     });
   }
 }

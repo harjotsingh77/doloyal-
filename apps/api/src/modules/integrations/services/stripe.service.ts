@@ -55,15 +55,24 @@ export class StripeIntegrationService {
     });
   }
 
-  async handleWebhookEvent(body: any, signature: string): Promise<{ received: boolean; type?: string }> {
-    const endpointSecret = this.config.get('STRIPE_WEBHOOK_SECRET');
+  /**
+   * Verifies and constructs a Stripe webhook event. FAILS CLOSED: an
+   * unconfigured or mismatched signing secret always rejects the delivery.
+   */
+  constructVerifiedEvent(rawBody: Buffer | string, signature: string): Stripe.Event {
+    const endpointSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
     if (!endpointSecret) {
-      this.logger.warn('STRIPE_WEBHOOK_SECRET not configured, skipping webhook verification');
-      return { received: true, type: body?.type };
+      throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
     }
+    const stripe = new Stripe(this.config.get<string>('STRIPE_SECRET_KEY')!);
+    return stripe.webhooks.constructEvent(rawBody, signature, endpointSecret);
+  }
 
-    const stripe = new Stripe(this.config.get('STRIPE_SECRET_KEY')!);
-    const event = stripe.webhooks.constructEvent(body, signature, endpointSecret);
+  async handleWebhookEvent(body: any, signature: string): Promise<{ received: boolean; type?: string }> {
+    const event = this.constructVerifiedEvent(
+      typeof body === 'string' ? body : JSON.stringify(body),
+      signature,
+    );
     return { received: true, type: event.type };
   }
 }

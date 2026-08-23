@@ -741,6 +741,8 @@ model Invoice {
   tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   items    InvoiceItem[]
+
+  @@unique([tenantId, invoiceNumber])
 }
 
 model InvoiceItem {
@@ -1435,8 +1437,8 @@ model LoyaltyAuditLog {
 }
 
 model Subscription {
-  id                 String    @id @default(uuid())
-  tenantId           String
+  id String @id @default(uuid())
+  tenantId String @unique
   plan               String    @default("free")
   status             String    @default("ACTIVE") // ACTIVE, PAST_DUE, CANCELED, EXPIRED, TRIALING
   stripeId           String?
@@ -1490,18 +1492,20 @@ model SyncLog {
 }
 
 model WebhookEvent {
-  id            String    @id @default(uuid())
-  integrationId String
-  eventType     String
-  payload       Json
-  status        String    @default("PENDING") // PENDING, PROCESSED, FAILED
-  processedAt   DateTime?
-  errorMessage  String?
-  createdAt     DateTime  @default(now())
+  id              String    @id @default(uuid())
+  integrationId   String
+  externalEventId String? // provider event/message id or payload hash — used for idempotent processing
+  eventType       String
+  payload         Json
+  status          String    @default("PENDING") // PENDING, PROCESSED, FAILED
+  processedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
 
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
   @@index([integrationId])
+  @@unique([integrationId, externalEventId])
 }
 
 model BookingLink {
@@ -1826,7 +1830,7 @@ model Integration {
 /// Encrypted OAuth tokens / API keys for an integration.
 model IntegrationToken {
   id            String    @id @default(uuid())
-  integrationId String
+  integrationId String    @unique
   accessToken   String? // encrypted
   refreshToken  String? // encrypted
   tokenType     String    @default("Bearer")

@@ -125,20 +125,15 @@ export class AuthService {
       include: { memberships: true },
     });
 
-    const isAdminEmail = (email: string) =>
-      ['bhariharjot@gmail.com', 'teamdoloyal@gmail.com', 'demo@doloyal.ai'].includes(email.toLowerCase()) ||
-      email.toLowerCase().endsWith('@doloyal.ai');
-
-    const shouldBeAdmin = isAdminEmail(googleProfile.email);
+    // Admin status is granted exclusively through the database (isAdmin /
+    // adminRole columns managed by platform operators). No email-based
+    // auto-promotion — that would let anyone registering a matching address
+    // escalate to SUPER_ADMIN.
 
     if (user) {
       const updateData: any = {};
       if (!user.googleId) updateData.googleId = googleProfile.id;
       if (googleProfile.avatarUrl && googleProfile.avatarUrl !== user.avatarUrl) updateData.avatarUrl = googleProfile.avatarUrl;
-      if (shouldBeAdmin && (!user.isAdmin || !user.adminRole)) {
-        updateData.isAdmin = true;
-        updateData.adminRole = 'SUPER_ADMIN';
-      }
       if (Object.keys(updateData).length > 0) {
         user = await this.prisma.user.update({
           where: { id: user.id },
@@ -154,8 +149,6 @@ export class AuthService {
           lastName: googleProfile.lastName,
           avatarUrl: googleProfile.avatarUrl,
           googleId: googleProfile.id,
-          isAdmin: shouldBeAdmin,
-          adminRole: shouldBeAdmin ? 'SUPER_ADMIN' : null,
         },
         include: { memberships: true },
       });

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { prismaTierToShared } from '../../common/helpers';
 import { getPlan } from './plan-definitions';
@@ -267,24 +267,43 @@ export class MembershipsService {
     });
     if (!sub) throw new NotFoundException('No subscription found');
 
-    if (this.normalizePlan(sub.plan) === normalized) {
+    const current = this.normalizePlan(sub.plan);
+    if (current === normalized) {
       return {
-        plan: this.normalizePlan(sub.plan),
+        plan: current,
         message: `You're already on the ${plan.name} plan`,
         alreadyOnPlan: true,
       };
     }
 
+    // SECURITY: paid plans can only be granted through Razorpay checkout
+    // verification (POST /checkout/verify). This endpoint may only move a
+    // tenant DOWN to the free tier — never onto a paid plan.
+    const currentPrice = getPlan(current)?.priceMonthly ?? 0;
+    if (plan.priceMonthly > 0) {
+      throw new BadRequestException(
+        'Paid plans must be purchased through checkout. Redirecting you there.',
+      );
+    }
+
     const updated = await this.prisma.subscription.update({
       where: { id: sub.id },
-      data: { plan: normalized },
+      data: {
+        plan: normalized,
+        status: 'CANCELED',
+        autoRenew: false,
+        canceledAt: new Date(),
+      },
     });
 
     await this.logEvent(tenantId, {
       type: 'PLAN_CHANGED',
       plan: normalized,
-      description: `Plan changed to ${plan.name}`,
-      metadata: { previousPlan: this.normalizePlan(sub.plan) },
+      description: `Plan changed from ${getPlan(current)?.name ?? current} to ${plan.name}`,
+      amount: 0,
+      currency: 'INR',
+      status: 'COMPLETED',
+      metadata: { previousPlan: current, previousMonthlyPrice: currentPrice },
     });
 
     return {

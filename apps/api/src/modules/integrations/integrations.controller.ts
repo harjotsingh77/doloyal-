@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, Headers, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, Headers, Req, BadRequestException } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { IntegrationsService } from './integrations.service';
 import { EmailService } from './services/email.service';
 import { ResendIntegrationService } from './services/resend.service';
@@ -192,9 +193,11 @@ export class IntegrationsController {
   @Post('webhook/:type')
   async handleWebhook(
     @Param('type') type: string,
+    @Req() req: FastifyRequest & { rawBody?: Buffer },
     @Headers() headers: any,
     @Body() body: any,
   ) {
-    return this.integrationsService.handleWebhook(type.toUpperCase(), headers, body);
+    const raw = req.rawBody ? req.rawBody.toString('utf8') : '';
+    return this.integrationsService.handleWebhook(type.toUpperCase(), headers, raw, body);
   }
 }

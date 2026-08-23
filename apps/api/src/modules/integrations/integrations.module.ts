@@ -5,6 +5,8 @@ import { IntegrationsService } from './integrations.service';
 import { GoogleCalendarIntegrationService } from './services/google-calendar.service';
 import { ResendIntegrationService } from './services/resend.service';
 import { EmailService } from './services/email.service';
+import { StripeIntegrationService } from './services/stripe.service';
+import { RazorpayIntegrationService } from './services/razorpay.service';
 import { EncryptionService } from '../../common/encryption.service';
 
 @Module({
@@ -15,8 +17,17 @@ import { EncryptionService } from '../../common/encryption.service';
     GoogleCalendarIntegrationService,
     ResendIntegrationService,
     EmailService,
+    StripeIntegrationService,
+    RazorpayIntegrationService,
     EncryptionService,
   ],
-  exports: [IntegrationsService, GoogleCalendarIntegrationService, ResendIntegrationService, EmailService],
+  exports: [
+    IntegrationsService,
+    GoogleCalendarIntegrationService,
+    ResendIntegrationService,
+    EmailService,
+    StripeIntegrationService,
+    RazorpayIntegrationService,
+  ],
 })
 export class IntegrationsModule {}

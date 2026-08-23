@@ -38,6 +38,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: false, bodyLimit: 15 * 1024 * 1024 }),
+    // Keeps the raw request body on req.rawBody so webhook signature
+    // verification can HMAC the exact bytes the provider signed.
+    { rawBody: true },
   );
 
   await app.register(multipart as any, {

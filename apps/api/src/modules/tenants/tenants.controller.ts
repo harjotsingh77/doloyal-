@@ -10,8 +10,10 @@ import {
   HttpStatus,
   Req,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
+import { PrismaService } from '../../common/prisma.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Roles } from '../../common/roles.decorator';
 import {
@@ -177,7 +179,10 @@ class UpdateTenantDto {
 
 @Controller('tenants')
 export class TenantsController {
-  constructor(private readonly tenantsService: TenantsService) {}
+  constructor(
+    private readonly tenantsService: TenantsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -216,19 +221,25 @@ export class TenantsController {
 
   @Get(':id')
   @Roles('OWNER', 'MANAGER')
-  async getById(@Param('id') id: string) {
-    return this.tenantsService.getById(id);
+  async getById(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.tenantsService.getById(id, { userId: user.id, requireRoles: ['OWNER', 'MANAGER'] });
   }
 
   @Patch(':id')
   @Roles('OWNER')
-  async update(@Param('id') id: string, @Body() dto: UpdateTenantDto) {
-    return this.tenantsService.updateSettings(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateTenantDto, @CurrentUser() user: any) {
+    return this.tenantsService.updateSettings(id, dto, { userId: user.id, requireRoles: ['OWNER'] });
   }
 
   @Get(':id/stats')
   @Roles('OWNER', 'MANAGER')
-  async getStats(@Param('id') id: string) {
+  async getStats(@Param('id') id: string, @CurrentUser() user: any) {
+    const membership = await this.prisma.membership.findUnique({
+      where: { userId_tenantId: { userId: user.id, tenantId: id } },
+    });
+    if (!membership || !['OWNER', 'MANAGER'].includes(membership.role)) {
+      throw new ForbiddenException('You do not have access to this workspace');
+    }
     return this.tenantsService.getStats(id);
   }
 }

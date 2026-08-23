@@ -1199,8 +1199,13 @@ export class LoyaltyService {
 
   async upsertSurpriseReward(tenantId: string, data: any) {
     if (data.id) {
+      // Tenant-scoped existence check prevents cross-tenant rule mutation.
+      const existing = await this.prisma.surpriseRewardRule.findFirst({
+        where: { id: data.id, tenantId },
+      });
+      if (!existing) throw new NotFoundException('Surprise reward rule not found');
       return this.prisma.surpriseRewardRule.update({
-        where: { id: data.id },
+        where: { id: existing.id },
         data: {
           name: data.name,
           type: data.type,

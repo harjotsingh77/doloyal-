@@ -74,12 +74,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 /**
  * Demo/mock mode is a development convenience. It is NEVER active in
- * production builds: production must show real API data or surface the actual
- * error — never fabricated data and never fake success states.
+ * production builds and there is no env escape hatch: production must show
+ * real API data or surface the actual error — never fabricated data and never
+ * fake success states.
  */
-const DEMO_MODE =
-  process.env.NODE_ENV !== "production" ||
-  process.env.NEXT_PUBLIC_ALLOW_DEMO_AUTH === "true";
+const DEMO_MODE = process.env.NODE_ENV !== "production";
 
 /**
  * The mock dataset (~2.6k lines) is loaded through a dynamic import so it

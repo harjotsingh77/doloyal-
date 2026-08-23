@@ -62,28 +62,15 @@ function setToken(token: string | null) {
   else localStorage.removeItem("doloyal_token");
 }
 
-export function isKnownAdminEmail(email?: string): boolean {
-  if (!email) return false;
-  const e = email.toLowerCase().trim();
-  return (
-    e === "demo@doloyal.ai" ||
-    e === "bhariharjot@gmail.com" ||
-    e === "teamdoloyal@gmail.com" ||
-    e.endsWith("@doloyal.ai")
-  );
-}
-
 function getSavedUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   try {
     const s = localStorage.getItem("doloyal_user");
     if (!s) return null;
-    const u: AuthUser = JSON.parse(s);
-    if (isKnownAdminEmail(u.email)) {
-      u.isAdmin = true;
-      if (!u.adminRole) u.adminRole = "SUPER_ADMIN";
-    }
-    return u;
+    // Admin status is ALWAYS server-issued (JWT + /auth/me). The client never
+    // promotes a cached user based on their email — anyone could edit
+    // localStorage.
+    return JSON.parse(s);
   } catch {
     localStorage.removeItem("doloyal_user");
     return null;
@@ -93,10 +80,6 @@ function getSavedUser(): AuthUser | null {
 function saveUser(u: AuthUser | null) {
   if (typeof window === "undefined") return;
   if (u) {
-    if (isKnownAdminEmail(u.email)) {
-      u.isAdmin = true;
-      if (!u.adminRole) u.adminRole = "SUPER_ADMIN";
-    }
     localStorage.setItem("doloyal_user", JSON.stringify(u));
   } else {
     localStorage.removeItem("doloyal_user");
@@ -128,16 +111,12 @@ const DEMO_USER: AuthUser = {
 };
 
 /**
- * Demo/mock mode is enabled only outside production builds, or when explicitly
- * opted in via NEXT_PUBLIC_ALLOW_DEMO_AUTH=true.
- *
- * Production NEVER auto-provisions a demo session and NEVER serves mock data:
- * unauthenticated visitors are treated as unauthenticated (redirected to
- * sign-in) and every API call must return real data or surface a real error.
+ * Demo/mock mode is enabled only outside production builds. There is no
+ * production escape hatch: production NEVER auto-provisions a demo session
+ * and NEVER serves mock data — unauthenticated visitors are redirected to
+ * sign-in and every API call must return real data or surface a real error.
  */
-export const DEMO_MODE =
-  process.env.NODE_ENV !== "production" ||
-  process.env.NEXT_PUBLIC_ALLOW_DEMO_AUTH === "true";
+export const DEMO_MODE = process.env.NODE_ENV !== "production";
 
 /**
  * Synchronously resolve the initial user from localStorage.
@@ -320,8 +299,9 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
   const lastName = meta.family_name || nameParts.slice(1).join(" ") || "";
   const avatarUrl = meta.avatar_url || meta.picture || undefined;
   const email = sbUser.email || "";
-  const isAdmin = isKnownAdminEmail(email);
 
+  // Fallback identity only — admin flags are never granted client-side. The
+  // real session must come from the backend bridge (/auth/supabase/exchange).
   return {
     id: sbUser.id,
     externalId: sbUser.id,
@@ -329,8 +309,7 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
     firstName,
     lastName,
     avatarUrl,
-    isAdmin,
-    adminRole: isAdmin ? "SUPER_ADMIN" : undefined,
+    isAdmin: false,
     memberships: [
       {
         id: `m-${sbUser.id}`,

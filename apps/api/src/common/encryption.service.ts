@@ -40,8 +40,17 @@ export class EncryptionService {
   private readonly previousKeys: Buffer[] = [];
 
   constructor(private readonly config: ConfigService) {
-    const primarySecret = this.config.get<string>('ENCRYPTION_KEY') || this.config.get<string>('JWT_SECRET') || 'doloyal-encryption-key-change-in-production';
-    this.currentKey = deriveKey(primarySecret);
+    const primarySecret =
+      this.config.get<string>('ENCRYPTION_KEY') || this.config.get<string>('JWT_SECRET');
+    if (!primarySecret && process.env.NODE_ENV === 'production') {
+      // Encrypting OAuth tokens/API keys under a publicly-known default would
+      // be equivalent to storing them in plaintext. Refuse instead.
+      this.logger.error('ENCRYPTION_KEY (or JWT_SECRET) must be set in production.');
+      throw new Error('ENCRYPTION_KEY must be configured in production');
+    }
+    this.currentKey = deriveKey(
+      primarySecret || 'doloyal-encryption-key-dev-only',
+    );
 
     // Support key rotation: previous keys can decrypt old data
     const prevSecrets = this.config.get<string>('ENCRYPTION_PREVIOUS_KEYS');

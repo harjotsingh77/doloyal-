@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
 import { getIntegrationDef } from './integration-definitions';
@@ -36,6 +36,19 @@ export class IntegrationsService {
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
   ) {}
+
+  /** Builds a Stripe client from the tenant's stored (encrypted) key. */
+  private async getTenantStripeClient(tenantId: string) {
+    const integration = await this.prisma.integration.findFirst({
+      where: { tenantId, type: 'STRIPE', status: 'CONNECTED' },
+      include: { tokens: true },
+    });
+    const raw = (integration?.tokens?.[0] as any) || {};
+    const apiKey = raw.apiKey ? this.encryption.decrypt(raw.apiKey) : process.env.STRIPE_SECRET_KEY;
+    if (!apiKey) return null;
+    const { default: Stripe } = await import('stripe');
+    return new Stripe(apiKey);
+  }
 
   async list(tenantId: string) {
     const integrations = await this.prisma.integration.findMany({
@@ -325,23 +338,143 @@ export class IntegrationsService {
     });
   }
 
-  async handleWebhook(type: string, headers: any, body: any) {
-    const integration = await this.prisma.integration.findFirst({
-      where: { type: type as any, status: 'CONNECTED' },
-    });
-    if (!integration) throw new NotFoundException('Integration not found');
+  /**
+   * Public webhook sink. Security model:
+   *  - The caller MUST present the integration's webhook secret (either as a
+   *    raw secret header or as an HMAC-SHA256 signature over the raw body).
+   *  - The secret resolves BOTH the provider type and the exact tenant
+   *    integration — no cross-tenant global lookups.
+   *  - Events are deduped by a deterministic external event id so redeliveries
+   *    never double-process.
+   */
+  async handleWebhook(type: string, headers: any, rawBody: Buffer | string, parsedBody?: any) {
+    const body = parsedBody ?? (() => {
+      try { return JSON.parse(String(rawBody)); } catch { return {}; }
+    })();
 
-    await p(this.prisma).webhookEvent.create({
-      data: {
-        integrationId: integration.id,
-        eventType: headers['x-event-type'] || 'unknown',
-        payload: body,
-        status: 'PROCESSED',
-        processedAt: new Date(),
-      },
+    const candidates = await this.prisma.integration.findMany({
+      where: { type: type as any, status: 'CONNECTED' },
+      include: { tokens: true },
     });
+    if (candidates.length === 0) throw new NotFoundException('Integration not found');
+
+    const encryption = this.encryption;
+    const providedSecretHeader = headers?.['x-webhook-secret'] || headers?.['x-doloyal-signature'];
+    const providedSignature = headers?.['x-hub-signature-256'] || headers?.['x-signature'];
+    const rawPayload = typeof rawBody === 'string' ? rawBody : rawBody?.toString('utf8') || '';
+
+    const match = candidates.find((integration) => {
+      const token = integration.tokens?.[0] as any;
+      if (!token?.webhookSecret) return false;
+      let secret: string;
+      try {
+        secret = encryption.decrypt(token.webhookSecret);
+      } catch {
+        return false;
+      }
+      // Raw-secret comparison (constant-time)
+      if (providedSecretHeader && encryption.secureCompare(providedSecretHeader, secret)) return true;
+      // HMAC signature comparison
+      if (providedSignature) {
+        const expected = crypto
+          .createHmac('sha256', secret)
+          .update(rawPayload)
+          .digest('hex');
+        if (
+          encryption.secureCompare(
+            String(providedSignature).replace(/^sha256=/, ''),
+            expected,
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!match) throw new UnauthorizedException('Invalid webhook signature');
+
+    const eventType =
+      headers['x-event-type'] ||
+      body?.event ||
+      body?.type ||
+      body?.entry?.[0]?.field ||
+      'unknown';
+
+    const externalEventId =
+      body?.id ||
+      body?.message_id ||
+      body?.paymentId ||
+      crypto.createHash('sha256').update(`${type}:${eventType}:${rawPayload}`).digest('hex');
+
+    try {
+      await p(this.prisma).webhookEvent.create({
+        data: {
+          integrationId: match.id,
+          externalEventId,
+          eventType,
+          payload: body,
+          status: 'PROCESSED',
+          processedAt: new Date(),
+        },
+      });
+    } catch (err: any) {
+      // Unique violation on (integrationId, externalEventId) → duplicate delivery.
+      if (String(err?.code) === 'P2002') {
+        return { received: true, duplicate: true };
+      }
+      throw err;
+    }
+
+    // Dispatch provider-specific side effects (best-effort, never 500 the webhook).
+    try {
+      if (type === 'STRIPE') {
+        await this.processStripeEvent(match.tenantId, body);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Webhook ${eventType} processing failed for tenant ${match.tenantId}: ${err?.message}`);
+    }
 
     return { received: true };
+  }
+
+  /** Server-side fulfillment of verified Stripe booking payments. */
+  private async processStripeEvent(tenantId: string, event: any) {
+    if (event?.type !== 'payment_intent.succeeded') return;
+    const intent = event?.data?.object;
+    const appointmentId = intent?.metadata?.appointmentId;
+    if (!appointmentId || !intent?.id) return;
+
+    const stripeClient = await this.getTenantStripeClient(tenantId);
+    if (!stripeClient) return;
+
+    // Never trust the webhook payload alone — re-fetch the intent from Stripe.
+    const fresh = await stripeClient.paymentIntents.retrieve(intent.id).catch(() => null);
+    if (!fresh || fresh.status !== 'succeeded' || !fresh.metadata?.appointmentId) return;
+
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, tenantId },
+    });
+    if (!appointment || appointment.paymentStatus === 'PAID') return;
+
+    const expectedPaise = Math.round(Number(appointment.paymentAmount || 0) * 100);
+    if (expectedPaise > 0 && Number(fresh.amount) < expectedPaise) return;
+
+    await this.prisma.$transaction([
+      this.prisma.appointment.update({
+        where: { id: appointmentId },
+        data: { paymentStatus: 'PAID' },
+      }),
+      this.prisma.invoice.updateMany({
+        where: {
+          tenantId,
+          customerId: appointment.customerId,
+          status: 'PENDING',
+          ...(appointment.paymentAmount != null ? { total: appointment.paymentAmount } : {}),
+        },
+        data: { status: 'PAID', paidAt: new Date() },
+      }),
+    ]);
   }
 
   async getOAuthUrl(type: string, redirectUri: string | undefined, user: any) {

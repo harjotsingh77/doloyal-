@@ -750,6 +750,13 @@ export default function BillingPage() {
         disabled={!isOwner}
         onConfirm={(planId) =>
           run(async () => {
+            const target = PLANS.find((p) => p.id === planId);
+            if (target && target.priceMonthly > 0) {
+              // Paid plans must go through Razorpay checkout — never a direct switch.
+              setChangeOpen(false);
+              window.location.href = `/checkout?plan=${planId}&cycle=monthly`;
+              return;
+            }
             await api.changePlan(planId);
             setChangeOpen(false);
           }, "Your plan has been updated")

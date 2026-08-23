@@ -17,6 +17,7 @@ import { BookingAnalyticsService } from './booking-analytics.service';
 import { BookingOrchestratorService } from './booking-orchestrator.service';
 import { AiSchedulingService } from './ai-scheduling.service';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { Public } from '../auth/public.decorator';
 import * as crypto from 'crypto';
 
 class CreateBookingLinkDto {
@@ -190,7 +191,11 @@ class AiOptimizeScheduleDto {
 
 class ConfirmPaymentDto {
   @IsString() @IsNotEmpty() appointmentId: string;
-  @IsString() @IsOptional() status?: string;
+  @IsString() @IsNotEmpty() provider: string;
+  @IsString() @IsOptional() paymentIntentId?: string;
+  @IsString() @IsOptional() razorpayOrderId?: string;
+  @IsString() @IsOptional() razorpayPaymentId?: string;
+  @IsString() @IsOptional() razorpaySignature?: string;
 }
 
 @Controller()
@@ -272,21 +277,25 @@ export class BookingLinksController {
     return this.bookingLinksService.regenerate(user.activeTenantId, id);
   }
 
+  @Public()
   @Get('public/book/:slug')
   getPublicBusinessInfo(@Param('slug') slug: string) {
     return this.bookingLinksService.getPublicBusinessInfo(slug);
   }
 
+  @Public()
   @Get('public/book/:slug/services')
   getPublicServices(@Param('slug') slug: string) {
     return this.bookingLinksService.getPublicServices(slug);
   }
 
+  @Public()
   @Get('public/book/:slug/staff')
   getPublicStaff(@Param('slug') slug: string) {
     return this.bookingLinksService.getPublicStaff(slug);
   }
 
+  @Public()
   @Get('public/book/:slug/slots')
   getPublicSlots(
     @Param('slug') slug: string,
@@ -297,6 +306,7 @@ export class BookingLinksController {
     return this.bookingLinksService.getAvailableSlots(slug, date, serviceId, staffId);
   }
 
+  @Public()
   @Post('public/book/:slug/visit')
   trackVisit(
     @Param('slug') slug: string,
@@ -315,6 +325,7 @@ export class BookingLinksController {
     });
   }
 
+  @Public()
   @Post('public/book/:slug')
   createPublicBooking(
     @Param('slug') slug: string,
@@ -326,13 +337,21 @@ export class BookingLinksController {
     return this.orchestrator.book(slug, dto, { ipHash });
   }
 
+  @Public()
   @Post('public/book/:slug/confirm-payment')
   confirmPublicPayment(@Param('slug') slug: string, @Body() dto: ConfirmPaymentDto) {
     return this.bookingLinksService.findBySlug(slug).then(({ tenant }) =>
-      this.orchestrator.confirmPayment(tenant.id, dto.appointmentId, (dto.status as any) || 'PAID'),
+      this.orchestrator.confirmPayment(tenant.id, dto.appointmentId, {
+        provider: dto.provider as 'STRIPE' | 'RAZORPAY',
+        paymentIntentId: dto.paymentIntentId,
+        razorpayOrderId: dto.razorpayOrderId,
+        razorpayPaymentId: dto.razorpayPaymentId,
+        razorpaySignature: dto.razorpaySignature,
+      }),
     );
   }
 
+  @Public()
   @Get('public/book/:slug/confirm/:bookingId')
   getPublicBookingConfirmation(@Param('slug') slug: string, @Param('bookingId') bookingId: string) {
     return this.bookingLinksService.getBookingConfirmation(slug, bookingId);

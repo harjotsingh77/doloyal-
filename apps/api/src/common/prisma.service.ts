@@ -210,11 +210,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       }
     }
 
-    // Last resort for local demos only — incomplete vs full schema.
-    // Prefer fixing DATABASE_URL / starting Postgres (pnpm db:up).
-    this.logger.error(
-      'Database unreachable after retries. Starting limited in-memory mode. Run `pnpm db:up` for a real Postgres.',
-    );
+    // In-memory mode is an explicit development convenience ONLY. It must
+    // never activate silently: it bypasses tenant-isolation middleware and
+    // holds no transactions. Opt in with DOLOYAL_ALLOW_IN_MEMORY_DB=true.
+    const allowed =
+      process.env.DOLOYAL_ALLOW_IN_MEMORY_DB === 'true' &&
+      process.env.NODE_ENV !== 'production';
+    if (!allowed) {
+      this.logger.error(
+        'Database unreachable after retries. Refusing to start. Fix DATABASE_URL or run `pnpm db:up`.',
+      );
+      throw new Error('Database connection failed and in-memory fallback is disabled');
+    }
+
+    this.logger.warn('Database unreachable — starting LIMITED in-memory demo mode (no tenant isolation).');
     this.inMemory = true;
     this.initStores();
     this.seedDemoData();

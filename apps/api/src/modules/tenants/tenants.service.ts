@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { mapModeToPrisma } from '../../common/helpers';
 
@@ -134,7 +134,7 @@ export class TenantsService {
     return Number.isFinite(value) ? Math.max(0, value as number) : fallback;
   }
 
-  async getById(id: string) {
+  async getById(id: string, opts?: { userId?: string; requireRoles?: string[] }) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id },
       include: {
@@ -151,14 +151,34 @@ export class TenantsService {
       },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
+    if (opts?.userId && opts.requireRoles?.length) {
+      const membership = await this.prisma.membership.findUnique({
+        where: { userId_tenantId: { userId: opts.userId, tenantId: id } },
+      });
+      if (!membership || !opts.requireRoles.includes(membership.role)) {
+        throw new ForbiddenException('You do not have access to this workspace');
+      }
+    }
     return this.mapTenant(tenant);
   }
 
-  async update(id: string, data: Record<string, unknown>) {
-    return this.updateSettings(id, data);
+  async update(id: string, data: Record<string, unknown>, opts?: { userId?: string; requireRoles?: string[] }) {
+    return this.updateSettings(id, data, opts);
   }
 
-  async updateSettings(id: string, data: Record<string, unknown> | object) {
+  async updateSettings(
+    id: string,
+    data: Record<string, unknown> | object,
+    opts?: { userId?: string; requireRoles?: string[] },
+  ) {
+    if (opts?.userId && opts.requireRoles?.length) {
+      const membership = await this.prisma.membership.findUnique({
+        where: { userId_tenantId: { userId: opts.userId, tenantId: id } },
+      });
+      if (!membership || !opts.requireRoles.includes(membership.role)) {
+        throw new ForbiddenException('You do not have access to this workspace');
+      }
+    }
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
