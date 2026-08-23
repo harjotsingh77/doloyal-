@@ -5,6 +5,11 @@ import * as crypto from 'crypto';
 
 export const tenantContext = new AsyncLocalStorage<{ tenantId: string }>();
 
+/**
+ * Models carrying a direct `tenantId`. The Prisma middleware injects the
+ * active tenant into every query against these models — defense in depth
+ * behind explicit service-level scoping.
+ */
 const TENANT_MODELS = new Set([
   'Membership', 'Branch', 'Staff', 'Customer', 'Service',
   'Appointment', 'Invoice', 'LoyaltyConfig', 'PointsLedger',
@@ -15,6 +20,23 @@ const TENANT_MODELS = new Set([
   'ReferralRegistration', 'ReferralSource', 'ReferralLeaderboard',
   'AiConversation', 'AiMessage', 'AiAttachment', 'AiFeedback', 'AiUsage',
   'Workflow', 'WorkflowRun',
+  // Extended coverage (audit pass):
+  'BookingLink', 'BookingLinkVisit',
+  'Notification', 'NotificationTemplate', 'BlockedDate', 'CalendarEvent',
+  'WidgetSettings', 'AvailabilityConfig',
+  // NOTE: WebsitePage/Section/Asset/Domain/Deployment, AIWebsiteGeneration and
+  // SupportAttachment/InternalNote/StatusHistory are grandchild tables without
+  // a direct tenantId — they must be scoped through their parent queries.
+  'Website',
+  'ConnectedWebsite', 'WebsiteApiKey', 'WebsiteWebhook', 'ConnectionLog', 'SdkInstallation',
+  'Integration',
+  'EmailLog', 'ResendDomain',
+  'StaffProfile', 'Invitation', 'EmployeeNote', 'StaffActivityLog',
+  'CashbackTransaction', 'RewardProgramConfig', 'RewardEngagementClaim',
+  'FeatureFlag', 'SubscriptionEvent',
+  'LoyaltyChallenge', 'LoyaltyBadge', 'LoyaltyAutomation', 'SurpriseRewardRule',
+  'LoyaltyFeatureEntity', 'LoyaltyConfigVersion', 'LoyaltyAuditLog',
+  'SupportTicket', 'SupportConversation', 'SupportConversationMessage',
 ]);
 
 const ALL_MODELS = [

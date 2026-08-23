@@ -218,6 +218,20 @@ export class SupportController {
         'Too many uploads. Please try again in a moment.',
       );
     }
+    // Whitelist safe document/image types; SVG and executables are rejected.
+    const allowedMimes = [
+      'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif',
+      'application/pdf', 'text/plain', 'text/csv',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    if (!allowedMimes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Unsupported file type. Allowed: images (PNG/JPEG/WebP/GIF), PDF, TXT, CSV, DOC(X), XLS(X).',
+      );
+    }
     const buffer = await file.toBuffer();
     if (buffer.length > 5 * 1024 * 1024) {
       throw new BadRequestException('File must be under 5MB');

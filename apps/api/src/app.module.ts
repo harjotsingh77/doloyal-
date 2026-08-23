@@ -7,6 +7,7 @@ import { CommonModule } from './common/common.module';
 import { HealthModule } from './common/health.module';
 import { MockAuthGuard } from './common/mock-auth.guard';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
+import { RateLimitGuard } from './common/rate-limit.guard';
 import { TenantContextGuard } from './common/tenant-context.guard';
 import { RolesGuard } from './common/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
@@ -73,6 +74,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     Reflector,
     { provide: APP_GUARD, useClass: MockAuthGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: TenantContextGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

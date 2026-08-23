@@ -218,9 +218,11 @@ export class TenantsService {
     filename: string,
     kind: string,
   ) {
-    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'];
-    if (!allowed.includes(mimetype) && !/\.(png|jpe?g|webp|svg|ico)$/i.test(filename)) {
-      throw new BadRequestException('Unsupported image type');
+    // Raster images only. SVG is rejected: it renders as an inline document
+    // wherever logos appear, making it a stored-XSS vector.
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon'];
+    if (!allowed.includes(mimetype) || !/\.(png|jpe?g|webp|ico)$/i.test(filename)) {
+      throw new BadRequestException('Unsupported image type. Use PNG, JPEG, WebP or ICO.');
     }
     if (buffer.length > 2 * 1024 * 1024) {
       throw new BadRequestException('Image must be under 2MB');

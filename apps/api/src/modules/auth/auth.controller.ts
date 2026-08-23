@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { AuthService, type LoginMeta } from './auth.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from './public.decorator';
+import { RateLimitGuard, RateLimit } from '../../common/rate-limit.guard';
 import { IsString, IsNotEmpty, IsOptional, IsBoolean, MinLength, IsEmail } from 'class-validator';
 import { OAuth2Client } from 'google-auth-library';
 import type { FastifyRequest } from 'fastify';
@@ -52,6 +53,7 @@ class TwoFactorDto {
 }
 
 @Controller('auth')
+@UseGuards(RateLimitGuard)
 export class AuthController {
   private googleClient: OAuth2Client;
 
@@ -67,6 +69,7 @@ export class AuthController {
 
   @Public()
   @Post('signup')
+  @RateLimit(10, 3600)
   async signUp(@Body() dto: SignUpDto) {
     return { data: await this.authService.signUp(dto) };
   }
@@ -74,6 +77,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @RateLimit(15, 900)
   async login(@Body() dto: LoginDto, @Req() req: FastifyRequest) {
     return {
       data: await this.authService.login(dto.email, dto.password, this.requestMeta(req)),
@@ -156,6 +160,7 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
+  @RateLimit(5, 3600)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.requestPasswordReset(dto.email);
   }
@@ -163,6 +168,7 @@ export class AuthController {
   @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
+  @RateLimit(10, 3600)
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
   }
