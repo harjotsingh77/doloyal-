@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import type { AuthUser } from '@doloyal/shared';
 import { StaffService } from '../staff/staff.service';
 
@@ -13,6 +14,7 @@ export type LoginMeta = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -278,9 +280,118 @@ export class AuthService {
     const hashed = await bcrypt.hash(newPassword, 12);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashed, tokenVersion: { increment: 1 } },
+      data: {
+        password: hashed,
+        tokenVersion: { increment: 1 },
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
     });
     return { message: 'Password updated successfully' };
+  }
+
+  /**
+   * Requests a password reset. Always returns success to prevent account
+   * enumeration; only users WITH a password set actually receive an email.
+   */
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const genericMessage =
+      'If an account exists for that email, a reset link has been sent.';
+    if (!normalizedEmail) return { message: genericMessage };
+
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    // No account OR no password auth (Google-only) → pretend success.
+    if (!user || !user.password) return { message: genericMessage };
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expires = new Date(Date.now() + 30 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: hashedToken, passwordResetExpires: expires },
+    });
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const resetUrl = `${appUrl}/forgot-password?token=${rawToken}`;
+    const sent = await this.sendPlatformEmail(
+      user.email,
+      'Reset your Doloyal password',
+      `<p>Hi ${user.firstName || 'there'},</p>
+       <p>We received a request to reset your Doloyal password. This link is valid for <strong>30 minutes</strong> and can be used once.</p>
+       <p><a href="${resetUrl}" style="display:inline-block;background:#2563EB;color:#ffffff;padding:12px 24px;border-radius:999px;font-weight:600;text-decoration:none;">Choose a new password</a></p>
+       <p style="color:#6B7280;font-size:13px;">If you didn't request this, you can safely ignore this email — your password stays unchanged.</p>`,
+      `Reset your Doloyal password: ${resetUrl}`,
+    );
+
+    if (!sent.ok) {
+      this.logger.warn(`Password-reset email failed (${user.email}): ${sent.error}`);
+    }
+    return { message: genericMessage };
+  }
+
+  /** Completes a password reset using a single-use token. */
+  async resetPassword(token: string, newPassword: string) {
+    if (!token) throw new BadRequestException('Reset token is required');
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('New password must be at least 8 characters');
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await this.prisma.user.findFirst({
+      where: { passwordResetToken: hashedToken },
+    });
+    if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      throw new BadRequestException('This reset link is invalid or has expired. Request a new one.');
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashed,
+        tokenVersion: { increment: 1 }, // revoke all existing sessions
+        sessions: [],
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+    return { message: 'Password has been reset. You can now sign in.' };
+  }
+
+  /**
+   * Platform-level transactional email (auth flows). Uses RESEND_API_KEY when
+   * configured; otherwise reports failure so callers can log it.
+   */
+  private async sendPlatformEmail(
+    to: string,
+    subject: string,
+    html: string,
+    text?: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      return { ok: false, error: 'RESEND_API_KEY is not configured on this environment' };
+    }
+    const from = process.env.RESEND_FROM || 'Doloyal <onboarding@resend.dev>';
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from, to, subject, html, ...(text ? { text } : {}) }),
+      });
+      if (!response.ok) {
+        const body: any = await response.json().catch(() => null);
+        return { ok: false, error: body?.message || `Resend returned ${response.status}` };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to reach Resend' };
+    }
   }
 
   async setTwoFactor(userId: string, enabled: boolean) {

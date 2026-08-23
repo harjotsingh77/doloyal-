@@ -789,6 +789,7 @@ export const MOCK: Record<string, (...args: any[]) => any> = {
       period: { from: params?.from || DD(numDays), to: params?.to || DD(0) },
       kpis: {
         todayRevenue: totalRev,
+        periodRevenue: totalRev,
         todayCustomers: totalCust,
         repeatCustomers: repeatCust,
         newCustomers: Math.max(1, totalCust - repeatCust),

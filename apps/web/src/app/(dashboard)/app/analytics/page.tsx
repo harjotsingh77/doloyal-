@@ -38,14 +38,6 @@ const RANGES = [
   { label: "Custom date", value: "custom" },
 ] as const;
 
-const DEFAULT_SERVICES = [
-  { service: "Haircut & Styling", revenue: 184500, customers: 342, growth: 12.4 },
-  { service: "Facial Treatment", revenue: 98200, customers: 156, growth: 8.7 },
-  { service: "Manicure & Pedicure", revenue: 72300, customers: 198, growth: -2.1 },
-  { service: "Massage Therapy", revenue: 65400, customers: 112, growth: 15.3 },
-  { service: "Hair Coloring", revenue: 54100, customers: 89, growth: 5.6 },
-];
-
 export default function AnalyticsPage() {
   const { format: fmt, formatCompact: fmtCompact } = useCurrency();
   const [data, setData] = React.useState<DashboardOverview | null>(null);
@@ -132,13 +124,14 @@ export default function AnalyticsPage() {
   const totalCustomers = trendTotalCustomers || (kpis.todayCustomers + kpis.repeatCustomers + kpis.inactiveCustomers);
   const totalRevenue = trendTotalRevenue || kpis.todayRevenue;
   const avgOrderValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
-  
+
+  // Real ratio from server KPIs — never a fabricated fallback.
   const repeatRate =
     kpis.todayCustomers > 0
       ? (kpis.repeatCustomers / kpis.todayCustomers) * 100
       : totalCustomers > 0
         ? (kpis.repeatCustomers / totalCustomers) * 100
-        : 68.2;
+        : 0;
 
   const healthScore = Math.min(
     100,
@@ -146,7 +139,7 @@ export default function AnalyticsPage() {
       0,
       Math.round(
         (Math.min(repeatRate, 100) / 100) * 35 +
-          (kpis.monthlyGrowthPct > 0 ? Math.min(kpis.monthlyGrowthPct / 2, 25) : 10) +
+          ((kpis.monthlyGrowthPct ?? 0) > 0 ? Math.min((kpis.monthlyGrowthPct as number) / 2, 25) : 10) +
           Math.min(kpis.activeRewards * 4, 20) +
           (kpis.inactiveCustomers === 0 ? 20 : Math.max(20 - kpis.inactiveCustomers, 5))
       )
@@ -159,7 +152,7 @@ export default function AnalyticsPage() {
   } else {
     healthFactors.push({ label: "Repeat rate needs improvement", positive: false });
   }
-  if (kpis.monthlyGrowthPct > 0) {
+  if ((kpis.monthlyGrowthPct ?? 0) > 0) {
     healthFactors.push({ label: "Revenue is growing", positive: true });
   } else {
     healthFactors.push({ label: "Revenue is declining", positive: false });
@@ -183,7 +176,7 @@ export default function AnalyticsPage() {
       ? `${customFrom} – ${customTo}`
       : `Last ${range} days`;
 
-  const topServices = (data as any).topServices || DEFAULT_SERVICES;
+  const topServices = (data as any).topServices ?? [];
 
   return (
     <div className="space-y-6">
@@ -236,7 +229,7 @@ export default function AnalyticsPage() {
           label="Total Revenue"
           value={totalRevenue}
           format={(v) => fmt(v)}
-          delta={kpis.monthlyGrowthPct}
+          delta={kpis.monthlyGrowthPct ?? undefined}
           deltaSuffix="vs last period"
         />
         <KpiCard
@@ -302,6 +295,14 @@ export default function AnalyticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 p-0">
+            {topServices.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-1 px-6 py-12 text-center">
+                <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">No service revenue yet</p>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                  Create paid invoices for services in this period to see your top performers.
+                </p>
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -320,20 +321,25 @@ export default function AnalyticsPage() {
                     <TableCell className="text-right">{fmt(s.revenue)}</TableCell>
                     <TableCell className="text-right">{s.customers}</TableCell>
                     <TableCell className="pr-6 text-right">
-                      <span
-                        className={`font-medium ${
-                          s.growth >= 0
-                            ? "text-[rgb(var(--color-success))]"
-                            : "text-[rgb(var(--color-danger))]"
-                        }`}
-                      >
-                        {s.growth >= 0 ? `+${s.growth.toFixed(1)}%` : `${s.growth.toFixed(1)}%`}
-                      </span>
+                      {s.growth === null || s.growth === undefined ? (
+                        <span className="text-[rgb(var(--color-muted-foreground))]">—</span>
+                      ) : (
+                        <span
+                          className={`font-medium ${
+                            s.growth >= 0
+                              ? "text-[rgb(var(--color-success))]"
+                              : "text-[rgb(var(--color-danger))]"
+                          }`}
+                        >
+                          {s.growth >= 0 ? `+${Number(s.growth).toFixed(1)}%` : `${Number(s.growth).toFixed(1)}%`}
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
 

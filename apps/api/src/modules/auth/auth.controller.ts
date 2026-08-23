@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, HttpCode, HttpStatus, Req, UnauthorizedExc
 import { AuthService, type LoginMeta } from './auth.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from './public.decorator';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, MinLength, IsEmail } from 'class-validator';
 import { OAuth2Client } from 'google-auth-library';
 import type { FastifyRequest } from 'fastify';
 
@@ -17,6 +17,15 @@ class SignUpDto {
 class LoginDto {
   @IsString() @IsNotEmpty() email: string;
   @IsString() @IsNotEmpty() password: string;
+}
+
+class ForgotPasswordDto {
+  @IsEmail() email: string;
+}
+
+class ResetPasswordDto {
+  @IsString() @IsNotEmpty() token: string;
+  @IsString() @MinLength(8) newPassword: string;
 }
 
 class GoogleLoginDto {
@@ -142,6 +151,20 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async switchTenant(@Body() dto: SwitchTenantDto, @CurrentUser() user: any) {
     return this.authService.switchTenant(user.id, dto.tenantId);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 
   @Post('change-password')

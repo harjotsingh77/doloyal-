@@ -915,6 +915,7 @@ export interface DashboardOverview {
   period: { from: string; to: string };
   kpis: {
     todayRevenue: number;
+    periodRevenue: number;
     todayCustomers: number;
     repeatCustomers: number;
     newCustomers: number;
@@ -924,7 +925,8 @@ export interface DashboardOverview {
     membershipSales30d: number;
     appointmentsToday: number;
     pendingReviews: number;
-    monthlyGrowthPct: number; // revenue vs previous period
+    /** null when no prior-period baseline exists yet */
+    monthlyGrowthPct: number | null;
   };
   revenueTrend: KpiPoint[]; // last 30 days
   customerTrend: KpiPoint[]; // last 30 days
@@ -933,7 +935,7 @@ export interface DashboardOverview {
     "id" | "name" | "phone" | "lifetimeValue" | "visitCount" | "loyaltyBand" | "churnRisk"
   >[];
   topRewards: Pick<Reward, "id" | "name" | "pointsCost" | "redeemedCount">[];
-  topServices?: { service: string; revenue: number; customers: number; growth: number }[];
+  topServices?: { service: string; revenue: number; customers: number; growth: number | null }[];
   recentActivity: ActivityEntry[];
 }
 

@@ -213,6 +213,9 @@ model User {
   twoFactorEnabled Boolean  @default(false)
   tokenVersion     Int      @default(0)
   sessions         Json?
+  /// Hashed single-use password-reset token + expiry (30 min). Null when idle.
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
   /// Whether this user is part of the Doloyal team and may access the
   /// internal Website Services admin panel.
   isAdmin          Boolean  @default(false)

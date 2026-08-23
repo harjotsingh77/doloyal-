@@ -1701,7 +1701,7 @@ function DetailContent({
       </div>
 
       <DialogFooter>
-        <Button variant="secondary" onClick={() => {}}>
+        <Button variant="secondary" onClick={() => onClose?.()}>
           Close
         </Button>
       </DialogFooter>

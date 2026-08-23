@@ -191,71 +191,29 @@ export default function DashboardPage() {
     let diffDays = Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1;
     if (isNaN(diffDays) || diffDays <= 0) diffDays = 30;
 
-    const trendMapRevenue = new Map<string, number>();
-    const trendMapCustomers = new Map<string, number>();
-
-    if (data.revenueTrend) {
-      data.revenueTrend.forEach((item) => trendMapRevenue.set(item.date, item.revenue));
-    }
-    if (data.customerTrend) {
-      data.customerTrend.forEach((item) => trendMapCustomers.set(item.date, item.customers));
-    }
-
-    const generatedRevenueTrend: { date: string; revenue: number }[] = [];
-    const generatedCustomerTrend: { date: string; customers: number }[] = [];
-
-    let totalPeriodRevenue = 0;
-    let totalPeriodCustomers = 0;
-
-    const curr = new Date(startDate);
-    for (let i = 0; i < Math.min(365, diffDays); i++) {
-      const ymd = toYMD(curr);
-
-      let rev = trendMapRevenue.get(ymd);
-      let cust = trendMapCustomers.get(ymd);
-
-      if (rev === undefined) {
-        const hash = ymd.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const isWeekend = curr.getDay() === 0 || curr.getDay() === 6;
-        rev = (hash % 18 + 10) * 120 + (isWeekend ? 1800 : 0);
-      }
-      if (cust === undefined) {
-        cust = Math.max(1, Math.round(rev / 1150));
-      }
-
-      generatedRevenueTrend.push({ date: ymd, revenue: rev });
-      generatedCustomerTrend.push({ date: ymd, customers: cust });
-
-      totalPeriodRevenue += rev;
-      totalPeriodCustomers += cust;
-
-      curr.setDate(curr.getDate() + 1);
-    }
-
-    const periodNewCustomers = Math.max(1, Math.round(totalPeriodCustomers * 0.35));
-    const periodRepeatCustomers = Math.max(1, totalPeriodCustomers - periodNewCustomers);
-    const periodRepeatRate = totalPeriodCustomers > 0
-      ? Math.round((periodRepeatCustomers / totalPeriodCustomers) * 100)
-      : 0;
-
-    const periodPointsRedeemed = Math.round(totalPeriodRevenue * 0.12);
-    const periodAppointments = Math.max(1, Math.round(totalPeriodCustomers * 0.65));
-    const periodMembershipSales = Math.round(totalPeriodRevenue * 0.25);
-    const periodGrowthPct = Math.round(((totalPeriodRevenue - (totalPeriodRevenue * 0.82)) / (totalPeriodRevenue * 0.82)) * 100);
+    // Real server-computed series only. Missing days are genuine zero-revenue
+    // days — never fabricated.
+    const revenueTrend = (data.revenueTrend ?? []).map((item) => ({
+      date: item.date,
+      revenue: item.revenue,
+    }));
+    const customerTrend = (data.customerTrend ?? []).map((item) => ({
+      date: item.date,
+      customers: item.customers,
+    }));
 
     return {
       diffDays,
-      revenueTrend: generatedRevenueTrend,
-      customerTrend: generatedCustomerTrend,
-      periodRevenue: totalPeriodRevenue,
-      periodCustomers: totalPeriodCustomers,
-      periodRepeatCustomers,
-      periodNewCustomers,
-      periodRepeatRate,
-      periodPointsRedeemed,
-      periodAppointments,
-      periodMembershipSales,
-      periodGrowthPct,
+      revenueTrend,
+      customerTrend,
+      periodRevenue: data.kpis?.periodRevenue ?? data.kpis?.todayRevenue ?? 0,
+      periodCustomers: data.kpis?.newCustomers ?? 0,
+      periodRepeatCustomers: data.kpis?.repeatCustomers ?? 0,
+      periodNewCustomers: data.kpis?.newCustomers ?? 0,
+      periodPointsRedeemed: data.kpis?.pointsRedeemed30d ?? 0,
+      periodAppointments: data.kpis?.appointmentsToday ?? 0,
+      periodMembershipSales: data.kpis?.membershipSales30d ?? 0,
+      periodGrowthPct: data.kpis?.monthlyGrowthPct ?? null,
     };
   }, [data, fromDate, toDate]);
 
@@ -299,13 +257,20 @@ export default function DashboardPage() {
     periodCustomers,
     periodRepeatCustomers,
     periodNewCustomers,
-    periodRepeatRate,
     periodPointsRedeemed,
     periodAppointments,
     periodMembershipSales,
     periodGrowthPct,
     diffDays,
   } = dynamicMetrics;
+
+  // Real ratio from server-computed values — never fabricated.
+  const periodRepeatRate =
+    periodCustomers > 0
+      ? Math.round((periodRepeatCustomers / periodCustomers) * 100)
+      : 0;
+  const growthLabel =
+    periodGrowthPct === null ? "—" : formatPercent(periodGrowthPct);
 
   return (
     <div className="space-y-6">
@@ -326,7 +291,7 @@ export default function DashboardPage() {
         actions={
           <Badge variant="primary">
             <TrendingUp className="h-3.5 w-3.5" />
-            {formatPercent(periodGrowthPct)} vs last period
+            {growthLabel} vs last period
           </Badge>
         }
       />
@@ -335,18 +300,20 @@ export default function DashboardPage() {
         <InsightCard
           icon={<Wand2 className="h-5 w-5" />}
           title="AI Revenue Insight"
-          badge={periodGrowthPct >= 0 ? "Growing" : "Declining"}
-          badgeVariant={periodGrowthPct >= 0 ? "success" : "danger"}
+          badge={periodGrowthPct === null ? "New" : periodGrowthPct >= 0 ? "Growing" : "Declining"}
+          badgeVariant={periodGrowthPct === null ? "accent" : periodGrowthPct >= 0 ? "success" : "danger"}
         >
           <p className="text-sm text-[rgb(var(--color-foreground))]">
-            {periodGrowthPct >= 0
+            {periodGrowthPct === null
+              ? `No prior-period baseline yet. Revenue for this ${diffDays}-day window is ${fmt(periodRevenue)} across ${periodCustomers} customers. Growth tracking unlocks once the previous period has data.`
+              : periodGrowthPct >= 0
               ? `Revenue is trending up ${formatPercent(periodGrowthPct)} over this ${diffDays}-day period (${fromDate} to ${toDate}). Total revenue of ${fmt(periodRevenue)} is driven by ${periodCustomers} customers.`
               : `Revenue declined ${formatPercent(Math.abs(periodGrowthPct))} in this period. Consider launching a win-back campaign to re-engage inactive customers.`}
           </p>
           <div className="mt-3 flex items-center gap-4 text-xs text-[rgb(var(--color-muted-foreground))]">
             <span>Period Revenue: {fmt(periodRevenue)}</span>
             <span className="h-3 w-px bg-[rgb(var(--color-border))]" />
-            <span>Growth: {formatPercent(periodGrowthPct)}</span>
+            <span>Growth: {growthLabel}</span>
           </div>
         </InsightCard>
 
@@ -374,7 +341,7 @@ export default function DashboardPage() {
           label={`Revenue (${diffDays}d)`}
           value={periodRevenue}
           format={(v) => fmt(v)}
-          delta={periodGrowthPct}
+          delta={periodGrowthPct ?? undefined}
           icon={<DollarSign className="h-5 w-5" />}
           accent="primary"
         />

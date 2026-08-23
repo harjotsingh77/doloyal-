@@ -709,11 +709,21 @@ export default function InvoicesPage() {
   const handleWordFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !["doc", "docx"].includes(ext)) {
+      toast.error("Please choose a Word document (.doc or .docx).");
+      e.target.value = "";
+      return;
+    }
     setWordFileName(file.name);
     if (!tplName) {
       setTplName(file.name.replace(/\.[^/.]+$/, ""));
     }
-    toast.success(`Uploaded Word file "${file.name}". Template placeholders extracted!`);
+    // Honest behavior: the reference file is stored with the template for your
+    // own use — it does not modify template fields. Adjust the fields manually.
+    toast.info(
+      `Reference file "${file.name}" attached. Set title, colors and terms below to match it.`,
+    );
   };
 
   // AI Template Generator state

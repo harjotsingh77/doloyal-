@@ -17,7 +17,6 @@ import {
   ThumbsUp,
   ThumbsDown,
   Share2,
-  Volume2,
   Plus,
   Search,
   Trash2,
@@ -888,9 +887,6 @@ export default function AssistantPage() {
                               }}
                             >
                               <Share2 className="h-3.5 w-3.5" />
-                            </IconBtn>
-                            <IconBtn label="Read aloud (coming soon)" disabled>
-                              <Volume2 className="h-3.5 w-3.5" />
                             </IconBtn>
                           </div>
                         ) : null}
