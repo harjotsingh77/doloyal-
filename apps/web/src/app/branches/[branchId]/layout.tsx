@@ -74,6 +74,12 @@ export default function BranchWorkspaceLayout({
     setMobileOpen(false);
   }, [pathname]);
 
+  // Stable handlers keep the memoized Sidebar from re-rendering on
+  // unrelated layout updates.
+  const toggleCollapsed = React.useCallback(() => setCollapsed((c) => !c), []);
+  const openMobile = React.useCallback(() => setMobileOpen(true), []);
+  const closeMobile = React.useCallback(() => setMobileOpen(false), []);
+
   if (!authorized || !branch) return null;
 
   return (
@@ -82,16 +88,16 @@ export default function BranchWorkspaceLayout({
         <div className="flex h-screen overflow-hidden bg-[rgb(var(--color-background))]">
         <Sidebar
           collapsed={collapsed}
-          onToggle={() => setCollapsed(!collapsed)}
+          onToggle={toggleCollapsed}
           mobileOpen={mobileOpen}
-          onMobileClose={() => setMobileOpen(false)}
+          onMobileClose={closeMobile}
         />
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 lg:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <button
-                onClick={() => setMobileOpen(true)}
+                onClick={openMobile}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] transition-colors lg:hidden"
               >
                 <Menu className="h-4.5 w-4.5" />

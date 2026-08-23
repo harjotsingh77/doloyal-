@@ -108,7 +108,7 @@ export default function FeaturesPage() {
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
             <Link
-              href="/sign-up"
+              href="/checkout?plan=free-trial"
               className="group flex items-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5"
             >
               <TextRoll>Start 1 Month Free</TextRoll>

@@ -256,15 +256,15 @@ export default function RewardsPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {loading && !overview
           ? Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 rounded-2xl" />
+              <Skeleton key={i} className="h-[68px] rounded-2xl" />
             ))
           : stats.map((s) => (
               <div
                 key={s.label}
-                className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
               >
-                <p className="text-xs text-slate-500">{s.label}</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                <p className="truncate text-xs text-slate-500">{s.label}</p>
+                <p className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">
                   {s.value}
                 </p>
               </div>

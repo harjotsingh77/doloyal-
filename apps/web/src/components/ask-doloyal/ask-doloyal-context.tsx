@@ -30,10 +30,23 @@ export function AskDoloyalProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   // Refresh on mount + poll every 30s so a human reply bumps the badge.
+  // Polling is skipped while the tab is hidden (background tabs shouldn't
+  // generate network traffic); a refresh runs when the tab becomes visible.
   React.useEffect(() => {
     void refreshUnread();
-    const t = setInterval(() => void refreshUnread(), 30_000);
-    return () => clearInterval(t);
+    const t = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        void refreshUnread();
+      }
+    }, 30_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refreshUnread();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [refreshUnread]);
 
   // Re-check when the window regains focus (tab switch).

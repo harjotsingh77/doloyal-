@@ -209,7 +209,7 @@ export default function CampaignsPage() {
         <h3 className="mt-4 text-lg font-semibold">Failed to load campaigns</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{error}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => void load()}
           className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
         >
           Try again

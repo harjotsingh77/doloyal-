@@ -57,6 +57,7 @@ export default function BookingAnalyticsPage() {
   const [data, setData] = React.useState<BookingAnalytics | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [retryToken, setRetryToken] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -76,7 +77,7 @@ export default function BookingAnalyticsPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [retryToken]);
 
   if (error) {
     return (
@@ -86,7 +87,7 @@ export default function BookingAnalyticsPage() {
         </div>
         <h3 className="mt-4 text-lg font-semibold">Failed to load booking analytics</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{error}</p>
-        <Button variant="ghost" className="mt-5" onClick={() => window.location.reload()}>
+        <Button variant="ghost" className="mt-5" onClick={() => setRetryToken((t) => t + 1)}>
           Try again
         </Button>
       </div>

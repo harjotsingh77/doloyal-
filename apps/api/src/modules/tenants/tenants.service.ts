@@ -270,6 +270,7 @@ export class TenantsService {
     return {
       id: tenant.id,
       name: tenant.name,
+      slug: tenant.slug,
       category: tenant.category,
       phone: tenant.phone || '',
       email: tenant.email || '',
@@ -301,6 +302,7 @@ export class TenantsService {
       notificationPrefs: this.mergeJsonDefaults(tenant.notificationPrefs, notificationDefaults),
       onboardingComplete: tenant.onboardingComplete,
       createdAt: tenant.createdAt?.toISOString?.() ?? tenant.createdAt,
+      updatedAt: tenant.updatedAt?.toISOString?.() ?? tenant.updatedAt,
       _count: tenant._count,
       loyaltyConfig: tenant.loyaltyConfig,
       subscriptions: tenant.subscriptions,

@@ -52,6 +52,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [range, setRange] = React.useState("30");
+  const [retryToken, setRetryToken] = React.useState(0);
   const [customFrom, setCustomFrom] = React.useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -85,7 +86,7 @@ export default function AnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [range, customFrom, customTo]);
+  }, [range, customFrom, customTo, retryToken]);
 
   if (error) {
     return (
@@ -98,7 +99,7 @@ export default function AnalyticsPage() {
           {error}
         </p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => setRetryToken((t) => t + 1)}
           className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
         >
           Try again

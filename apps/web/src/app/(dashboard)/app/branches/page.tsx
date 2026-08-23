@@ -122,23 +122,26 @@ export default function BranchesPage() {
   const [form, setForm] = React.useState<FormState>(defaultForm);
   const [saving, setSaving] = React.useState(false);
 
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const stored = localStorage.getItem("doloyal_branches");
-        if (stored) {
-          setBranches(JSON.parse(stored));
-        } else {
-          setBranches(initialBranches);
-        }
-      } catch {
-        setError("Failed to load branches");
-      } finally {
-        setLoading(false);
+  const load = React.useCallback(() => {
+    try {
+      const stored = localStorage.getItem("doloyal_branches");
+      if (stored) {
+        setBranches(JSON.parse(stored));
+      } else {
+        setBranches(initialBranches);
       }
-    }, 600);
-    return () => clearTimeout(timer);
+      setError(null);
+    } catch {
+      setError("Failed to load branches");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  React.useEffect(() => {
+    const timer = setTimeout(load, 600);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   const persist = React.useCallback((updated: Branch[]) => {
     setBranches(updated);
@@ -192,7 +195,7 @@ export default function BranchesPage() {
         <h3 className="mt-4 text-lg font-semibold">Failed to load branches</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{error}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={load}
           className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
         >
           Try again

@@ -35,7 +35,8 @@ export function PageHeader({ title, description, actions, breadcrumbs, className
           {title}
         </h1>
         {description ? (
-          <p className="max-w-2xl text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
+          // div (not p) — callers may pass block content like pickers.
+          <div className="max-w-2xl text-sm text-[rgb(var(--color-muted-foreground))]">{description}</div>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

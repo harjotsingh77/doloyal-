@@ -1,27 +1,26 @@
 "use client";
 
-import * as React from "react";
-import { api } from "@/lib/api";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
+import { useTenant } from "@/lib/tenant-query";
 import { useCurrency } from "@/lib/currency-context";
 
-/** Loads the tenant's saved currency from the backend on app start. */
+/**
+ * Loads the tenant's saved currency from the cached tenant query on app start.
+ * Shares the same React Query entry as the Settings pages, so the tenant is
+ * fetched at most once per stale window no matter how many consumers exist.
+ */
 export function TenantCurrencySync() {
   const { isAuthenticated, isLoading } = useAuth();
   const { setCurrency } = useCurrency();
+  const { data: tenant } = useTenant();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-
-    api
-      .getTenant()
-      .then((tenant) => {
-        if (tenant.currency) setCurrency(tenant.currency);
-      })
-      .catch(() => {
-        // Keep localStorage currency if tenant fetch fails temporarily.
-      });
-  }, [isAuthenticated, isLoading, setCurrency]);
+    if (tenant?.currency) setCurrency(tenant.currency);
+    // Keep localStorage in sync for the pre-hydration currency bootstrap.
+    if (tenant?.currency) localStorage.setItem("doloyal_currency", tenant.currency);
+  }, [isLoading, isAuthenticated, tenant?.currency, setCurrency]);
 
   return null;
 }

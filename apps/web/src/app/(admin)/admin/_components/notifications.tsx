@@ -39,8 +39,18 @@ export function AdminNotifications() {
 
   React.useEffect(() => {
     void load();
-    const id = setInterval(() => void load(), 60_000);
-    return () => clearInterval(id);
+    // Skip polling while the tab is hidden; refresh when it becomes visible.
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 60_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [load]);
 
   React.useEffect(() => {

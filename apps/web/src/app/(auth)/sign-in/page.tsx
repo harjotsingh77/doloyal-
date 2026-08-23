@@ -68,7 +68,9 @@ export default function SignInPage() {
         className="w-full max-w-sm"
       >
         <div className="mb-8 flex flex-col items-center">
-          <Logo size={36} />
+          <Link href="/" aria-label="Go to homepage" className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-primary))]">
+            <Logo size={36} />
+          </Link>
           <h1 className="mt-6 text-xl font-semibold tracking-tight">Welcome back</h1>
           <p className="mt-1.5 text-sm text-[rgb(var(--color-muted-foreground))]">
             Sign in to your doloyal AI account

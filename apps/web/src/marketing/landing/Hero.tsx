@@ -4,7 +4,7 @@ import * as React from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, Search, Bell, Menu, Calendar, ArrowUpRight, ChevronDown } from "lucide-react";
 import { TextRoll } from "./ui";
-import { useWaitlistModal } from "../components/waitlist-modal";
+import Link from "next/link";
 
 /* ── tiny SVG sparkline component ── */
 function Sparkline({ color, points }: { color: string; points: number[] }) {
@@ -151,7 +151,6 @@ function StatIcon({ color, children }: { color: string; children: React.ReactNod
 /* ════════════════════════ MAIN HERO ════════════════════════ */
 
 export function HeroContent() {
-  const { openWaitlistModal } = useWaitlistModal();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -237,15 +236,15 @@ export function HeroContent() {
           transition={{ duration: 0.7, delay: 0.3 }}
           className="mt-8 sm:mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 w-full max-w-xs sm:max-w-none mx-auto"
         >
-          <button
-            onClick={openWaitlistModal}
+          <Link
+            href="/checkout?plan=free-trial"
             className="group flex w-full sm:w-auto items-center justify-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text-sm sm:text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5 active:scale-95"
           >
             <TextRoll>Start 1 Month Free</TextRoll>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#232529] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:rotate-45 group-hover:translate-x-0.5">
               <ArrowRight className="h-4 w-4 stroke-[2.5]" />
             </div>
-          </button>
+          </Link>
           <a href="/book-demo" className="group flex items-center justify-center gap-2 px-4 py-3 text-sm sm:text-[15px] font-semibold text-[#1F242B] hover:text-[#2563EB] transition-colors">
             <TextRoll>Book a Demo</TextRoll>
             <ArrowRight className="h-4 w-4 stroke-[2.5] transition-transform duration-300 group-hover:translate-x-1" />

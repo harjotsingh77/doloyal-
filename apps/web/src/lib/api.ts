@@ -20,7 +20,6 @@ import type {
   UpdateAvailabilityInput, BlockDateInput,
 } from "@doloyal/shared";
 import type { ApiResponse, Paginated } from "@doloyal/shared";
-import { MOCK } from "./mock-data";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 
 const BASE_URL = getApiBaseUrl();
@@ -82,12 +81,24 @@ const DEMO_MODE =
   process.env.NODE_ENV !== "production" ||
   process.env.NEXT_PUBLIC_ALLOW_DEMO_AUTH === "true";
 
+/**
+ * The mock dataset (~2.6k lines) is loaded through a dynamic import so it
+ * never lands in the initial bundle of any page. In production the chunk is
+ * never requested at all; in dev/demo mode the one-time load is negligible.
+ */
+let mockModulePromise: Promise<typeof import("./mock-data")> | null = null;
+function loadMockModule() {
+  if (!mockModulePromise) mockModulePromise = import("./mock-data");
+  return mockModulePromise;
+}
+
 async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mockArgs: any[]): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
   const useMock =
     DEMO_MODE && (!token || token === "mock-token" || token === "demo-token");
 
   if (useMock) {
+    const { MOCK } = await loadMockModule();
     const mockFn = MOCK[mockKey];
     if (mockFn) return mockFn(...mockArgs) as T;
   }
@@ -96,6 +107,7 @@ async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mo
     return await apiCall();
   } catch (err) {
     if (!DEMO_MODE) throw err;
+    const { MOCK } = await loadMockModule();
     const mockFn = MOCK[mockKey];
     if (mockFn) {
       console.warn(`API request for "${mockKey}" failed, falling back to mock data:`, err);
@@ -951,6 +963,61 @@ export const api = {
 
   updatePaymentMethod: (data: SubscriptionPaymentMethod) =>
     withFallback(() => request<SubscriptionPaymentMethod>("/memberships/subscription/payment-method", { method: "PUT", body: JSON.stringify(data) }), "updatePaymentMethod", data),
+
+  // ─── Checkout (real payments — never mocked) ──────────────────────────────
+
+  /** Current subscription without demo/mock fallback — checkout must see the truth. */
+  getSubscriptionStrict: () =>
+    request<BillingSubscription | null>("/memberships/subscription"),
+
+  createCheckoutSession: (plan: string, cycle: "monthly" | "yearly") =>
+    request<{
+      orderId: string;
+      amount: number;
+      currency: string;
+      keyId: string | null;
+      plan: string;
+      planName: string;
+      cycle: "monthly" | "yearly";
+      prefill: { email: string | null; name: string | null };
+    }>("/checkout/session", {
+      method: "POST",
+      body: JSON.stringify({ plan, cycle }),
+    }),
+
+  verifyCheckoutPayment: (data: {
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+    planId: string;
+    cycle: "monthly" | "yearly";
+  }) =>
+    request<{
+      success: boolean;
+      plan: string;
+      planName: string;
+      status: string;
+      transactionId: string;
+      orderId: string;
+      amount: number;
+      currency: string;
+      currentPeriodStart: string;
+      nextBillingDate: string;
+    }>("/checkout/verify", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  activateFreeTrial: () =>
+    request<{
+      success: boolean;
+      plan: string;
+      planName: string;
+      status: string;
+      trialEndsAt: string | null;
+      nextBillingDate?: string;
+      alreadyActive?: boolean;
+    }>("/checkout/trial", { method: "POST", body: JSON.stringify({}) }),
 
   // ─── Doloyal AI Assistant (live) ────────────────────────────────────────────
   chatWithAssistant: (data: AssistantMessageInput) =>

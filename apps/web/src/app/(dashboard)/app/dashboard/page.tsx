@@ -141,6 +141,7 @@ export default function DashboardPage() {
   const [data, setData] = React.useState<DashboardOverview | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [retryToken, setRetryToken] = React.useState(0);
 
   const defaultEnd = new Date();
   const defaultStart = new Date(defaultEnd.getTime() - 30 * 86400000);
@@ -171,7 +172,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retryToken]);
 
   const dynamicMetrics = React.useMemo(() => {
     if (!data) return null;
@@ -269,7 +270,7 @@ export default function DashboardPage() {
           {error}
         </p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => setRetryToken((t) => t + 1)}
           className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
         >
           Try again

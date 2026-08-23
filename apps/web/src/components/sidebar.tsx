@@ -3,7 +3,31 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import * as Lucide from "lucide-react";
+import {
+  BarChart3,
+  Bot,
+  CalendarDays,
+  CircleHelp,
+  CreditCard,
+  Crown,
+  FileText,
+  Gift,
+  Globe,
+  IdCard,
+  LayoutDashboard,
+  Link as LinkIcon,
+  Link2,
+  Megaphone,
+  Puzzle,
+  Settings,
+  Settings2,
+  Share2,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  Users,
+  Workflow,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { APP_NAV_GROUPS } from "@doloyal/shared";
 import { cn } from "@doloyal/ui";
@@ -11,11 +35,38 @@ import { Badge } from "@doloyal/ui";
 import { useBranch } from "@/lib/branch-context";
 import { useAuth } from "@/lib/auth";
 
+/**
+ * Explicit icon registry for nav items referenced by name in
+ * APP_NAV_GROUPS. A static map (instead of `import * as Lucide`) keeps
+ * every icon tree-shakeable so the whole icon library is never bundled.
+ */
+const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  LayoutDashboard,
+  BarChart3,
+  Bot,
+  Users,
+  CalendarDays,
+  Link: LinkIcon,
+  Sparkles,
+  Gift,
+  Crown,
+  Share2,
+  Megaphone,
+  Workflow,
+  Globe,
+  Link2,
+  FileText,
+  IdCard,
+  Store,
+  Puzzle,
+  Settings,
+  Settings2,
+  CreditCard,
+  CircleHelp,
+};
+
 function DynamicIcon({ name, className }: { name: string; className?: string }) {
-  const iconName = name as keyof typeof Lucide;
-  const IconComponent = Lucide[iconName] as React.ComponentType<{
-    className?: string;
-  }> | undefined;
+  const IconComponent = NAV_ICONS[name];
   if (!IconComponent) return null;
   return <IconComponent className={className} />;
 }
@@ -48,7 +99,7 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
-export function Sidebar({
+export const Sidebar = React.memo(function Sidebar({
   collapsed,
   onToggle,
   mobileOpen,
@@ -140,6 +191,7 @@ export function Sidebar({
                   <li key={item.href}>
                     <Link
                       href={item.badge === "soon" ? "#" : href}
+                      prefetch={item.badge === "soon" ? undefined : true}
                       onClick={(e) => {
                         if (item.badge === "soon") e.preventDefault();
                         onMobileClose?.();
@@ -203,6 +255,7 @@ export function Sidebar({
             ) : null}
             <Link
               href="/admin"
+              prefetch
               onClick={() => onMobileClose?.()}
               className={cn(
                 "group relative flex items-center gap-3 rounded-[0.625rem] px-3 py-2.5 text-sm font-medium transition-colors",
@@ -213,7 +266,7 @@ export function Sidebar({
               )}
             >
               <span className="relative z-10">
-                <Lucide.ShieldCheck className={cn("h-4.5 w-4.5 shrink-0 text-[rgb(var(--color-primary))]", collapsed && "h-5 w-5")} />
+                <ShieldCheck className={cn("h-4.5 w-4.5 shrink-0 text-[rgb(var(--color-primary))]", collapsed && "h-5 w-5")} />
               </span>
               {!collapsed && <span className="relative z-10 truncate font-semibold">Admin Panel</span>}
             </Link>
@@ -234,7 +287,7 @@ export function Sidebar({
             className="flex items-center justify-center"
             title="Settings"
           >
-            <Lucide.Settings className="h-5 w-5 text-[rgb(var(--color-muted-foreground))]" />
+            <Settings className="h-5 w-5 text-[rgb(var(--color-muted-foreground))]" />
           </Link>
         ) : (
           <div className="flex items-center justify-between">
@@ -242,7 +295,7 @@ export function Sidebar({
               Doloyal AI SaaS
             </span>
             <Link href="/app/settings" title="Settings">
-              <Lucide.Settings className="h-4.5 w-4.5 text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))] transition-colors" />
+              <Settings className="h-4.5 w-4.5 text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))] transition-colors" />
             </Link>
           </div>
         )}
@@ -281,4 +334,4 @@ export function Sidebar({
       </AnimatePresence>
     </>
   );
-}
+});

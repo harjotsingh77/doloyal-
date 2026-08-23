@@ -43,6 +43,7 @@ import type {
 export interface Tenant {
   id: string;
   name: string;
+  slug?: string;
   category: BusinessCategory;
   phone: string;
   email: string;
@@ -74,9 +75,30 @@ export interface Tenant {
   notificationPrefs?: NotificationPrefsSettings | null;
   onboardingComplete: boolean;
   createdAt: string;
+  /** Last time any tenant setting was persisted (drives "last updated" UI). */
+  updatedAt?: string;
+}
+
+export interface BusinessDayHours {
+  /** Opening time, "HH:mm". */
+  open?: string;
+  /** Closing time, "HH:mm". */
+  close?: string;
+  /** Break window start, "HH:mm". */
+  breakStart?: string;
+  /** Break window end, "HH:mm". */
+  breakEnd?: string;
+  /** False when the business is closed this day. */
+  isAvailable?: boolean;
 }
 
 export interface BusinessHoursSettings {
+  /**
+   * Canonical per-day schedule keyed by weekday name ("Monday"…). This is the
+   * shape rendered on public booking pages.
+   */
+  days?: Record<string, BusinessDayHours | null> | null;
+  // ── Legacy summary fields kept in sync for older consumers. ──
   openingTime?: string;
   closingTime?: string;
   weeklyOff?: string[];

@@ -20,7 +20,7 @@ const PRICING_PLANS = [
     period: "1 Month Free",
     desc: "Try all features with full access to test Doloyal for your business.",
     cta: "Start 1 Month Free",
-    href: "/sign-up",
+    href: "/checkout?plan=free-trial",
     popular: false,
     features: [
       "Full platform access (1 Month Free)",
@@ -38,7 +38,7 @@ const PRICING_PLANS = [
     period: "/month, billed yearly",
     desc: "For single-location businesses getting started with customer retention.",
     cta: "Choose Starter",
-    href: "/sign-up",
+    href: "/checkout?plan=starter",
     popular: false,
     features: [
       "Up to 500 customers",
@@ -61,7 +61,7 @@ const PRICING_PLANS = [
     period: "/month, billed yearly",
     desc: "For growing businesses that need automation and deeper customer retention.",
     cta: "Choose Growth",
-    href: "/sign-up",
+    href: "/checkout?plan=growth",
     popular: true,
     features: [
       "Everything in Starter",

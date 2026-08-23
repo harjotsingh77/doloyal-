@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import nextDynamic from "next/dynamic";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
@@ -46,7 +47,6 @@ import type {
 } from "@doloyal/shared";
 
 import { api } from "@/lib/api";
-import { WorkflowCanvas } from "./workflow-canvas";
 import {
   ensureTriggerNode,
   triggerLabel,
@@ -55,6 +55,25 @@ import {
   topologicalOrder,
   type NodePositions,
 } from "./workflow-graph";
+
+/**
+ * The React Flow canvas (and its d3-zoom/d3-drag dependency chain) is the
+ * heaviest part of this page. Loading it dynamically keeps it out of the
+ * initial route bundle; the fallback mirrors the canvas container so there
+ * is no layout shift while the chunk arrives.
+ */
+const WorkflowCanvas = nextDynamic(
+  () => import("./workflow-canvas").then((m) => m.WorkflowCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-white">
+        <Loader2 className="h-5 w-5 animate-spin text-[#9CA3AF]" />
+      </div>
+    ),
+  },
+);
+
 import type {
   TestNodeStates,
   TestNodeState,
@@ -246,9 +265,24 @@ export default function WorkflowsPage() {
     setDirty(sessionDef ? defSignature(sessionDef) !== savedSigRef.current : false);
   }, [sessionDef]);
 
+  // Persist the working draft (definition, node positions, viewport, chat).
+  // Node drags update `positions` on every frame, so the write is debounced
+  // to avoid synchronous JSON.stringify + localStorage work during drags.
+  const draftSaveTimerRef = React.useRef<number | null>(null);
   React.useEffect(() => {
-    const key = draftKey(selectedId);
-    writeDraft(key, { definition: sessionDef, positions, viewport, messages });
+    if (draftSaveTimerRef.current !== null) {
+      window.clearTimeout(draftSaveTimerRef.current);
+    }
+    draftSaveTimerRef.current = window.setTimeout(() => {
+      draftSaveTimerRef.current = null;
+      writeDraft(draftKey(selectedId), { definition: sessionDef, positions, viewport, messages });
+    }, 500);
+    return () => {
+      if (draftSaveTimerRef.current !== null) {
+        window.clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
+      }
+    };
   }, [sessionDef, positions, viewport, messages, selectedId]);
 
   const autoSaveTimerRef = React.useRef<number | null>(null);
@@ -1294,13 +1328,13 @@ export default function WorkflowsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Activate dialog */}
+      {/* Publish dialog */}
       <Dialog open={activateOpen} onOpenChange={setActivateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Activate &ldquo;{selected?.name}&rdquo;?</DialogTitle>
+            <DialogTitle>Publish &ldquo;{selected?.name}&rdquo;?</DialogTitle>
             <DialogDescription>
-              Once active, this workflow runs automatically for matching customers. You can pause it anytime.
+              Once published, this workflow runs automatically for matching customers. You can pause it anytime.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAFB] p-3">
@@ -1320,7 +1354,7 @@ export default function WorkflowsPage() {
             </Button>
             <Button onClick={() => void activate()} disabled={acting} className="gap-2">
               {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-              Activate workflow
+              Publish workflow
             </Button>
           </DialogFooter>
         </DialogContent>

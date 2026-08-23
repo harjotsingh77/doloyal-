@@ -30,6 +30,12 @@ export default function AppShellLayout({
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
+  // Stable handlers keep the memoized Sidebar from re-rendering when this
+  // layout re-renders for unrelated reasons.
+  const toggleCollapsed = React.useCallback(() => setCollapsed((c) => !c), []);
+  const openMobile = React.useCallback(() => setMobileOpen(true), []);
+  const closeMobile = React.useCallback(() => setMobileOpen(false), []);
+
   React.useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
@@ -40,22 +46,22 @@ export default function AppShellLayout({
         <TenantCurrencySync />
       <Sidebar
         collapsed={collapsed}
-        onToggle={() => setCollapsed(!collapsed)}
+        onToggle={toggleCollapsed}
         mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
+        onMobileClose={closeMobile}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setMobileOpen(true)}
+              onClick={openMobile}
               className="flex h-9 w-9 items-center justify-center rounded-lg text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] transition-colors lg:hidden"
             >
               <Menu className="h-4.5 w-4.5" />
             </button>
             <button
-              onClick={() => setCollapsed(!collapsed)}
+              onClick={toggleCollapsed}
               className="hidden lg:flex h-9 w-9 items-center justify-center rounded-lg text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] transition-colors"
             >
               <PanelLeftClose
@@ -109,23 +115,24 @@ export default function AppShellLayout({
           </div>
         </header>
 
-        {/* 
+        {/*
           IMPORTANT: No AnimatePresence / motion.div here.
-          
+
           The previous implementation used:
             <AnimatePresence mode="wait">
               <motion.div key={pathname} ...>
-          
+
           This caused the ENTIRE page content to unmount (opacity → 0) before
           the new page could mount, creating a visible white flash on every
           navigation and every HMR update.
-          
+
           Professional SaaS apps (Linear, Stripe, Notion) do NOT animate
-          route exits. They simply swap content instantly. Next.js App Router
-          handles streaming/suspense transitions internally.
+          route exits. They simply swap content instantly. The keyed wrapper
+          below adds only a 140ms entry fade so new content settles in without
+          ever delaying or blocking the previous page.
         */}
         <main className="flex-1 overflow-y-auto">
-          <div className="p-4 lg:p-8">
+          <div key={pathname} className="p-4 lg:p-8 animate-[lf-fade-in_0.14s_ease]">
             {children}
           </div>
         </main>

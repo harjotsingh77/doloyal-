@@ -146,6 +146,7 @@ function gen30Days<T>(fn: (daysAgo: number) => T): T[] {
 const DEFAULT_TENANT: Tenant = {
   id: "t1",
   name: "Elegance Salon & Spa",
+  slug: "elegance-salon-spa",
   category: "BEAUTY_SALON",
   phone: "+91 98765 43210",
   email: "hello@elegancesalon.com",
@@ -169,6 +170,7 @@ const DEFAULT_TENANT: Tenant = {
   taxRate: 10,
   onboardingComplete: true,
   createdAt: D(30),
+  updatedAt: new Date().toISOString(),
   logoUrl: null,
   coverBannerUrl: null,
   faviconUrl: null,
@@ -1509,6 +1511,7 @@ export const MOCK: Record<string, (...args: any[]) => any> = {
     const updated: Tenant = {
       ...current,
       ...data,
+      updatedAt: new Date().toISOString(),
       businessHours: data.businessHours
         ? { ...current.businessHours, ...data.businessHours }
         : current.businessHours,

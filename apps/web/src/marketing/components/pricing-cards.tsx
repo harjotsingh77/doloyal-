@@ -136,7 +136,7 @@ export function PricingCards() {
                 </p>
 
                 <Link
-                  href={plan.href}
+                  href={`/checkout?plan=${plan.id}&cycle=${yearly ? "yearly" : "monthly"}`}
                   className={cn(
                     "group mt-6 flex h-12 items-center justify-center gap-2 rounded-full text-sm font-semibold transition-all duration-300 shadow-md",
                     plan.highlighted

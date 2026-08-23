@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Check, Zap } from "lucide-react";
 import { Container, Section, SectionHead, Reveal, EASE, TextRoll } from "./ui";
 import { cn } from "@/lib/utils";
-import { useWaitlistModal } from "../components/waitlist-modal";
 
 const MONTHLY = {
   free: 0,
@@ -20,6 +20,7 @@ const YEARLY = {
 
 const PLANS = [
   {
+    id: "free-trial",
     name: "Free Trial",
     badge: "FREE / TRIAL",
     tagline: "Try all features with full access to test Doloyal for your business.",
@@ -39,6 +40,7 @@ const PLANS = [
     highlight: false,
   },
   {
+    id: "starter",
     name: "Starter",
     badge: "STARTER",
     tagline: "For single-location businesses getting started with customer retention.",
@@ -63,6 +65,7 @@ const PLANS = [
     highlight: false,
   },
   {
+    id: "growth",
     name: "Growth",
     badge: "GROWTH",
     tagline: "For growing businesses that need automation and deeper customer retention.",
@@ -91,7 +94,6 @@ const PLANS = [
 ];
 
 export function Pricing() {
-  const { openWaitlistModal } = useWaitlistModal();
   const [yearly, setYearly] = React.useState(true);
 
   return (
@@ -212,8 +214,8 @@ export function Pricing() {
                     ))}
                   </ul>
 
-                  <button
-                    onClick={openWaitlistModal}
+                  <Link
+                    href={`/checkout?plan=${plan.id}&cycle=${yearly ? "yearly" : "monthly"}`}
                     className={cn(
                       "group mt-8 flex h-12 w-full items-center justify-center rounded-full text-[14.5px] font-semibold transition-all duration-300 hover:-translate-y-0.5 shadow-md",
                       plan.highlight
@@ -222,7 +224,7 @@ export function Pricing() {
                     )}
                   >
                     <TextRoll>{plan.cta}</TextRoll>
-                  </button>
+                  </Link>
                 </motion.div>
               </Reveal>
             );

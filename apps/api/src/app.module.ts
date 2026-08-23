@@ -31,6 +31,7 @@ import { SupportModule } from './modules/support/support.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { WorkflowsModule } from './modules/workflows/workflow.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module';
     AdminModule,
     WorkflowsModule,
     CampaignsModule,
+    CheckoutModule,
   ],
   providers: [
     Reflector,

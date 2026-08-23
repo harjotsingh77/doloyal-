@@ -4,8 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import * as Lucide from "lucide-react";
-import { Search, SlidersHorizontal, X, ArrowLeft } from "lucide-react";
+import {
+  Activity, Award, BadgeCheck, BarChart3, Bell, Building2, Calendar,
+  Code2, Cog, Disc, FileSpreadsheet, FileText, Flag, Flame, Gamepad2,
+  Gauge, Gift, Layers, Mail, Medal, MessageCircle, MessageSquare,
+  QrCode, Settings2, ShieldCheck, SlidersHorizontal, Smartphone,
+  Sparkles, Target, Trophy, UserPlus, Wallet, Workflow, Zap,
+  Search, X, ArrowLeft,
+} from "lucide-react";
 import { Button, Input, Skeleton, Switch, cn } from "@doloyal/ui";
 import {
   LOYALTY_FEATURE_CATEGORIES,
@@ -16,8 +22,22 @@ import { useLoyaltyFeatures } from "@/lib/loyalty-features-context";
 import { useAuth } from "@/lib/auth";
 import { FeatureConfigureDrawer } from "@/components/loyalty/configure-drawer";
 
+/**
+ * Explicit icon registry for feature icons referenced by name in
+ * LOYALTY_FEATURE_CATEGORIES. A static map (instead of `import * as
+ * Lucide`) keeps every icon tree-shakeable so the whole icon library is
+ * never bundled into this page.
+ */
+const FEATURE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Activity, Award, BadgeCheck, BarChart3, Bell, Building2, Calendar,
+  Code2, Cog, Disc, FileSpreadsheet, FileText, Flag, Flame, Gamepad2,
+  Gauge, Gift, Layers, Mail, Medal, MessageCircle, MessageSquare,
+  QrCode, Settings2, ShieldCheck, SlidersHorizontal, Smartphone,
+  Sparkles, Target, Trophy, UserPlus, Wallet, Workflow, Zap,
+};
+
 function MinimalIcon({ name, className }: { name: string; className?: string }) {
-  const IconComponent = (Lucide as any)[name] as React.ComponentType<{ className?: string }> | undefined;
+  const IconComponent = FEATURE_ICONS[name];
   if (!IconComponent) {
     return <SlidersHorizontal className={cn("h-4 w-4 shrink-0 text-slate-400", className)} />;
   }

@@ -61,6 +61,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCw,
+  MoreHorizontal,
 } from "lucide-react";
 import type {
   WorkflowDefinition,
@@ -70,7 +71,22 @@ import type {
   WorkflowStatus,
   WorkflowCapabilityCatalog,
 } from "@doloyal/shared";
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Badge, cn } from "@doloyal/ui";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  Badge,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  cn,
+} from "@doloyal/ui";
 import {
   NODE_W,
   nodeSummary,
@@ -960,8 +976,8 @@ function CanvasInner(props: WorkflowCanvasProps) {
                 )}
               >
                 {testOk
-                  ? "All steps passed — ready to activate"
-                  : `${testResult.errors} step${testResult.errors === 1 ? "" : "s"} need attention before activation`}
+                  ? "All steps passed — ready to publish"
+                  : `${testResult.errors} step${testResult.errors === 1 ? "" : "s"} need attention before publishing`}
               </span>
               {testOk ? (
                 <button
@@ -970,7 +986,7 @@ function CanvasInner(props: WorkflowCanvasProps) {
                   className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[12px] font-medium text-white transition hover:bg-emerald-700"
                 >
                   <Zap className="h-3.5 w-3.5" />
-                  Activate
+                  Publish
                 </button>
               ) : null}
             </div>
@@ -1080,9 +1096,9 @@ function CanvasInner(props: WorkflowCanvasProps) {
           </Panel>
         ) : null}
 
-        {/* Top-right toolbar: Test/Activate + canvas controls */}
+        {/* Top-right toolbar: Test/Publish + 3-dot menu with canvas controls */}
         <Panel position="top-right" className="!m-3">
-          <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-0.5 overflow-x-auto rounded-xl border border-[#E5E7EB] bg-white/95 p-1.5 shadow-[0_4px_16px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="flex items-center gap-1 rounded-xl border border-[#E5E7EB] bg-white/95 p-1.5 shadow-[0_4px_16px_rgba(15,23,42,0.08)] backdrop-blur">
             <button
               type="button"
               onClick={onTest}
@@ -1108,65 +1124,124 @@ function CanvasInner(props: WorkflowCanvasProps) {
                 onClick={onActivate}
                 disabled={!definition || !canActivate}
                 title={activationHint}
-                className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-[#6366F1] px-2.5 text-[12px] font-medium text-white transition hover:bg-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-[#6366F1] px-3 text-[12px] font-medium text-white shadow-sm transition hover:bg-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Zap className="h-3.5 w-3.5" />
-                Activate
+                Publish
               </button>
             )}
-            <div className="mx-1 h-4 w-px shrink-0 bg-[#EEF1F6]" />
-            <ToolButton label="Zoom out" onClick={() => void zoomOut({ duration: 150 })}>
-              <Minus className="h-3.5 w-3.5" />
-            </ToolButton>
-            <span className="hidden w-10 shrink-0 text-center text-[10.5px] font-medium tabular-nums text-[#6B7280] sm:block">
-              {zoomPct}%
-            </span>
-            <ToolButton label="Zoom in" onClick={() => void zoomIn({ duration: 150 })}>
-              <Plus className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label="Fit to screen" onClick={() => void fitView({ padding: 0.14, duration: 350 })}>
-              <Scan className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label="Reset view" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 })}>
-              <RotateCcw className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label={showGrid ? "Hide grid" : "Show grid"} onClick={() => setShowGrid((v) => !v)}>
-              <LayoutGrid className={cn("h-3.5 w-3.5", !showGrid && "text-[#C7CBD4]")} />
-            </ToolButton>
-            <ToolButton label="Auto arrange" onClick={handleAutoArrange}>
-              <AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label="Add step" onClick={() => setAddOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label="Explain workflow" onClick={onExplain}>
-              <HelpCircle className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label={fullscreen ? "Exit fullscreen" : "Fullscreen"} onClick={onToggleFullscreen}>
-              {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            </ToolButton>
-            <div className="mx-1 h-4 w-px shrink-0 bg-[#EEF1F6]" />
-            <ToolButton label="Undo (⌘Z)" onClick={undo} disabled={!historyRef.current.past.length}>
-              <Undo2 className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton label="Redo (⌘⇧Z)" onClick={redo} disabled={!historyRef.current.future.length}>
-              <Redo2 className="h-3.5 w-3.5" />
-            </ToolButton>
-            <ToolButton
-              label="Delete selected"
-              onClick={() => {
-                if (selectedNode) {
-                  onNodesDelete([selectedNode]);
-                  setNodes((cur) => cur.filter((n) => n.id !== selectedNode.id));
-                  setEdges((cur) => cur.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
-                  setSelectedNode(null);
-                  setConfigOpen(false);
-                }
-              }}
-              disabled={!selectedNode}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </ToolButton>
+
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-[#EEF1F6]" />
+
+            {/* 3-Dot More Actions Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="More canvas options"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-[#6B7280] transition hover:bg-slate-100 hover:text-[#111827]"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-xl">
+                <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                  View &amp; Zoom ({zoomPct}%)
+                </DropdownMenuLabel>
+                <div className="flex items-center gap-1 px-1.5 py-1">
+                  <button
+                    type="button"
+                    onClick={() => void zoomOut({ duration: 150 })}
+                    className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-[#E5E7EB] text-xs font-medium text-[#374151] hover:bg-slate-50"
+                  >
+                    <Minus className="h-3 w-3" /> Zoom out
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void zoomIn({ duration: 150 })}
+                    className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-[#E5E7EB] text-xs font-medium text-[#374151] hover:bg-slate-50"
+                  >
+                    <Plus className="h-3 w-3" /> Zoom in
+                  </button>
+                </div>
+                <DropdownMenuItem onClick={() => void fitView({ padding: 0.14, duration: 350 })} className="cursor-pointer gap-2 text-xs">
+                  <Scan className="h-3.5 w-3.5 text-[#6B7280]" />
+                  Fit to screen
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setViewport({ x: 0, y: 0, zoom: 1 })} className="cursor-pointer gap-2 text-xs">
+                  <RotateCcw className="h-3.5 w-3.5 text-[#6B7280]" />
+                  Reset view
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowGrid((v) => !v)} className="cursor-pointer gap-2 text-xs">
+                  <LayoutGrid className={cn("h-3.5 w-3.5", showGrid ? "text-[#6366F1]" : "text-[#6B7280]")} />
+                  {showGrid ? "Hide grid" : "Show grid"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onToggleFullscreen} className="cursor-pointer gap-2 text-xs">
+                  {fullscreen ? <Minimize2 className="h-3.5 w-3.5 text-[#6B7280]" /> : <Maximize2 className="h-3.5 w-3.5 text-[#6B7280]" />}
+                  {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                  Workflow Tools
+                </DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleAutoArrange} className="cursor-pointer gap-2 text-xs">
+                  <AlignHorizontalDistributeCenter className="h-3.5 w-3.5 text-[#6B7280]" />
+                  Auto arrange
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAddOpen(true)} className="cursor-pointer gap-2 text-xs">
+                  <Plus className="h-3.5 w-3.5 text-[#6B7280]" />
+                  Add step
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onExplain} className="cursor-pointer gap-2 text-xs">
+                  <HelpCircle className="h-3.5 w-3.5 text-[#6B7280]" />
+                  Explain workflow
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                  Edit
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={undo}
+                  disabled={!historyRef.current.past.length}
+                  className="cursor-pointer justify-between text-xs disabled:opacity-40"
+                >
+                  <span className="flex items-center gap-2">
+                    <Undo2 className="h-3.5 w-3.5 text-[#6B7280]" /> Undo
+                  </span>
+                  <span className="text-[10px] text-[#9CA3AF]">⌘Z</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={redo}
+                  disabled={!historyRef.current.future.length}
+                  className="cursor-pointer justify-between text-xs disabled:opacity-40"
+                >
+                  <span className="flex items-center gap-2">
+                    <Redo2 className="h-3.5 w-3.5 text-[#6B7280]" /> Redo
+                  </span>
+                  <span className="text-[10px] text-[#9CA3AF]">⌘⇧Z</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (selectedNode) {
+                      onNodesDelete([selectedNode]);
+                      setNodes((cur) => cur.filter((n) => n.id !== selectedNode.id));
+                      setEdges((cur) => cur.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
+                      setSelectedNode(null);
+                      setConfigOpen(false);
+                    }
+                  }}
+                  disabled={!selectedNode}
+                  className="cursor-pointer gap-2 text-xs text-rose-600 focus:bg-rose-50 focus:text-rose-700 disabled:opacity-40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete selected
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </Panel>
 

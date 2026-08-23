@@ -4,7 +4,7 @@ import * as React from "react";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Container, EASE, TextRoll } from "./ui";
-import { useWaitlistModal } from "../components/waitlist-modal";
+import Link from "next/link";
 
 interface FinalCtaProps {
   title?: React.ReactNode;
@@ -15,7 +15,6 @@ export function FinalCta({
   title = "Turn More Customers Into Loyal Regulars",
   lead = "Grow your local business with customer retention, loyalty rewards, online bookings, memberships, and automated follow-ups — all from one simple platform.",
 }: FinalCtaProps) {
-  const { openWaitlistModal } = useWaitlistModal();
 
   return (
     <section className="relative py-20 sm:py-24 overflow-hidden bg-[#FAFAFC]">
@@ -63,15 +62,15 @@ export function FinalCta({
             {/* Soft Ambient Blue/Cyan Glow matching Hero Dashboard Preview */}
             <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] sm:w-[500px] h-28 bg-gradient-to-r from-[#2563EB] via-[#3B82F6] to-[#06B6D4] opacity-35 blur-3xl rounded-full" />
 
-            <button
-              onClick={openWaitlistModal}
+            <Link
+              href="/checkout?plan=free-trial"
               className="group relative z-10 inline-flex items-center gap-3.5 rounded-full bg-[#232529] pl-7 pr-2.5 py-3 text-[15px] font-semibold text-white shadow-[0_16px_40px_-12px_rgba(37,99,235,0.45)] transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_22px_48px_-10px_rgba(37,99,235,0.65)] hover:-translate-y-0.5"
             >
               <TextRoll>Start 1 Month Free</TextRoll>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#232529] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:rotate-45 group-hover:translate-x-0.5">
                 <ArrowRight className="h-4 w-4 stroke-[2.5]" />
               </div>
-            </button>
+            </Link>
           </motion.div>
 
           {/* Small text below button */}
