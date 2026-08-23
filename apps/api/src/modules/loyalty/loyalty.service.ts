@@ -1533,7 +1533,12 @@ export class LoyaltyService {
       },
     });
 
-    return prismaRedemptionToShared(redemption);
+    return prismaRedemptionToShared({
+      ...redemption,
+      customer,
+      reward,
+      pointsUsed: reward.pointsCost,
+    });
   }
 
   async adjust(tenantId: string, customerId: string, points: number, reason: string) {

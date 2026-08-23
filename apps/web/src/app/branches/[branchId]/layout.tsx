@@ -15,7 +15,7 @@ import {
 } from "@doloyal/ui";
 import { AuthGuard, useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch-context";
-import { getBranch } from "@/lib/branches";
+import { getBranchStats, type BranchStats } from "@/lib/branches";
 import { initials } from "@doloyal/shared";
 import { Sidebar } from "@/components/sidebar";
 import { CurrencySelect } from "@/components/currency-select";
@@ -27,6 +27,17 @@ import {
   BackToBranches,
   useWorkspaceNav,
 } from "@/components/branch-workspace";
+
+interface BranchWorkspaceValue {
+  stats: BranchStats;
+  refresh: () => void;
+}
+const BranchWorkspaceContext = React.createContext<BranchWorkspaceValue | null>(null);
+export function useBranchWorkspace(): BranchWorkspaceValue {
+  const ctx = React.useContext(BranchWorkspaceContext);
+  if (!ctx) throw new Error("useBranchWorkspace must be used within the branch workspace");
+  return ctx;
+}
 
 export default function BranchWorkspaceLayout({
   children,
@@ -43,44 +54,56 @@ export default function BranchWorkspaceLayout({
   const { label } = useWorkspaceNav();
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [stats, setStats] = React.useState<BranchStats | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [retryToken, setRetryToken] = React.useState(0);
 
-  const branch = React.useMemo(() => (branchId ? getBranch(branchId) : null), [branchId]);
-
-  // Access control: Owners/Managers access every branch. Receptionists &
-  // Staff are limited to a single assigned branch (demo: a fixed branch).
+  // Access control mirrors the backend roles.
   const authorized = React.useMemo(() => {
     if (!user) return false;
-    if (user.activeRole === "OWNER" || user.activeRole === "MANAGER") return true;
-    if (user.activeRole === "STAFF" || user.activeRole === "RECEPTIONIST") {
-      const homeBranchId = user.activeRole === "STAFF" ? "b1" : "b2";
-      return branchId === homeBranchId;
-    }
-    return false;
-  }, [user, branchId]);
+    return ["OWNER", "MANAGER", "STAFF", "RECEPTIONIST"].includes(user.activeRole || "");
+  }, [user]);
 
   React.useEffect(() => {
-    if (!authorized) {
-      router.replace("/app/dashboard");
-      return;
-    }
-    if (!branch) {
-      router.replace("/app/branches");
-      return;
-    }
-    enterBranchById(branch.id);
-  }, [branch, branchId, enterBranchById, router, authorized]);
+    let cancelled = false;
+    setLoadError(null);
+    setStats(null);
+    (async () => {
+      try {
+        const s = await getBranchStats(branchId);
+        if (!cancelled) {
+          setStats(s);
+          enterBranchById(s.branch.id);
+        }
+      } catch (err: any) {
+        if (!cancelled) setLoadError(err?.message || "Failed to load this branch");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, retryToken, enterBranchById]);
+
+  React.useEffect(() => {
+    if (user && !authorized) router.replace("/app/dashboard");
+  }, [user, authorized, router]);
 
   React.useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
-  // Stable handlers keep the memoized Sidebar from re-rendering on
-  // unrelated layout updates.
   const toggleCollapsed = React.useCallback(() => setCollapsed((c) => !c), []);
   const openMobile = React.useCallback(() => setMobileOpen(true), []);
   const closeMobile = React.useCallback(() => setMobileOpen(false), []);
 
-  if (!authorized || !branch) return null;
+  if (!authorized) return null;
+
+  const workspace = stats
+    ? {
+        stats,
+        refresh: () => setRetryToken((t) => t + 1),
+      }
+    : null;
 
   return (
     <AuthGuard>
@@ -155,7 +178,33 @@ export default function BranchWorkspaceLayout({
           </div>
 
           <main className="flex-1 overflow-y-auto">
-            <div className="p-4 lg:p-8">{children}</div>
+            <div className="p-4 lg:p-8">
+              {loadError ? (
+                <div className="mx-auto max-w-md rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-8 text-center">
+                  <h3 className="text-lg font-semibold">Couldn&apos;t load this branch</h3>
+                  <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{loadError}</p>
+                  <button
+                    onClick={() => setRetryToken((t) => t + 1)}
+                    className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : !workspace ? (
+                <div className="space-y-4">
+                  <div className="h-8 w-52 animate-pulse rounded-lg bg-[rgb(var(--color-muted))]" />
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="h-28 animate-pulse rounded-[var(--radius)] bg-[rgb(var(--color-muted))]" />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <BranchWorkspaceContext.Provider value={workspace}>
+                  {children}
+                </BranchWorkspaceContext.Provider>
+              )}
+            </div>
           </main>
         </div>
         </div>

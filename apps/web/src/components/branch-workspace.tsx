@@ -23,22 +23,11 @@ import {
 } from "@doloyal/ui";
 import { cn } from "@doloyal/ui";
 import { useBranch } from "@/lib/branch-context";
-import { getBranchInitials, type BranchProfile } from "@/lib/branches";
+import { branchAccent, getBranchInitials, type BranchRecord } from "@/lib/branches";
 
 const WORKSPACE_PAGES = [
   { slug: "dashboard", label: "Dashboard" },
-  { slug: "customers", label: "Customers" },
-  { slug: "appointments", label: "Appointments" },
-  { slug: "booking-links", label: "Booking Links" },
-  { slug: "loyalty", label: "Loyalty" },
-  { slug: "rewards", label: "Rewards" },
-  { slug: "memberships", label: "Memberships" },
-  { slug: "referrals", label: "Referrals" },
-  { slug: "campaigns", label: "Campaigns" },
-  { slug: "assistant", label: "AI Assistant" },
-  { slug: "analytics", label: "Analytics" },
-  { slug: "invoices", label: "Invoices" },
-  { slug: "staff", label: "Staff" },
+  { slug: "staff", label: "Team" },
   { slug: "settings", label: "Settings" },
 ];
 
@@ -56,7 +45,7 @@ export function BranchAvatar({
   branch,
   size = "md",
 }: {
-  branch: { id?: string; name: string; accent: string };
+  branch: { id?: string; name: string };
   size?: "sm" | "md" | "lg";
 }) {
   const sizeClass = size === "lg" ? "h-11 w-11 text-base" : size === "sm" ? "h-7 w-7 text-[0.6rem]" : "h-9 w-9 text-xs";
@@ -66,7 +55,7 @@ export function BranchAvatar({
         "flex shrink-0 items-center justify-center rounded-[0.625rem] font-semibold text-white",
         sizeClass,
       )}
-      style={{ backgroundColor: branch.accent }}
+      style={{ backgroundColor: branchAccent(branch.name) }}
     >
       {getBranchInitials(branch.name)}
     </div>
@@ -76,9 +65,9 @@ export function BranchAvatar({
 /** Dropdown used to switch branches or return to the global workspace. */
 export function BranchSwitcher() {
   const router = useRouter();
-  const { branches, selectedBranch, enterBranchById, exitBranch } = useBranch();
+  const { branches, loading, selectedBranch, enterBranchById, exitBranch } = useBranch();
 
-  const goToBranch = (b: BranchProfile) => {
+  const goToBranch = (b: BranchRecord) => {
     enterBranchById(b.id);
     router.push(`/branches/${b.id}/dashboard`);
   };
@@ -134,26 +123,31 @@ export function BranchSwitcher() {
         <DropdownMenuLabel className="mt-1 text-xs font-medium text-[rgb(var(--color-muted-foreground))]">
           Your Branches
         </DropdownMenuLabel>
-        {branches.map((b) => (
-          <DropdownMenuItem
-            key={b.id}
-            onClick={() => goToBranch(b)}
-            className="cursor-pointer"
-          >
-            <BranchAvatar branch={b} size="sm" />
-            <span className="flex-1">
-              <span className="block text-sm">{b.name}</span>
-              <span className="flex items-center gap-1 text-xs text-[rgb(var(--color-muted-foreground))]">
-                <MapPin className="h-3 w-3" />
-                <span className="truncate">{b.address.split(",").slice(0, 2).join(",").trim()}</span>
+        {loading ? (
+          <div className="px-3 py-2 text-xs text-[rgb(var(--color-muted-foreground))]">Loading branches…</div>
+        ) : branches.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-[rgb(var(--color-muted-foreground))]">
+            No branches yet. Create one from the Branches page.
+          </div>
+        ) : (
+          branches.map((b) => (
+            <DropdownMenuItem
+              key={b.id}
+              onClick={() => goToBranch(b)}
+              className="cursor-pointer"
+            >
+              <BranchAvatar branch={b} size="sm" />
+              <span className="flex-1">
+                <span className="block text-sm">{b.name}</span>
+                <span className="flex items-center gap-1 text-xs text-[rgb(var(--color-muted-foreground))]">
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate">{[b.address, b.city].filter(Boolean).join(", ").slice(0, 40) || "No address"}</span>
+                </span>
               </span>
-            </span>
-            {b.status === "Paused" && (
-              <Badge variant="outline" className="text-[0.6rem]">Paused</Badge>
-            )}
-            {selectedBranch?.id === b.id && <Check className="h-4 w-4" />}
-          </DropdownMenuItem>
-        ))}
+              {selectedBranch?.id === b.id && <Check className="h-4 w-4" />}
+            </DropdownMenuItem>
+          ))
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push("/app/branches")} className="cursor-pointer">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-[rgb(var(--color-border))] text-[rgb(var(--color-muted-foreground))]">

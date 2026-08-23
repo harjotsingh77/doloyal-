@@ -14,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { BranchesModule } from './modules/branches/branches.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module';
@@ -49,6 +50,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     TenantsModule,
     UsersModule,
     StaffModule,
+    BranchesModule,
     CustomersModule,
     FeatureFlagsModule,
     LoyaltyModule,

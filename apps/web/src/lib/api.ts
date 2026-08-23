@@ -27,7 +27,7 @@ const APP_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
   (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 
-class ApiError extends Error {
+export class ApiError extends Error {
   code: string;
   status: number;
   details?: unknown;
@@ -1867,6 +1867,23 @@ export const api = {
         activeRole: "OWNER",
       },
     }),
+
+  // ─── Branches ────────────────────────────────────────────────────────────
+
+  listBranches: () =>
+    withFallback(() => request<any[]>("/branches"), "listBranches"),
+
+  getBranch: (id: string) =>
+    request<any>(`/branches/${id}`),
+
+  createBranch: (data: { name: string; phone?: string; address?: string; city?: string }) =>
+    request<any>("/branches", { method: "POST", body: JSON.stringify(data) }),
+
+  updateBranch: (id: string, data: { name?: string; phone?: string; address?: string; city?: string }) =>
+    request<any>(`/branches/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  deleteBranch: (id: string) =>
+    request<{ success: boolean }>(`/branches/${id}`, { method: "DELETE" }),
 
   // ─── Integrations ────────────────────────────────────────────────────────
 
