@@ -11,8 +11,6 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/api/prisma ./apps/api/prisma
-COPY apps/landing/package.json apps/landing/
-COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 COPY packages/ui/package.json packages/ui/
 RUN pnpm install --frozen-lockfile
@@ -25,7 +23,6 @@ RUN pnpm --filter @doloyal/api... run build
 FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 WORKDIR /app/apps/api

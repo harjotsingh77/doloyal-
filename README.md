@@ -15,22 +15,21 @@ This repository contains a **deep vertical slice**: a production-grade architect
 | Layer        | Tech                                                                  |
 | ------------ | --------------------------------------------------------------------- |
 | Frontend     | Next.js 14 (App Router), React, TypeScript, Tailwind, shadcn/ui, Framer Motion |
-| Backend      | NestJS, REST, Prisma ORM                                              |
+| Backend      | NestJS (Fastify), REST, Prisma ORM                                    |
 | Database     | PostgreSQL                                                            |
-| Auth         | Clerk (with env-gated mock fallback for zero-config dev)              |
-| AI           | OpenAI (function-calling) with rule-based fallback                    |
-| Payments     | Stripe + Razorpay (stubbed in this build)                             |
-| Messaging    | Resend / Twilio / WhatsApp Business API (stubbed in this build)       |
-| File uploads | Cloudinary (stubbed in this build)                                    |
+| Auth         | Custom JWT sessions (bcrypt) + Supabase Auth bridge for Google sign-in |
+| AI           | OpenAI / OpenRouter / Groq / DeepSeek / Gemini / Anthropic with rule-based fallback |
+| Payments     | Razorpay (platform billing, verified server-side) · Stripe (per-tenant booking payments + signed webhooks) |
+| Messaging    | Resend (per-business OAuth email) · WhatsApp Business Cloud API (real sends + delivery receipts) |
+| File uploads | Inline base64 in Postgres (Cloudinary optional)                       |
 | Tooling      | pnpm workspaces, Turborepo                                            |
 
 ## Monorepo layout
 
 ```
 apps/
-  web/      Next.js SaaS app (login + dashboard + all modules) → app.doloyal.com
-  landing/  Next.js public marketing site → doloyal.com
-  api/      NestJS REST API → api.doloyal.com
+  web/      Next.js SaaS app (marketing site + dashboard + all modules)
+  api/      NestJS REST API
 packages/
   shared/   Zod schemas, TS types, enums, constants
   ui/       Brand design system (shadcn-based)
@@ -64,7 +63,7 @@ docker compose up -d postgres
 cp .env.example .env
 ```
 
-Everything works **without** API keys — Clerk auth, OpenAI, and other integrations gracefully fall back to dev/mock modes. Add real keys to enable production behavior.
+Everything works **without** API keys in development — auth runs on a local JWT flow and the AI falls back to structured templated responses. Add real keys to enable production integrations.
 
 ### 4. Set up the database
 
@@ -98,10 +97,10 @@ With the seed loaded, you'll land on a dashboard pre-populated with 90 days of r
 ## Architecture highlights
 
 - **Multi-tenancy via row-level isolation.** Every tenant-scoped table carries `tenantId`. A Prisma middleware injects the active tenant into all queries, making cross-tenant leaks structurally impossible through the data layer.
-- **RBAC.** Clerk handles identity; authorization is owned by the app via a `Membership` (user↔tenant+role) model and `@Roles()` decorators enforced by a `RolesGuard`. Roles: Owner, Manager, Receptionist, Staff, Customer.
+- **RBAC.** Identity is a `User` row (bcrypt password or Google via the Supabase bridge); authorization is owned by the app via a `Membership` (user↔tenant+role) model and `@Roles()` decorators enforced by a `RolesGuard`. Roles: Owner, Manager, Receptionist, Staff, Customer.
 - **Immutable loyalty ledger.** Points are an append-only ledger (`PointsLedger`) with running balances and per-entry expiry — auditable and correct by construction.
 - **Real KPIs.** Every dashboard metric is computed from real data, not cached counts. Aggregations run on indexed columns.
-- **Env-gated everything.** In development, missing API keys never break the app: the backend runs deterministic mock auth when `CLERK_SECRET_KEY` is unset and the AI module returns structured templated responses when no provider key is set. **In production these fallbacks are disabled** — auth requires a real token, the AI surfaces real errors, and the app fails loudly instead of showing fake data.
+- **Env-gated everything.** In development, missing API keys never break the app: mock auth provisions a demo identity when no JWT secret flow is configured, and the AI module returns structured templated responses when no provider key is set. **In production these fallbacks are disabled** — the in-memory DB requires an explicit `DOLOYAL_ALLOW_IN_MEMORY_DB=true` opt-in, `ENCRYPTION_KEY` is mandatory, auth always requires a real token, and the app fails loudly instead of showing fake data.
 
 ## Production deployment
 

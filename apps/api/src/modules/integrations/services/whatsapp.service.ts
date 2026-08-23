@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma.service';
 import { EncryptionService } from '../../../common/encryption.service';
+import * as crypto from 'crypto';
 
 const GRAPH_VERSION = 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -216,7 +217,6 @@ export class WhatsAppIntegrationService {
    */
   static verifySignature(rawBody: string, signatureHeader: string | undefined, appSecret: string): boolean {
     if (!signatureHeader) return false;
-    const crypto = require('crypto') as typeof import('crypto');
     const expected = crypto
       .createHmac('sha256', appSecret)
       .update(rawBody)

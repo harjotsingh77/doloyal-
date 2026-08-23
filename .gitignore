@@ -39,5 +39,3 @@ pnpm-debug.log*
 
 # local pnpm store
 .pnpm-store/
-
-.github/

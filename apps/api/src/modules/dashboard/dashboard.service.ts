@@ -46,7 +46,6 @@ export class DashboardService {
     const [
       periodInvoices,
       todayInvoices,
-      todayCustomers,
       periodCustomers,
       repeatCustomers,
       inactiveCustomers,
@@ -76,9 +75,6 @@ export class DashboardService {
         where: { tenantId, createdAt: { gte: startOfDay }, status: 'PAID' },
         _sum: { total: true },
         _count: true,
-      }),
-      this.prisma.customer.count({
-        where: { tenantId, createdAt: { gte: startOfDay } },
       }),
       this.prisma.customer.count({
         where: { tenantId, createdAt: { gte: fromDate, lte: toDate } },
