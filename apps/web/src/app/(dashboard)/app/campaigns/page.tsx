@@ -178,7 +178,12 @@ export default function CampaignsPage() {
     try {
       await api.createCampaign({
         name: newName,
-        subject: newChannel === "EMAIL" ? newSubject || newName : undefined,
+        subject:
+          newChannel === "EMAIL"
+            ? newSubject || newName
+            : newChannel === "WHATSAPP"
+              ? newSubject || undefined
+              : undefined,
         body: newMessage,
         channel: newChannel,
         audience: newAudience,
@@ -278,6 +283,22 @@ export default function CampaignsPage() {
                       onChange={(e) => setNewSubject(e.target.value)}
                     />
                   </Field>
+                )}
+                {newChannel === "WHATSAPP" && (
+                  <>
+                    <Field label="Approved Template Name (optional)">
+                      <Input
+                        placeholder="e.g. winback_offer"
+                        value={newSubject}
+                        onChange={(e) => setNewSubject(e.target.value)}
+                      />
+                    </Field>
+                    <p className="-mt-2 text-xs leading-relaxed text-[rgb(var(--color-muted-foreground))]">
+                      Meta requires approved templates for business-initiated WhatsApp messages.
+                      Leave empty to send as free-form text (only deliverable within 24h of the
+                      customer&apos;s last message). Use <code>{"{{firstName}}"}</code> in the message for personalization.
+                    </p>
+                  </>
                 )}
                 <Field label="Audience" required>
                   <Select value={newAudience} onValueChange={(v) => setNewAudience(v as Audience)}>
@@ -419,7 +440,8 @@ export default function CampaignsPage() {
                     })}
                   </div>
                   <div className="flex items-center gap-1">
-                    {c.channel === "EMAIL" && (c.status === "DRAFT" || c.status === "SCHEDULED") && (
+                    {(c.channel === "EMAIL" || c.channel === "WHATSAPP") &&
+                      (c.status === "DRAFT" || c.status === "SCHEDULED") && (
                       <Button
                         variant="outline"
                         size="sm"
