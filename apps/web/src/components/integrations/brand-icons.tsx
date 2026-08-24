@@ -49,11 +49,9 @@ export function StripeIcon({ className }: BrandIconProps) {
 
 export function RazorpayIcon({ className }: BrandIconProps) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path
-        fill="#0B245F"
-        d="M22.436 0l-11.91 7.773-1.174 4.276 6.625-4.297L11.65 24h4.391l6.395-24zM14.26 10.098L3.389 17.166 1.564 24h9.008l3.688-13.902Z"
-      />
+    <svg viewBox="0 0 286 326" className={className} aria-hidden="true" fill="none">
+      <polygon fill="#3395FF" points="122.6338 105.6902 106.8778 163.6732 197.0338 105.3642 138.0748 325.3482 197.9478 325.4032 285.0458 0.4822" />
+      <path fill="#072654" d="M25.5947 232.9246 L0.8077 325.4026 L123.5337 325.4026 C123.5337 325.4026 173.7317 137.3196 173.7457 137.2656 C173.6987 137.2956 25.5947 232.9246 25.5947 232.9246" />
     </svg>
   );
 }
