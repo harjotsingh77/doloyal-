@@ -49,7 +49,7 @@ function RetentionGraph() {
 
 export function WhyChooseUs() {
   return (
-    <section id="features" className="relative py-20 sm:py-28 bg-[#FAFAFC] scroll-mt-24">
+    <section id="features" className="relative pt-6 pb-20 sm:pt-10 sm:pb-28 bg-[#FAFAFC] scroll-mt-24">
       <Container>
         {/* Header */}
         <Reveal className="text-center max-w-3xl mx-auto mb-16 sm:mb-20">

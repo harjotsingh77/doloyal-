@@ -1,6 +1,7 @@
 "use client";
 
 import { HeroContent } from "@/marketing/landing/Hero";
+import { IntegrationStrip } from "@/marketing/landing/IntegrationStrip";
 import { WhyChooseUs } from "@/marketing/landing/WhyChooseUs";
 import { ProblemSection } from "@/marketing/landing/ProblemSection";
 import { FeaturesSection } from "@/marketing/landing/FeaturesSection";
@@ -13,6 +14,9 @@ export default function HomePage() {
     <div className="overflow-hidden bg-[#FAFAFC] font-[family-name:var(--font-sora)]">
       {/* 1 · HERO */}
       <HeroContent />
+
+      {/* 1.5 · INTEGRATIONS TRUST STRIP */}
+      <IntegrationStrip />
 
       {/* 2 · WHY CHOOSE US */}
       <WhyChooseUs />

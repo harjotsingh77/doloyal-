@@ -162,7 +162,7 @@ export function HeroContent() {
   const dashboardScale = useTransform(scrollYProgress, [0, 0.5], [0.98, 1]);
 
   return (
-    <div ref={containerRef} className="relative isolate pt-24 pb-12 sm:pt-28 sm:pb-16 w-full bg-[#FAFAFC] overflow-hidden">
+    <div ref={containerRef} className="relative isolate pt-24 pb-10 sm:pt-28 sm:pb-14 lg:pb-16 w-full bg-[#FAFAFC] overflow-hidden">
       {/* Top Ambient Blue Glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-0 flex justify-center">
         <div className="h-[520px] w-[860px] rounded-full bg-gradient-to-r from-[#2563EB]/14 via-[#3B82F6]/12 to-[#06B6D4]/14 blur-3xl" />
@@ -370,6 +370,26 @@ export function HeroContent() {
             </div>
           </div>
         </motion.div>
+      </div>
+
+      {/* Prominent Curved Bottom Transition into Logos Strip */}
+      <div className="absolute bottom-0 inset-x-0 overflow-hidden leading-none z-20 pointer-events-none">
+        <svg
+          viewBox="0 0 1440 90"
+          preserveAspectRatio="none"
+          className="relative block w-full h-8 sm:h-11 lg:h-13"
+        >
+          <path
+            d="M0,0 C420,90 1020,90 1440,0 L1440,90 L0,90 Z"
+            fill="#FFFFFF"
+          />
+          <path
+            d="M0,0 C420,90 1020,90 1440,0"
+            fill="none"
+            stroke="rgba(0,0,0,0.06)"
+            strokeWidth="1.5"
+          />
+        </svg>
       </div>
     </div>
   );

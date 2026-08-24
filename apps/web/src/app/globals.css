@@ -95,6 +95,28 @@ body {
   animation-duration: 30s;
 }
 
+/* "Works with" integration trust strip — moves LEFT → RIGHT, endless */
+@keyframes ww-marquee {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
+.ww-track {
+  animation: ww-marquee 36s linear infinite;
+  will-change: transform;
+}
+.works-with .ww-track:hover,
+.ww-marquee:hover .ww-track { animation-play-state: paused; }
+.ww-marquee {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 44px, black calc(100% - 44px), transparent);
+          mask-image: linear-gradient(to right, transparent, black 44px, black calc(100% - 44px), transparent);
+}
+.brand-logo {
+  filter: invert(46%);
+  opacity: 0.55;
+  transition: filter 0.35s ease, opacity 0.35s ease;
+}
+.brand-logo:hover { filter: none; opacity: 1; }
+
 /* Gradient blobs */
 @keyframes blob-drift {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -162,5 +184,5 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .mk-float, .mk-float-2, .mk-float-3, .marquee-track, .animate-blob, .pulse-ring, .shimmer-overlay::after, .gradient-text-animate { animation: none; }
+  .mk-float, .mk-float-2, .mk-float-3, .marquee-track, .ww-track, .animate-blob, .pulse-ring, .shimmer-overlay::after, .gradient-text-animate { animation: none; }
 }

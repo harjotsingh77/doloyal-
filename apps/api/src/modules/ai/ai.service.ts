@@ -6,6 +6,24 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
+import {
+  AgentServices,
+  AgentToolContext,
+  agentToolDefinitions,
+  checkAgentToolPermission,
+  getAgentTool,
+} from './agent-tools';
+import { CustomersService } from '../customers/customers.service';
+import { CampaignsService } from '../campaigns/campaigns.service';
+import { BookingLinksService } from '../booking-links/booking-links.service';
+import { AppointmentsService } from '../appointments/appointments.service';
+import { ReferralsService } from '../referrals/referrals.service';
+import { RewardsService } from '../rewards/rewards.service';
+import { MembershipsService } from '../memberships/memberships.service';
+import { BranchesService } from '../branches/branches.service';
+import { InvoicesService } from '../invoices/invoices.service';
+import { WorkflowService } from '../workflows/workflow.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 export type ChatAttachmentInput = {
   fileName: string;
@@ -29,7 +47,34 @@ export class AiService {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly customersService: CustomersService,
+    private readonly campaignsService: CampaignsService,
+    private readonly bookingLinksService: BookingLinksService,
+    private readonly appointmentsService: AppointmentsService,
+    private readonly referralsService: ReferralsService,
+    private readonly rewardsService: RewardsService,
+    private readonly membershipsService: MembershipsService,
+    private readonly branchesService: BranchesService,
+    private readonly invoicesService: InvoicesService,
+    private readonly workflowsService: WorkflowService,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
+
+  private agentServices(): AgentServices {
+    return {
+      customers: this.customersService,
+      campaigns: this.campaignsService,
+      bookingLinks: this.bookingLinksService,
+      appointments: this.appointmentsService,
+      referrals: this.referralsService,
+      rewards: this.rewardsService,
+      memberships: this.membershipsService,
+      branches: this.branchesService,
+      invoices: this.invoicesService,
+      workflows: this.workflowsService,
+      loyalty: this.loyaltyService,
+    };
+  }
 
   // ─── Conversations ─────────────────────────────────────────────────────────
 
@@ -45,6 +90,11 @@ export class AiService {
         createdAt: true,
         updatedAt: true,
         _count: { select: { messages: true } },
+        messages: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          select: { content: true },
+        },
       },
     });
   }
@@ -132,6 +182,7 @@ export class AiService {
   async chat(
     tenantId: string,
     userId: string,
+    role: string | undefined,
     message: string,
     conversationId?: string,
     attachments: ChatAttachmentInput[] = [],
@@ -142,6 +193,8 @@ export class AiService {
 
     const { text, toolCalls, provider, model } = await this.generateReply(
       tenantId,
+      userId,
+      role,
       conv.id,
       message,
       attachments,
@@ -192,6 +245,7 @@ export class AiService {
   async streamChat(
     tenantId: string,
     userId: string,
+    role: string | undefined,
     message: string,
     conversationId: string | undefined,
     attachments: ChatAttachmentInput[],
@@ -208,6 +262,8 @@ export class AiService {
 
     const { text, toolCalls, provider, model } = await this.generateReply(
       tenantId,
+      userId,
+      role,
       conv.id,
       message,
       attachments,
@@ -289,6 +345,7 @@ export class AiService {
   async regenerate(
     tenantId: string,
     userId: string,
+    role: string | undefined,
     conversationId: string,
     messageId: string,
     handlers?: StreamHandlers,
@@ -322,9 +379,9 @@ export class AiService {
     }));
 
     if (handlers) {
-      return this.streamChat(tenantId, userId, priorUser.content, conversationId, attachments, handlers);
+      return this.streamChat(tenantId, userId, role, priorUser.content, conversationId, attachments, handlers);
     }
-    return this.chat(tenantId, userId, priorUser.content, conversationId, attachments);
+    return this.chat(tenantId, userId, role, priorUser.content, conversationId, attachments);
   }
 
   // ─── Internals ─────────────────────────────────────────────────────────────
@@ -353,9 +410,16 @@ export class AiService {
   }
 
   private autoTitle(message: string) {
-    const clean = message.replace(/\s+/g, ' ').trim();
+    const clean = message
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^["'“”*#>\s]+/, '')
+      .replace(/[\s]*[.!?,;:—–-]+$/, '');
     if (!clean) return 'New chat';
-    return clean.length > 48 ? `${clean.slice(0, 45)}…` : clean;
+    if (clean.length <= 48) return clean;
+    const cut = clean.slice(0, 48);
+    const lastSpace = cut.lastIndexOf(' ');
+    return `${(lastSpace > 24 ? cut.slice(0, lastSpace) : cut).replace(/[\s]*[.!?,;:—–-]+$/, '')}…`;
   }
 
   private async persistUserTurn(
@@ -448,6 +512,8 @@ export class AiService {
 
   private async generateReply(
     tenantId: string,
+    userId: string,
+    role: string | undefined,
     conversationId: string,
     message: string,
     attachments: ChatAttachmentInput[],
@@ -483,6 +549,8 @@ export class AiService {
         }
         return await this.chatWithOpenAICompatible({
           tenantId,
+          userId,
+          role,
           apiKey,
           baseURL: baseURL!,
           model,
@@ -613,14 +681,26 @@ export class AiService {
   }
 
   private systemPrompt() {
-    return `You are Doloyal AI Assistant — an enterprise AI business partner for local business owners using Doloyal.
-You help with customers, revenue, loyalty, appointments, campaigns, memberships, rewards, invoices, referrals, booking links, staff, branches, analytics, and growth.
-Use tools when you need live business data. Respond in clear Markdown with headings, lists, and tables when helpful.
-Be concise, professional, and actionable. Never invent numbers — use tool results.`;
+    return `You are Doloyal AI — an agentic AI operator for local business owners using Doloyal. You don't just answer questions; you complete tasks using the business's tools.
+
+## How you work
+1. **Understand the goal.** If a request is ambiguous or missing required details (names, phones, dates, prices, message text), ask short clarifying questions BEFORE acting. Never guess IDs — resolve them with search/get tools first.
+2. **Act.** Once you have what you need, call the right tools to do the work. Chain multiple tools when needed (e.g. searchCustomers → createInvoice → adjustLoyaltyPoints).
+3. **Confirm before irreversible actions.** For sending campaigns, activating workflows, deducting points, creating invoices, or anything contacting real customers or moving money: summarize exactly what will happen (who, what, when) and get explicit approval. Only pass confirmed=true after the user agrees in this conversation.
+4. **Report results.** After executing, confirm what was done with concrete details (IDs, links/slugs, totals). If a tool returns needsConfirmation, ask the user — never retry with confirmed=true without their explicit approval.
+
+## Rules
+- Tenant scoping is automatic; never fabricate IDs — always resolve via tools.
+- Creating an invoice ALREADY updates the customer's visit/spend stats and may award loyalty points automatically per the program config. Do NOT call adjustLoyaltyPoints after an invoice unless the user explicitly asks for a separate manual adjustment.
+- If a tool errors, explain simply and suggest a fix (e.g. connect email provider).
+- You cannot manage platform billing, staff accounts, or settings — say so if asked.
+- Respond in clear Markdown. Be concise, professional, actionable. Never invent numbers — use tool results.`;
   }
 
   private async chatWithOpenAICompatible(opts: {
     tenantId: string;
+    userId: string;
+    role: string | undefined;
     apiKey: string;
     baseURL: string;
     model: string;
@@ -632,7 +712,7 @@ Be concise, professional, and actionable. Never invent numbers — use tool resu
   }) {
     const OpenAI = (await import('openai')).default;
     const client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
-    const tools = this.toolDefinitions();
+    const tools = [...this.toolDefinitions(), ...agentToolDefinitions()];
 
     const messages: any[] = [
       { role: 'system', content: this.systemPrompt() },
@@ -648,17 +728,30 @@ Be concise, professional, and actionable. Never invent numbers — use tool resu
       },
     ];
 
-    const completion = await client.chat.completions.create({
-      model: opts.model,
-      messages,
-      tools,
-      tool_choice: 'auto',
-    });
-
-    const responseMessage = completion.choices[0]?.message;
+    // Agentic loop: allow the model to chain tool calls across multiple rounds
+    // (e.g. searchCustomers → createCustomer → createAppointment) before the
+    // final answer. Streaming is applied to the final text only.
+    const MAX_TOOL_ROUNDS = 5;
     const toolCalls: { name: string; args: Record<string, unknown>; result: string }[] = [];
+    let finalText: string | null = null;
 
-    if (responseMessage?.tool_calls?.length) {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const completion = await client.chat.completions.create({
+        model: opts.model,
+        messages,
+        tools,
+        tool_choice: 'auto',
+      });
+
+      const responseMessage = completion.choices[0]?.message;
+
+      if (!responseMessage?.tool_calls?.length) {
+        finalText = responseMessage?.content || 'I could not process your request.';
+        break;
+      }
+
+      messages.push(responseMessage);
+
       for (const toolCall of responseMessage.tool_calls) {
         const name = toolCall.function.name;
         let args: Record<string, unknown> = {};
@@ -667,65 +760,47 @@ Be concise, professional, and actionable. Never invent numbers — use tool resu
         } catch {
           args = {};
         }
-        const result = await this.runTool(opts.tenantId, name, args);
-        toolCalls.push({ name, args, result: JSON.stringify(result) });
+        const result = await this.runTool(
+          { tenantId: opts.tenantId, userId: opts.userId, role: opts.role },
+          name,
+          args,
+        );
+        const serialized = JSON.stringify(result ?? {}).slice(0, 12000);
+        toolCalls.push({ name, args, result: serialized });
+        messages.push({
+          role: 'tool' as const,
+          tool_call_id: toolCall.id,
+          content: serialized,
+        });
       }
+    }
 
-      const second = await client.chat.completions.create({
+    if (finalText === null) {
+      // Round budget exhausted — force a text-only wrap-up.
+      const wrapUp = await client.chat.completions.create({
         model: opts.model,
         messages: [
           ...messages,
-          responseMessage,
-          ...toolCalls.map((tc, i) => ({
-            role: 'tool' as const,
-            tool_call_id: responseMessage.tool_calls![i].id,
-            content: tc.result,
-          })),
+          {
+            role: 'user' as const,
+            content:
+              'Summarize for the user now: what you completed, what still needs their input, and any next steps.',
+          },
         ],
-        stream: !!opts.onToken,
       });
-
-      if (opts.onToken && Symbol.asyncIterator in Object(second)) {
-        let text = '';
-        for await (const chunk of second as any) {
-          const token = chunk.choices?.[0]?.delta?.content || '';
-          if (token) {
-            text += token;
-            await opts.onToken(token);
-          }
-        }
-        return { text: text || 'I could not process your request.', toolCalls, provider: opts.provider, model: opts.model };
-      }
-
-      const text =
-        (second as any).choices?.[0]?.message?.content || 'I could not process your request.';
-      if (opts.onToken) await this.streamText(text, opts.onToken);
-      return { text, toolCalls, provider: opts.provider, model: opts.model };
+      finalText = (wrapUp.choices[0]?.message as any)?.content || 'I could not process your request.';
     }
 
-    let text = responseMessage?.content || 'I could not process your request.';
     if (opts.onToken) {
-      // Prefer true stream for simple completions
-      try {
-        const streamed = await client.chat.completions.create({
-          model: opts.model,
-          messages,
-          stream: true,
-        });
-        text = '';
-        for await (const chunk of streamed as any) {
-          const token = chunk.choices?.[0]?.delta?.content || '';
-          if (token) {
-            text += token;
-            await opts.onToken(token);
-          }
-        }
-      } catch {
-        await this.streamText(text, opts.onToken);
-      }
+      const streamed = finalText ?? 'I could not process your request.';
+      await this.streamText(streamed, opts.onToken);
     }
-
-    return { text, toolCalls, provider: opts.provider, model: opts.model };
+    return {
+      text: finalText ?? 'I could not process your request.',
+      toolCalls,
+      provider: opts.provider,
+      model: opts.model,
+    };
   }
 
   private toolDefinitions() {
@@ -815,7 +890,25 @@ Be concise, professional, and actionable. Never invent numbers — use tool resu
     ];
   }
 
-  private async runTool(tenantId: string, name: string, args: Record<string, unknown>) {
+  private async runTool(
+    ctx: Omit<AgentToolContext, 'services'>,
+    name: string,
+    args: Record<string, unknown>,
+  ) {
+    // Agent registry first — write tools + extended reads.
+    const agentTool = getAgentTool(name);
+    if (agentTool) {
+      const blocked = checkAgentToolPermission(agentTool, ctx.role, args);
+      if (blocked) return blocked;
+      try {
+        return await agentTool.handler({ ...ctx, services: this.agentServices() }, args);
+      } catch (err: any) {
+        this.logger.warn(`Agent tool ${name} failed: ${err?.message || err}`);
+        return { error: err?.message || `Tool ${name} failed` };
+      }
+    }
+
+    const { tenantId } = ctx;
     switch (name) {
       case 'getKpis':
         return this.getKpisData(tenantId);
@@ -951,15 +1044,19 @@ Be concise, professional, and actionable. Never invent numbers — use tool resu
   }
 
   private async searchCustomersData(tenantId: string, query: string) {
+    const terms = query.trim().split(/\s+/).filter(Boolean).slice(0, 4);
+    if (!terms.length) return [];
     const customers = await this.prisma.customer.findMany({
       where: {
         tenantId,
-        OR: [
-          { firstName: { contains: query, mode: 'insensitive' } },
-          { lastName: { contains: query, mode: 'insensitive' } },
-          { phone: { contains: query } },
-          { email: { contains: query, mode: 'insensitive' } },
-        ],
+        AND: terms.map((term) => ({
+          OR: [
+            { firstName: { contains: term, mode: 'insensitive' } },
+            { lastName: { contains: term, mode: 'insensitive' } },
+            { phone: { contains: term } },
+            { email: { contains: term, mode: 'insensitive' } },
+          ],
+        })),
       },
       take: 10,
     });

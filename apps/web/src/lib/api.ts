@@ -1040,6 +1040,7 @@ export const api = {
         createdAt: string;
         updatedAt: string;
         _count?: { messages: number };
+        messages?: Array<{ content: string }>;
       }>
     >("/assistant/conversations"),
 

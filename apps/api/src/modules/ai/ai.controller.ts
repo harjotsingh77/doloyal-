@@ -115,6 +115,7 @@ export class AiController {
     return this.aiService.chat(
       user.activeTenantId,
       user.id,
+      user.activeRole,
       dto.message,
       dto.conversationId,
       (dto.attachments || []) as ChatAttachmentInput[],
@@ -160,6 +161,7 @@ export class AiController {
       const result = await this.aiService.streamChat(
         user.activeTenantId,
         user.id,
+        user.activeRole,
         dto.message,
         dto.conversationId,
         (dto.attachments || []) as ChatAttachmentInput[],
@@ -217,6 +219,7 @@ export class AiController {
       const result = await this.aiService.regenerate(
         user.activeTenantId,
         user.id,
+        user.activeRole,
         dto.conversationId,
         dto.messageId,
         {
