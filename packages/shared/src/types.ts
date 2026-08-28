@@ -49,6 +49,10 @@ export interface Tenant {
   email: string;
   website?: string | null;
   address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  country?: string | null;
   gst?: string | null;
   registrationNumber?: string | null;
   logoUrl?: string | null;
@@ -67,6 +71,13 @@ export interface Tenant {
   secondaryColor?: string | null;
   accentColor?: string | null;
   fontFamily?: string | null;
+  /** Brand name shown in place of "Doloyal" inside this workspace. */
+  brandName?: string | null;
+  /** Compact brand name for tight spaces (collapsed sidebar, avatars). */
+  brandShortName?: string | null;
+  /** Optional customer-facing surface colors. Null → Doloyal neutrals. */
+  backgroundColor?: string | null;
+  textColor?: string | null;
   taxRate: number;
   businessHours?: BusinessHoursSettings | null;
   socialLinks?: SocialLinksSettings | null;

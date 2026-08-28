@@ -159,15 +159,28 @@ export const DEFAULT_SEO = {
 };
 
 export function defaultDomain(slug: string) {
+  const configuredUrl = subdomainUrl(slug);
+  let subdomain = '';
+  try {
+    subdomain = configuredUrl ? new URL(configuredUrl).hostname : '';
+  } catch {
+    subdomain = '';
+  }
   return {
-    subdomain: `${slug}.doloyal.ai`,
+    // A tenant subdomain must only be advertised when its DNS and wildcard TLS
+    // certificate are configured. The secure /book/[slug] URL is always live.
+    subdomain,
     customDomain: '',
     status: 'PENDING' as const,
   };
 }
 
 export function webBaseUrl(): string {
-  return process.env.WEB_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return (
+    process.env.WEB_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://doloyal.ai' : 'http://localhost:3000')
+  ).replace(/\/+$/, '');
 }
 
 export function bookingUrl(slug: string): string {
@@ -175,7 +188,11 @@ export function bookingUrl(slug: string): string {
 }
 
 export function subdomainUrl(slug: string): string {
-  return `https://${slug}.doloyal.ai`;
+  // Set PUBLIC_SUBDOMAIN_URL_TEMPLATE to a verified wildcard domain, for
+  // example "https://{slug}.pages.example.com", after its TLS certificate is
+  // active. Until then, never generate a broken *.doloyal.ai URL.
+  const template = process.env.PUBLIC_SUBDOMAIN_URL_TEMPLATE;
+  return template ? template.replace('{slug}', slug) : '';
 }
 
 export function qrCodeUrl(url: string, color = '111827'): string {

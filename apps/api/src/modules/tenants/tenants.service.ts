@@ -187,6 +187,7 @@ export class TenantsService {
       'name', 'category', 'phone', 'email', 'website', 'address', 'city', 'state', 'zip',
       'country', 'currency', 'timezone', 'language', 'dateFormat', 'timeFormat',
       'brandColor', 'secondaryColor', 'accentColor', 'fontFamily', 'taxRate',
+      'brandName', 'brandShortName', 'backgroundColor', 'textColor',
       'gst', 'registrationNumber', 'tagline', 'description', 'whatsapp', 'mapsUrl',
       'logoUrl', 'coverBannerUrl', 'faviconUrl', 'businessHours', 'socialLinks',
       'legalPolicies', 'businessStatus', 'notificationPrefs',
@@ -201,6 +202,14 @@ export class TenantsService {
 
     if (typeof updateData.website === 'string' && updateData.website === '') {
       updateData.website = null;
+    }
+
+    // Brand names are display-only: blank strings must fall back to the
+    // business name / Doloyal default rather than rendering as empty labels.
+    for (const key of ['brandName', 'brandShortName'] as const) {
+      if (typeof updateData[key] === 'string' && !(updateData[key] as string).trim()) {
+        updateData[key] = null;
+      }
     }
 
     const updated = await this.prisma.tenant.update({
@@ -316,6 +325,10 @@ export class TenantsService {
       secondaryColor: tenant.secondaryColor || '#64748B',
       accentColor: tenant.accentColor || '#F59E0B',
       fontFamily: tenant.fontFamily || 'Inter',
+      brandName: tenant.brandName ?? null,
+      brandShortName: tenant.brandShortName ?? null,
+      backgroundColor: tenant.backgroundColor ?? null,
+      textColor: tenant.textColor ?? null,
       taxRate: tenant.taxRate ?? 0,
       businessHours: this.mergeJsonDefaults(tenant.businessHours, businessHoursDefaults),
       socialLinks: this.mergeJsonDefaults(tenant.socialLinks, socialDefaults),

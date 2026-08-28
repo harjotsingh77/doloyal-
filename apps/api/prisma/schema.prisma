@@ -285,6 +285,14 @@ model Tenant {
   secondaryColor        String?  @default("#64748B")
   accentColor           String?  @default("#F59E0B")
   fontFamily            String?  @default("Inter")
+  /// Brand identity overrides shown in place of "Doloyal" inside this
+  /// tenant's workspace. Null → default Doloyal branding.
+  brandName             String?
+  brandShortName        String?
+  /// Optional customer-facing surface colors (booking pages, portals).
+  /// Null → Doloyal neutrals. Never applied to workspace chrome.
+  backgroundColor       String?
+  textColor             String?
   gst                   String?
   registrationNumber    String?
   whatsapp              String?

@@ -1,18 +1,6 @@
 /*
- * Doloyal UI — brand stylesheet.
- *
- * Consuming apps import this once (e.g. in their root layout) via:
- *   import "@doloyal/ui/styles.css";
- *
- * It defines:
- *   - Tailwind theme mapping (@theme) so `bg-primary`, `text-accent`, etc. work
- *   - CSS variables for light & dark mode
- *   - Base typography, scrollbar, selection, focus-ring styles
- *   - Keyframe animations reused across the app
+ * Doloyal UI — brand stylesheet tokens and utility classes.
  */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 :root {
     /* Brand */
@@ -25,6 +13,18 @@
     --color-success: 16 185 129; /* #10B981 */
     --color-danger: 239 68 68; /* #EF4444 */
     --color-warning: 245 158 11; /* #F59E0B */
+
+    /*
+     * Tenant brand tokens (white-label). Overridden at runtime by
+     * TenantBrandingSync from each business's Business Profile. Defaults
+     * mirror Doloyal's own palette so nothing changes until a tenant
+     * customizes their branding.
+     */
+    --brand-primary: 37 99 235; /* #2563EB */
+    --brand-secondary: 100 116 139; /* #64748B */
+    --brand-accent: 245 158 11; /* #F59E0B */
+    --brand-background: 255 255 255;
+    --brand-text: 17 17 17;
 
     /* Neutrals */
     --color-background: 250 250 252; /* #FAFAFC */

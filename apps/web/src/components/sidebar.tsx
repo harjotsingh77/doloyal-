@@ -34,6 +34,8 @@ import { cn } from "@doloyal/ui";
 import { Badge } from "@doloyal/ui";
 import { useBranch } from "@/lib/branch-context";
 import { useAuth } from "@/lib/auth";
+import { useTenant } from "@/lib/tenant-query";
+import { getBusinessDisplayName, getBrandLogo, getBrandShortName } from "@/lib/branding";
 
 /**
  * Explicit icon registry for nav items referenced by name in
@@ -108,6 +110,12 @@ export const Sidebar = React.memo(function Sidebar({
   const pathname = usePathname();
   const { mode, workspaceBase, selectedBranch } = useBranch();
   const { user } = useAuth();
+  // Tenant branding: custom logo/name when the business set one, otherwise
+  // the default Doloyal logo and naming (never undefined or empty).
+  const { data: tenant } = useTenant();
+  const brandName = getBusinessDisplayName(tenant);
+  const brandShortName = getBrandShortName(tenant);
+  const brandLogo = getBrandLogo(tenant);
 
   const resolveHref = (href: string) => {
     if (mode === "branch" && selectedBranch) {
@@ -141,10 +149,11 @@ export const Sidebar = React.memo(function Sidebar({
         )}
       >
         {collapsed ? (
-          <Link href={logoHref} className="flex items-center justify-center">
+          <Link href={logoHref} className="flex items-center justify-center" title={brandName}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/8bg.png"
-              alt="Doloyal"
+              src={brandLogo}
+              alt={brandShortName}
               width={32}
               height={32}
               className="h-8 w-8 rounded-lg object-contain shrink-0"
@@ -152,16 +161,17 @@ export const Sidebar = React.memo(function Sidebar({
           </Link>
         ) : (
           <Link href={logoHref} className="flex items-center gap-3 group">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/8bg.png"
-              alt="Doloyal"
+              src={brandLogo}
+              alt={brandName}
               width={32}
               height={32}
               className="h-8 w-8 rounded-lg object-contain shrink-0"
             />
-            <div className="leading-tight">
-              <p className="text-base font-semibold text-[rgb(var(--color-foreground))] group-hover:text-[rgb(var(--color-primary))] transition-colors">
-                Doloyal
+            <div className="leading-tight min-w-0">
+              <p className="text-base font-semibold text-[rgb(var(--color-foreground))] truncate group-hover:text-[rgb(var(--color-primary))] transition-colors">
+                {brandName}
               </p>
               <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                 {mode === "branch" && selectedBranch ? selectedBranch.name : "Workspace"}

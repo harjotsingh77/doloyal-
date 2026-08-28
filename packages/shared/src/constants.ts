@@ -158,8 +158,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     section: "AI & Websites",
     items: [
       { label: "Workflows", href: "/app/workflows", icon: "Workflow", badge: "new" },
-      { label: "Website Builder", href: "/app/websites", icon: "Globe", badge: "new" },
-      { label: "Website Connections", href: "/app/website-connections", icon: "Link2", badge: "new" },
+      { label: "Client Page", href: "/app/client-page", icon: "Globe", badge: "new" },
     ],
   },
   {

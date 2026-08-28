@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "./providers";
-import "@doloyal/ui/styles.css";
 import "./globals.css";
 import Script from "next/script";
 import { site } from "@/marketing/lib/site";

@@ -34,7 +34,7 @@ import type {
   BookingSlot,
   BookingConfirmation,
 } from "@doloyal/shared";
-import { BookingLanding } from "./booking-landing";
+import { ClientPageRenderer, masterConfigFromPageConfig } from "@/app/(dashboard)/app/client-page/client-page-renderer";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
 
 const BASE_URL = getApiBaseUrl();
@@ -750,12 +750,31 @@ export default function BookingPage() {
     setStep(2);
   };
 
+  // The landing page is the customer's client page: the exact same component the
+  // builder previews, so what a business publishes is what it saw while editing.
+  if (phase === "landing") {
+    return (
+      <ClientPageRenderer
+        business={business}
+        services={services}
+        currency={currency}
+        config={masterConfigFromPageConfig(
+          business.bookingLink?.pageConfig ?? (business as { pageConfig?: unknown }).pageConfig,
+          business.brandColor,
+        )}
+        mode="published"
+        onBook={startBooking}
+        headerAccessory={<ThemeToggle />}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[rgb(var(--color-background))]">
-      <header className="sticky top-0 z-50 bg-[rgb(var(--color-background))/0.8] backdrop-blur-xl border-b border-[rgb(var(--color-border))]">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-black/[0.08] bg-white/95 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            {phase === "flow" && step > 1 && step < 6 && (
+            {step > 1 && step < 6 && (
               <button
                 type="button"
                 className="mr-1 rounded-md p-1 hover:bg-[rgb(var(--color-muted))]"
@@ -789,37 +808,17 @@ export default function BookingPage() {
             <div>
               <h1 className="text-sm font-bold leading-tight">{business.name}</h1>
               <p className="text-[0.65rem] text-[rgb(var(--color-muted-foreground))]">
-                {phase === "landing" ? (business.tagline || "Book an appointment") : "Book an appointment"}
+                Book an appointment
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {phase === "landing" && (
-              <button
-                type="button"
-                onClick={startBooking}
-                className="hidden h-8 items-center rounded-md px-3 text-xs font-medium text-white sm:inline-flex"
-                style={{ backgroundColor: business.brandColor || "rgb(var(--color-primary))" }}
-              >
-                Book Now
-              </button>
-            )}
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 md:py-10">
-        {phase === "landing" ? (
-          <BookingLanding
-            business={business}
-            services={services}
-            staff={staff}
-            currency={currency}
-            onBook={startBooking}
-          />
-        ) : (
-          <>
+      <main className="mx-auto max-w-3xl px-4 py-6 md:py-10">
         {step < 6 && <StepIndicator current={step} />}
 
         <AnimatePresence mode="wait" custom={direction}>
@@ -932,8 +931,6 @@ export default function BookingPage() {
             )}
           </motion.div>
         </AnimatePresence>
-          </>
-        )}
       </main>
     </div>
   );

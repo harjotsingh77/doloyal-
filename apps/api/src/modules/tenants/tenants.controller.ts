@@ -160,6 +160,10 @@ class UpdateTenantDto {
   @IsString() @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/) secondaryColor?: string;
   @IsString() @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/) accentColor?: string;
   @IsString() @IsOptional() fontFamily?: string;
+  @IsString() @IsOptional() @MaxLength(60) brandName?: string;
+  @IsString() @IsOptional() @MaxLength(24) brandShortName?: string;
+  @IsString() @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/) backgroundColor?: string;
+  @IsString() @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/) textColor?: string;
   @IsNumber() @IsOptional() taxRate?: number;
   @IsString() @IsOptional() gst?: string;
   @IsString() @IsOptional() registrationNumber?: string;

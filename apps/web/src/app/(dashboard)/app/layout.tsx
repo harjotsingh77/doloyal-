@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { CurrencySelect } from "@/components/currency-select";
 import { TenantCurrencySync } from "@/components/tenant-currency-sync";
+import { TenantBrandingSync } from "@/components/tenant-branding";
 import { AskDoloyal } from "@/components/ask-doloyal";
 import { initials } from "@doloyal/shared";
 
@@ -44,6 +45,7 @@ export default function AppShellLayout({
     <AskDoloyal>
       <div className="flex h-screen overflow-hidden bg-[rgb(var(--color-background))]">
         <TenantCurrencySync />
+        <TenantBrandingSync />
       <Sidebar
         collapsed={collapsed}
         onToggle={toggleCollapsed}

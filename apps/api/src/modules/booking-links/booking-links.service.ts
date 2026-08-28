@@ -524,15 +524,17 @@ export class BookingLinksService {
     const seo = mergeDefaults((bookingLink as any).seo, DEFAULT_SEO);
     const domain = mergeDefaults((bookingLink as any).domain, defaultDomain(bookingLink.slug));
     const hours = (tenant as any).businessHours || null;
-    const brandColor =
-      branding.primaryColor || branding.themeColor || tenant.brandColor || '#2563EB';
+    // The Client Page is a presentation layer over Business Profile. Tenant
+    // branding must always win so profile changes are reflected immediately,
+    // rather than being frozen inside a booking-link configuration.
+    const brandColor = tenant.brandColor || branding.primaryColor || branding.themeColor || '#2563EB';
 
     return {
       id: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
-      logoUrl: branding.logoUrl || tenant.logoUrl,
-      coverBannerUrl: branding.coverBannerUrl || tenant.coverBannerUrl || null,
+      logoUrl: tenant.logoUrl || branding.logoUrl,
+      coverBannerUrl: tenant.coverBannerUrl || branding.coverBannerUrl || null,
       address: tenant.address,
       phone: tenant.phone,
       email: tenant.email,
@@ -545,8 +547,8 @@ export class BookingLinksService {
       timezone: tenant.timezone,
       currency: tenant.currency,
       rating: 4.8,
-      tagline: pageConfig.tagline || bookingLink.description || 'Book your next appointment online',
-      about: pageConfig.about || bookingLink.description || null,
+      tagline: tenant.tagline || pageConfig.tagline || bookingLink.description || 'Book your next appointment online',
+      about: tenant.description || pageConfig.about || bookingLink.description || null,
       businessHours: hours,
       pageConfig,
       seo,

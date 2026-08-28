@@ -201,7 +201,7 @@ export const HELP_ARTICLES: HelpArticleSeed[] = [
     description:
       'Use the Website Builder to create a site or connect an existing domain.',
     content:
-      'Doloyal includes a Website Builder so you can launch a professional site for your business.\n\nOpen Website Builder in your sidebar to choose a template, add your services, and enable online booking. You can also connect your own custom domain under Website Connections.\n\nIf you’d like our team to build a custom website for you, submit a website request from the Website Builder section.',
+      'Doloyal includes a Website Builder so you can launch a professional site for your business.\n\nOpen Website Builder in your sidebar to choose a template, add your services, and enable online booking. Your site is published on your Doloyal subdomain.\n\nIf you’d like our team to build a custom website for you, submit a website request from the Website Builder section.',
     category: 'Website & Integrations',
     keywords: ['website', 'domain', 'builder', 'connect', 'custom site'],
     faq: true,
@@ -225,7 +225,7 @@ export const HELP_ARTICLES: HelpArticleSeed[] = [
     description:
       'Point your own domain to your Doloyal website.',
     content:
-      'Under Website Connections you can add a custom domain for your booking page or website.\n\nFollow the DNS setup steps to add the CNAME/A record provided by Doloyal. Once the DNS propagates (usually within an hour), your domain connects automatically and the status updates in the dashboard.',
+      'Open Website Builder in the sidebar and open your published site to add a custom domain.\n\nFollow the DNS setup steps to add the CNAME/A record provided by Doloyal. Once the DNS propagates (usually within an hour), your domain connects automatically and the status updates in the dashboard.',
     category: 'Website & Integrations',
     keywords: ['domain', 'dns', 'custom domain', 'connect', 'website'],
     faq: false,
@@ -406,17 +406,6 @@ export const HELP_ARTICLES: HelpArticleSeed[] = [
     keywords: ['website', 'builder', 'request', 'custom site', 'template', 'domain'],
     faq: true,
     sortOrder: 25,
-  },
-  {
-    slug: 'use-website-connections',
-    title: 'What are Website Connections?',
-    description: 'Connect your existing website to Doloyal data.',
-    content:
-      'Website Connections let you embed Doloyal booking, loyalty, and customer widgets into an existing website you already own.\n\nOpen Website Connections to find your business ID, generate API keys, see widgets, and read the developer documentation and SDK. Connection logs show sync activity and errors.',
-    category: 'Website & Integrations',
-    keywords: ['website connections', 'sdk', 'api key', 'widget', 'embed', 'developer'],
-    faq: false,
-    sortOrder: 26,
   },
   {
     slug: 'billing-invoices',
