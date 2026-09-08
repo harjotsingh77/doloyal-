@@ -141,7 +141,6 @@ export default function BranchesPage() {
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="h-4 w-4" />
                 New Branch
               </Button>
             </DialogTrigger>
@@ -177,25 +176,22 @@ export default function BranchesPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard label="Locations" value={branches.length} icon={<Store className="h-5 w-5" />} accent="primary" />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <KpiCard label="Locations" value={branches.length} accent="primary" />
         <KpiCard
           label="Total team assigned"
           value={branches.reduce((s, b) => s + (b.staffCount || 0), 0)}
-          icon={<Users className="h-5 w-5" />}
           accent="accent"
         />
         <KpiCard
           label="Locations with team"
           value={branches.filter((b) => (b.staffCount || 0) > 0).length}
-          icon={<MapPin className="h-5 w-5" />}
           accent="success"
         />
       </div>
 
       {branches.length === 0 ? (
         <EmptyState
-          icon={<Store className="h-7 w-7" />}
           title="No branches yet"
           description="Create your first location to start assigning teams to it."
         />

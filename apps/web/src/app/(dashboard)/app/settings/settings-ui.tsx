@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Upload, Trash2, ImageIcon, Bold, Italic, Underline, List } from "lucide-react";
+import { Trash2, ImageIcon, Bold, Italic, Underline, List } from "lucide-react";
 import { Button, Switch, Skeleton, cn } from "@doloyal/ui";
 
 /* ── Section ───────────────────────────────────────────────────────────────
@@ -267,7 +267,6 @@ export function ImageUploadField({
             loading={busy}
             onClick={() => inputRef.current?.click()}
           >
-            <Upload className="h-3.5 w-3.5" />
             {value ? "Replace" : "Upload"}
           </Button>
           {value ? (

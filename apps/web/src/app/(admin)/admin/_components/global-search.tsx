@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Building2, FileText, Inbox, Search, Ticket, Users, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Input } from "@doloyal/ui";
 import { api } from "@/lib/api";
 import type { AdminSearchResults } from "@doloyal/shared";
@@ -110,42 +110,42 @@ export function AdminGlobalSearch() {
               ) : (
                 <div className="space-y-3">
                   {results.businesses.length > 0 ? (
-                    <Group label="Businesses" icon={<Building2 className="h-3.5 w-3.5" />}>
+                    <Group label="Businesses">
                       {results.businesses.map((b) => (
                         <Row key={b.id} onClick={() => go(`/admin/businesses/${b.id}`)} title={b.name} sub={b.plan ?? "free trial"} />
                       ))}
                     </Group>
                   ) : null}
                   {results.users.length > 0 ? (
-                    <Group label="Users" icon={<Users className="h-3.5 w-3.5" />}>
+                    <Group label="Users">
                       {results.users.map((u) => (
                         <Row key={u.id} onClick={() => go(`/admin/users/${u.id}`)} title={u.email} sub={`${u.firstName} ${u.lastName}`.trim()} />
                       ))}
                     </Group>
                   ) : null}
                   {results.customers.length > 0 ? (
-                    <Group label="Customers" icon={<Users className="h-3.5 w-3.5" />}>
+                    <Group label="Customers">
                       {results.customers.map((c) => (
                         <Row key={c.id} onClick={() => go(`/admin/customers?business=${c.businessId}`)} title={`${c.firstName} ${c.lastName}`.trim()} sub={c.businessName} />
                       ))}
                     </Group>
                   ) : null}
                   {results.tickets.length > 0 ? (
-                    <Group label="Support tickets" icon={<Ticket className="h-3.5 w-3.5" />}>
+                    <Group label="Support tickets">
                       {results.tickets.map((t) => (
                         <Row key={t.id} onClick={() => go(`/admin/support/${t.id}`)} title={`${t.ticketNumber} · ${t.subject}`} sub={t.businessName} />
                       ))}
                     </Group>
                   ) : null}
                   {results.websiteRequests.length > 0 ? (
-                    <Group label="Website requests" icon={<FileText className="h-3.5 w-3.5" />}>
+                    <Group label="Website requests">
                       {results.websiteRequests.map((r) => (
                         <Row key={r.id} onClick={() => go(`/admin/website-requests/${r.id}`)} title={r.name} sub={r.businessName} />
                       ))}
                     </Group>
                   ) : null}
                   {results.invoices.length > 0 ? (
-                    <Group label="Invoices" icon={<Inbox className="h-3.5 w-3.5" />}>
+                    <Group label="Invoices">
                       {results.invoices.map((i) => (
                         <Row key={i.id} onClick={() => go(`/admin/billing`)} title={i.invoiceNumber} sub={`${i.businessName} · ${i.status}`} />
                       ))}
@@ -166,11 +166,10 @@ export function AdminGlobalSearch() {
   );
 }
 
-function Group({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="flex items-center gap-1.5 px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-wider text-[rgb(var(--color-muted-foreground))]">
-        {icon}
+      <p className="px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-wider text-[rgb(var(--color-muted-foreground))]">
         {label}
       </p>
       <div className="space-y-0.5">{children}</div>

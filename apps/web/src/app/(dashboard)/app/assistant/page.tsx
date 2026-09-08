@@ -28,6 +28,7 @@ import {
   Pin,
   MessagesSquare,
   MoreVertical,
+  Briefcase,
 } from "lucide-react";
 import {
   Button,
@@ -53,6 +54,7 @@ import {
 
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useCurrency } from "@/lib/currency-context";
 
 type AttachmentDraft = {
   id: string;
@@ -170,6 +172,26 @@ async function fileToDraft(file: File): Promise<AttachmentDraft> {
   return draft;
 }
 
+function splitStrategistContent(content: string) {
+  if (!content) return { main: "", strategist: "" };
+  const marker = "<<<STRATEGIST>>>";
+  const markerIdx = content.indexOf(marker);
+  if (markerIdx >= 0) {
+    return {
+      main: content.slice(0, markerIdx).trim(),
+      strategist: content.slice(markerIdx + marker.length).trim(),
+    };
+  }
+  const heading = content.match(/\n#{2,3}\s+Business Strategist[^\n]*/i);
+  if (heading?.index != null) {
+    return {
+      main: content.slice(0, heading.index).trim(),
+      strategist: content.slice(heading.index).trim(),
+    };
+  }
+  return { main: content, strategist: "" };
+}
+
 function MarkdownBody({ content }: { content: string }) {
   return (
     <div className="prose prose-sm max-w-none prose-headings:text-[#111827] prose-p:text-[#111827] prose-p:leading-relaxed prose-strong:text-[#111827] prose-li:text-[#111827] prose-a:text-[#6366F1] prose-table:text-sm">
@@ -242,6 +264,7 @@ function MarkdownBody({ content }: { content: string }) {
 
 function AssistantInner() {
   const { user } = useAuth();
+  const { currency } = useCurrency();
   const reduceMotion = useReducedMotion();
   const rm = Boolean(reduceMotion);
 
@@ -301,6 +324,14 @@ function AssistantInner() {
   const [isListening, setIsListening] = React.useState(false);
 
   const hasChat = messages.length > 0;
+  const latestStrategist = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role !== "assistant" || !messages[i].content) continue;
+      const { strategist } = splitStrategistContent(messages[i].content);
+      if (strategist) return strategist;
+    }
+    return "";
+  }, [messages]);
   const firstName = cleanDisplayName(user?.firstName);
   const greeting = firstName ? `How can I help, ${firstName}?` : "How can I help?";
 
@@ -322,6 +353,7 @@ function AssistantInner() {
   const syncUrlChat = React.useCallback(
     (chatId?: string) => {
       const params = new URLSearchParams(searchParams?.toString() || "");
+      params.delete("prompt");
       if (chatId) params.set("chat", chatId);
       else params.delete("chat");
       const qs = params.toString();
@@ -525,6 +557,7 @@ function AssistantInner() {
           message: content,
           conversationId: convIdRef.current,
           attachments: payloadAttachments,
+          currency,
         },
         {
           onStatus: () => setThinking(true),
@@ -584,9 +617,9 @@ function AssistantInner() {
     }
   };
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, opts?: { ignoreBusy?: boolean }) => {
     const trimmed = text.trim();
-    if ((!trimmed && !attachments.length) || generating) return;
+    if ((!trimmed && !attachments.length) || (generating && !opts?.ignoreBusy)) return;
 
     setErrorBanner(null);
     const pendingAttachments = attachments;
@@ -618,6 +651,36 @@ function AssistantInner() {
     setTimeout(() => textareaRef.current?.focus(), 90);
     await streamReply(userMsg.content, pendingAttachments, assistantId);
   };
+
+  const promptHandledRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const prompt = searchParams?.get("prompt")?.trim();
+    if (!prompt || generating) return;
+    if (promptHandledRef.current === prompt) return;
+    promptHandledRef.current = prompt;
+
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setGenerating(false);
+    setThinking(false);
+    setMessages([]);
+    applyActiveMeta({ conversationId: undefined, title: "New chat", pinned: false });
+    setAttachments([]);
+    setInput("");
+    setErrorBanner(null);
+    setSearchHits([]);
+    atBottomRef.current = true;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("prompt");
+    params.delete("chat");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+
+    void sendMessage(prompt, { ignoreBusy: true });
+    // sendMessage is recreated each render; promptHandledRef prevents duplicates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const retryLastFailed = async () => {
     if (generating) return;
@@ -656,7 +719,7 @@ function AssistantInner() {
     try {
       let liveId = messageId;
       abortRef.current = await api.streamAssistantChat(
-        { conversationId: convIdRef.current, messageId } as any,
+        { conversationId: convIdRef.current, messageId, currency } as any,
         {
           onStatus: () => setThinking(true),
           onToken: (token) => {
@@ -788,6 +851,7 @@ function AssistantInner() {
   React.useEffect(() => {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
+    if (searchParams?.get("prompt")) return;
     const chatId = searchParams?.get("chat");
     if (chatId) void openConversation(chatId, true);
   }, [openConversation, searchParams]);
@@ -1152,7 +1216,6 @@ function AssistantInner() {
             className="h-8 gap-1.5 border-[#6366F1]/30 text-[#6366F1] hover:bg-[#6366F1]/5"
             onClick={newChat}
           >
-            <Plus className="h-3.5 w-3.5" />
             New Chat
           </Button>
         </div>
@@ -1218,11 +1281,12 @@ function AssistantInner() {
           ) : (
             <motion.div
               key="conversation"
-              className="flex min-h-0 flex-1 flex-col"
+              className="flex min-h-0 flex-1"
               initial={rm ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: rm ? 0 : 0.2, ease: "easeOut" }}
             >
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div
                 ref={scrollAreaRef}
                 onScroll={() => {
@@ -1299,7 +1363,7 @@ function AssistantInner() {
                                     Unable to reach Doloyal AI. Please try again.
                                   </p>
                                 ) : msg.content ? (
-                                  <MarkdownBody content={msg.content} />
+                                  <MarkdownBody content={splitStrategistContent(msg.content).main || msg.content} />
                                 ) : thinking || msg.streaming ? (
                                   <div className="flex items-center gap-2 text-[#6B7280]">
                                     <span className="flex gap-1">
@@ -1387,6 +1451,20 @@ function AssistantInner() {
                       ))}
                     </AnimatePresence>
                   )}
+                  {latestStrategist ? (
+                    <div className="mt-10 space-y-3 rounded-2xl border border-[#E5E7EB] bg-[#FAFAF8] p-4 lg:hidden">
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="h-4 w-4 text-[#6366F1]" />
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+                            Business Strategist
+                          </p>
+                          <p className="text-sm font-semibold text-[#111827]">Separate briefing</p>
+                        </div>
+                      </div>
+                      <MarkdownBody content={latestStrategist} />
+                    </div>
+                  ) : null}
                   <div ref={bottomRef} />
                 </div>
               </div>
@@ -1397,6 +1475,23 @@ function AssistantInner() {
                   Doloyal AI can make mistakes. Verify important business decisions.
                 </p>
               </div>
+              </div>
+              {latestStrategist ? (
+                <aside className="hidden min-h-0 w-[min(400px,36%)] shrink-0 flex-col border-l border-[#E5E7EB] bg-[#FAFAF8] lg:flex">
+                  <div className="flex shrink-0 items-start gap-2.5 border-b border-[#E5E7EB] px-4 py-3">
+                    <Briefcase className="mt-0.5 h-4 w-4 shrink-0 text-[#6366F1]" />
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+                        Business Strategist
+                      </p>
+                      <p className="text-sm font-semibold text-[#111827]">POV on this business</p>
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                    <MarkdownBody content={latestStrategist} />
+                  </div>
+                </aside>
+              ) : null}
             </motion.div>
           )}
         </AnimatePresence>

@@ -106,6 +106,7 @@ class UpdateCustomerDto {
 }
 
 @Controller('customers')
+@Roles('OWNER', 'MANAGER', 'RECEPTIONIST', 'STAFF')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 

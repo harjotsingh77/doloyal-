@@ -1080,7 +1080,6 @@ function BillingHistory({
         {history.length === 0 ? (
           <div className="p-6">
             <EmptyState
-              icon={<Receipt className="h-7 w-7" />}
               title="No billing history yet"
               description="Payments and plan changes will appear here once your subscription starts."
             />
@@ -1690,7 +1689,6 @@ function ReceiptDialog({
             Close
           </Button>
           <Button variant="secondary" onClick={handleDownload} disabled={!event}>
-            <Download className="h-4 w-4" />
             Download Receipt
           </Button>
         </DialogFooter>

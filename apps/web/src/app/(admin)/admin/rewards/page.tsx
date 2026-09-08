@@ -36,7 +36,7 @@ export default function AdminRewardsPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Gift className="h-10 w-10" />} title="Rewards data unavailable" />
+          <EmptyState title="Rewards data unavailable" />
         </CardContent>
       </Card>
     );
@@ -50,10 +50,10 @@ export default function AdminRewardsPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Rewards" }]}
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminStatCard label="Redemption rate" value={`${data.redemptionRate}%`} icon={<Percent className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Total redemptions" value={data.totalRedemptions} icon={<Gift className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Created (30d)" value={data.created30d} icon={<Gift className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Expired (30d)" value={data.expired30d} icon={<Gift className="h-4 w-4" />} tone="warning" />
+        <AdminStatCard label="Redemption rate" value={`${data.redemptionRate}%`} tone="primary" />
+        <AdminStatCard label="Total redemptions" value={data.totalRedemptions} tone="success" />
+        <AdminStatCard label="Created (30d)" value={data.created30d} tone="accent" />
+        <AdminStatCard label="Expired (30d)" value={data.expired30d} tone="warning" />
       </div>
 
       <Card>

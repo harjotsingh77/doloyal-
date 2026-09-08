@@ -92,7 +92,7 @@ export default function AdminSettingsPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Info className="h-10 w-10" />} title="Settings unavailable" />
+          <EmptyState title="Settings unavailable" />
         </CardContent>
       </Card>
     );

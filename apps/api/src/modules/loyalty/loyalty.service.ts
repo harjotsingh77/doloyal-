@@ -524,7 +524,7 @@ export class LoyaltyService {
       visits: c.totalVisits,
       referrals: c._count.referralsMade,
       membership: c.memberships[0]?.tier?.name ?? null,
-      growthPercent: Math.round(((c.totalVisits % 17) + 3) * 1.7),
+      growthPercent: 0,
       badges: c.badges.map((b) => b.badge.name),
       totalSpent: c.totalSpent,
       rewardsRedeemed: c._count.redemptions,

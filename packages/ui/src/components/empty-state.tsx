@@ -11,7 +11,8 @@ export interface EmptyStateProps {
   className?: string;
 }
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon: _icon, title, description, action, className }: EmptyStateProps) {
+  void _icon;
   return (
     <div
       className={cn(
@@ -19,11 +20,6 @@ export function EmptyState({ icon, title, description, action, className }: Empt
         className,
       )}
     >
-      {icon ? (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgb(var(--color-muted))] text-[rgb(var(--color-muted-foreground))]">
-          {icon}
-        </div>
-      ) : null}
       <h3 className="text-base font-semibold text-[rgb(var(--color-foreground))]">{title}</h3>
       {description ? (
         <p className="mt-1.5 max-w-sm text-sm text-[rgb(var(--color-muted-foreground))]">
@@ -39,17 +35,6 @@ export function EmptyState({ icon, title, description, action, className }: Empt
 export function ComingSoon({ title, description }: { title: string; description?: string }) {
   return (
     <EmptyState
-      icon={
-        <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" aria-hidden="true">
-          <path
-            d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-          <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.6" />
-        </svg>
-      }
       title={`${title} is coming soon`}
       description={
         description ??

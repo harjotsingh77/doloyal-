@@ -77,6 +77,8 @@ export const updateTenantSettingsSchema = z.object({
   description: z.string().max(5000).optional(),
   whatsapp: z.string().max(40).optional(),
   mapsUrl: z.string().max(1000).optional(),
+  googleReviewUrl: z.string().max(1000).optional().or(z.literal("")),
+  googlePlaceId: z.string().max(256).optional().or(z.literal("")),
   currency: z.string().length(3).optional(),
   timezone: z.string().max(60).optional(),
   language: z.string().max(20).optional(),
@@ -668,6 +670,76 @@ export const sendNotificationSchema = z.object({
   channel: z.string().default("EMAIL"),
 });
 export type SendNotificationInput = z.infer<typeof sendNotificationSchema>;
+
+export const createProductCategorySchema = z.object({
+  name: z.string().min(1, "Category name is required").max(80),
+  description: z.string().max(500).optional().or(z.literal("")),
+});
+export type CreateProductCategoryInput = z.infer<typeof createProductCategorySchema>;
+
+export const createProductSchema = z.object({
+  name: z.string().min(1, "Product name is required").max(160),
+  sku: z.string().min(1, "SKU is required").max(64),
+  description: z.string().max(5000).optional().or(z.literal("")),
+  categoryId: z.string().uuid().optional().nullable(),
+  price: currency,
+  originalPrice: currency.optional().nullable(),
+  discount: z.number().min(0).max(10_000_000).optional().nullable(),
+  stockQuantity: z.number().int().min(0).max(10_000_000).default(0),
+  lowStockThreshold: z.number().int().min(0).max(10_000_000).default(5),
+  unit: z.string().max(40).optional().or(z.literal("")),
+  brand: z.string().max(80).optional().or(z.literal("")),
+  productCode: z.string().max(64).optional().or(z.literal("")),
+  imageUrl: z.string().max(5_000_000).optional().nullable(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
+  availability: z.enum(["IN_STOCK", "OUT_OF_STOCK"]).default("IN_STOCK"),
+});
+export type CreateProductInput = z.infer<typeof createProductSchema>;
+export const updateProductSchema = createProductSchema.partial();
+export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+export const productQuerySchema = z.object({
+  search: z.string().max(200).optional(),
+  categoryId: z.string().uuid().optional(),
+  status: z.enum(["ALL", "ACTIVE", "INACTIVE"]).optional(),
+  stock: z.enum(["ALL", "IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"]).optional(),
+  sort: z.enum(["name", "sku", "category", "price", "stock", "status", "updatedAt"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  page: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+export type ProductQuery = z.infer<typeof productQuerySchema>;
+
+export const createClientOrderSchema = z.object({
+  customerId: z.string().uuid(),
+  productId: z.string().uuid(),
+  quantity: z.number().int().min(1).max(10_000_000),
+  unitPrice: currency,
+  discount: currency.default(0),
+  tax: currency.default(0),
+  status: z.enum(["PENDING", "CONFIRMED", "PROCESSING", "COMPLETED", "CANCELLED"]).default("PENDING"),
+  paymentStatus: z.enum(["PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED"]).default("PENDING"),
+  orderDate: z.string().optional(),
+  notes: z.string().max(5000).optional().or(z.literal("")),
+  assignedStaffId: z.string().optional().nullable(),
+  assignedStaffName: z.string().max(160).optional().nullable(),
+});
+export type CreateClientOrderInput = z.infer<typeof createClientOrderSchema>;
+export const updateClientOrderSchema = createClientOrderSchema.partial();
+export type UpdateClientOrderInput = z.infer<typeof updateClientOrderSchema>;
+
+export const clientOrderQuerySchema = z.object({
+  search: z.string().max(200).optional(),
+  productId: z.string().uuid().optional(),
+  customerId: z.string().uuid().optional(),
+  status: z.enum(["ALL", "PENDING", "CONFIRMED", "PROCESSING", "COMPLETED", "CANCELLED"]).optional(),
+  paymentStatus: z.enum(["ALL", "PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED"]).optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  page: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+export type ClientOrderQuery = z.infer<typeof clientOrderQuerySchema>;
 
 export const aiSuggestSlotSchema = z.object({
   serviceId: z.string(),

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -36,6 +36,7 @@ import type {
 } from "@doloyal/shared";
 import { ClientPageRenderer, masterConfigFromPageConfig } from "@/app/(dashboard)/app/client-page/client-page-renderer";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
+import { useClientAuth } from "@/lib/client-auth";
 
 const BASE_URL = getApiBaseUrl();
 
@@ -372,18 +373,18 @@ function EmptyCard({
 }
 
 function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  const dark = mounted && resolvedTheme === "dark";
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="p-2 rounded-[var(--radius-sm)] hover:bg-[rgb(var(--color-muted))] transition-colors"
+      type="button"
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      className="grid h-9 w-9 place-items-center rounded-full text-[#1c1410] hover:bg-white/80"
       aria-label="Toggle theme"
     >
-      {theme === "dark" ? (
-        <Sun className="h-4 w-4" />
-      ) : (
-        <Moon className="h-4 w-4" />
-      )}
+      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
   );
 }
@@ -405,7 +406,19 @@ const slideVariants = {
 
 export default function BookingPage() {
   const params = useParams<{ slug: string }>();
+  const router = useRouter();
   const slug = params.slug;
+  const { user, logout, portal } = useClientAuth();
+
+  React.useEffect(() => {
+    if (!user) {
+      router.replace(`/book/${slug}/sign-in`);
+      return;
+    }
+    if (user.needsPhone) {
+      router.replace(`/book/${slug}/complete-profile`);
+    }
+  }, [user, slug, router]);
 
   const [step, setStep] = React.useState(1);
   const [direction, setDirection] = React.useState(0);
@@ -461,6 +474,14 @@ export default function BookingPage() {
     }, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  React.useEffect(() => {
+    if (!user) return;
+    if (user.firstName) setFirstName((v) => v || user.firstName || "");
+    if (user.lastName) setLastName((v) => v || user.lastName || "");
+    if (user.email) setEmail((v) => v || user.email);
+    if (user.phone) setPhone((v) => v || user.phone || "");
+  }, [user]);
 
   const currency = business?.currency ?? "INR";
 
@@ -723,6 +744,14 @@ export default function BookingPage() {
     }
   }
 
+  if (!user || user.needsPhone) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgb(var(--color-border))] border-t-[rgb(var(--color-primary))]" />
+      </div>
+    );
+  }
+
   if (businessLoading) {
     return (
       <div className="min-h-screen p-4 md:p-8">
@@ -744,7 +773,8 @@ export default function BookingPage() {
     return <NoBusinessFound message={businessErrorMessage || undefined} />;
   }
 
-  const startBooking = () => {
+  const startBooking = (service?: PublicService) => {
+    if (service) setSelectedService(service);
     setPhase("flow");
     setDirection(1);
     setStep(2);
@@ -764,6 +794,8 @@ export default function BookingPage() {
         )}
         mode="published"
         onBook={startBooking}
+        portal={portal}
+        onLogout={() => logout(slug)}
         headerAccessory={<ThemeToggle />}
       />
     );

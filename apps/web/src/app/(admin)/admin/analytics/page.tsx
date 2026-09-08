@@ -39,7 +39,7 @@ export default function AdminAnalyticsPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Activity className="h-10 w-10" />} title="Analytics unavailable" />
+          <EmptyState title="Analytics unavailable" />
         </CardContent>
       </Card>
     );
@@ -66,14 +66,14 @@ export default function AdminAnalyticsPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminStatCard label="New signups" value={data.newSignups} icon={<Users className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Activation rate" value={`${data.activationRate}%`} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Onboarding completed" value={data.onboardingCompleted} icon={<Activity className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Activated businesses" value={data.activatedBusinesses} icon={<Users className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Active businesses" value={data.retention.activeBusinesses} icon={<Users className="h-4 w-4" />} />
-        <AdminStatCard label="Weekly actives" value={data.retention.wau} icon={<Activity className="h-4 w-4" />} tone="warning" />
-        <AdminStatCard label="Retention rate" value={`${data.retention.businessRetentionRate}%`} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Churn rate" value={`${data.retention.churnRate}%`} icon={<TrendingUp className="h-4 w-4" />} tone={data.retention.churnRate > 5 ? "danger" : "warning"} />
+        <AdminStatCard label="New signups" value={data.newSignups} tone="primary" />
+        <AdminStatCard label="Activation rate" value={`${data.activationRate}%`} tone="success" />
+        <AdminStatCard label="Onboarding completed" value={data.onboardingCompleted} tone="accent" />
+        <AdminStatCard label="Activated businesses" value={data.activatedBusinesses} tone="accent" />
+        <AdminStatCard label="Active businesses" value={data.retention.activeBusinesses} />
+        <AdminStatCard label="Weekly actives" value={data.retention.wau} tone="warning" />
+        <AdminStatCard label="Retention rate" value={`${data.retention.businessRetentionRate}%`} tone="success" />
+        <AdminStatCard label="Churn rate" value={`${data.retention.churnRate}%`} tone={data.retention.churnRate > 5 ? "danger" : "warning"} />
       </div>
 
       {data.acquisition.length > 0 ? (

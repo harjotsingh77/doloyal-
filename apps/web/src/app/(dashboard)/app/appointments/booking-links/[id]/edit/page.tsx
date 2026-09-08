@@ -341,10 +341,10 @@ export default function EditBookingPageEditor() {
         <aside className="w-[360px] shrink-0 overflow-y-auto border-r border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4">
           <Tabs defaultValue="sections">
             <TabsList className="mb-3 w-full">
-              <TabsTrigger value="sections" className="flex-1 text-xs"><Layout className="mr-1 h-3.5 w-3.5" />Sections</TabsTrigger>
-              <TabsTrigger value="brand" className="flex-1 text-xs"><Palette className="mr-1 h-3.5 w-3.5" />Brand</TabsTrigger>
-              <TabsTrigger value="seo" className="flex-1 text-xs"><Search className="mr-1 h-3.5 w-3.5" />SEO</TabsTrigger>
-              <TabsTrigger value="domain" className="flex-1 text-xs"><Globe className="mr-1 h-3.5 w-3.5" />Domain</TabsTrigger>
+              <TabsTrigger value="sections" className="flex-1 text-xs">Sections</TabsTrigger>
+              <TabsTrigger value="brand" className="flex-1 text-xs">Brand</TabsTrigger>
+              <TabsTrigger value="seo" className="flex-1 text-xs">SEO</TabsTrigger>
+              <TabsTrigger value="domain" className="flex-1 text-xs">Domain</TabsTrigger>
             </TabsList>
 
             <TabsContent value="sections" className="space-y-4">

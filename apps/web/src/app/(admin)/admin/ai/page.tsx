@@ -39,7 +39,7 @@ export default function AdminAiPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Sparkles className="h-10 w-10" />} title="AI usage data unavailable" />
+          <EmptyState title="AI usage data unavailable" />
         </CardContent>
       </Card>
     );
@@ -66,12 +66,12 @@ export default function AdminAiPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminStatCard label="AI queries (30d)" value={data.aiQueries30d} icon={<Bot className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Assistant sessions" value={data.assistantUsage30d} icon={<MessageSquare className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Retention AI calls" value={data.retentionAiUsage30d} icon={<Sparkles className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Site generations" value={data.websiteGenerationUsage30d} icon={<FileCode2 className="h-4 w-4" />} />
-        <AdminStatCard label="AI errors (30d)" value={data.aiErrors30d} icon={<TrendingDown className="h-4 w-4" />} tone={data.aiErrors30d > 0 ? "danger" : "success"} />
-        <AdminStatCard label="Est. cost" value={`₹${formatCompact(data.costEstimate)}`} icon={<Wallet className="h-4 w-4" />} tone="warning" />
+        <AdminStatCard label="AI queries (30d)" value={data.aiQueries30d} tone="primary" />
+        <AdminStatCard label="Assistant sessions" value={data.assistantUsage30d} tone="accent" />
+        <AdminStatCard label="Retention AI calls" value={data.retentionAiUsage30d} tone="accent" />
+        <AdminStatCard label="Site generations" value={data.websiteGenerationUsage30d} />
+        <AdminStatCard label="AI errors (30d)" value={data.aiErrors30d} tone={data.aiErrors30d > 0 ? "danger" : "success"} />
+        <AdminStatCard label="Est. cost" value={`₹${formatCompact(data.costEstimate)}`} tone="warning" />
       </div>
 
       {data.aiRequestVolume.length > 0 ? (

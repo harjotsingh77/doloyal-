@@ -12,12 +12,9 @@ import {
   DollarSign,
   ShoppingBag,
   Star,
-  TrendingUp,
-  Clock,
   Award,
   Gift,
   AlertTriangle,
-  Tag,
   Plus,
   MessageSquare,
   FileText,
@@ -50,10 +47,12 @@ import {
   avatarColor,
   relativeTime,
 } from "@doloyal/shared";
-import type { CustomerProfile } from "@doloyal/shared";
+import type { ClientOrder, CustomerProfile } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
+import { OrderFormDialog } from "../orders/order-form-dialog";
+import { useAppSync } from "@/lib/data-sync";
 
 export default function CustomerProfilePage() {
   const { format: fmt } = useCurrency();
@@ -64,6 +63,10 @@ export default function CustomerProfilePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [newNote, setNewNote] = React.useState("");
   const [addingNote, setAddingNote] = React.useState(false);
+  const [orders, setOrders] = React.useState<ClientOrder[]>([]);
+  const [orderFormOpen, setOrderFormOpen] = React.useState(false);
+
+  const [reloadTick, setReloadTick] = React.useState(0);
 
   React.useEffect(() => {
     if (!params.id) return;
@@ -73,7 +76,11 @@ export default function CustomerProfilePage() {
         setLoading(true);
         setError(null);
         const data = await api.getCustomer(params.id as string);
-        if (!cancelled) setCustomer(data);
+        const related = await api.listOrders({ customerId: params.id as string, limit: 50 }).catch(() => ({ items: [] as ClientOrder[] }));
+        if (!cancelled) {
+          setCustomer(data);
+          setOrders(related.items);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load customer");
@@ -86,7 +93,9 @@ export default function CustomerProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [params.id]);
+  }, [params.id, reloadTick]);
+
+  useAppSync(["customers", "orders", "reviews", "loyalty", "invoices"], () => setReloadTick((n) => n + 1));
 
   const handleAddNote = async () => {
     if (!newNote.trim() || !customer) return;
@@ -135,8 +144,7 @@ export default function CustomerProfilePage() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <AlertTriangle className="h-10 w-10 text-[rgb(var(--color-danger))]" />
-        <h3 className="mt-4 text-lg font-semibold">Failed to load customer</h3>
+        <h3 className="text-lg font-semibold">Failed to load customer</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{error}</p>
         <Button variant="ghost" className="mt-4" onClick={() => router.back()}>
           Go back
@@ -222,6 +230,9 @@ export default function CustomerProfilePage() {
                     <Calendar className="h-3.5 w-3.5" />
                     Customer since {new Date(customer.createdAt).toLocaleDateString()}
                   </span>
+                  {customer.lastLoginAt && (
+                    <span>Last login {new Date(customer.lastLoginAt).toLocaleString()}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -264,22 +275,11 @@ export default function CustomerProfilePage() {
 
       <Tabs defaultValue="timeline">
         <TabsList>
-          <TabsTrigger value="timeline">
-            <Clock className="h-4 w-4" />
-            Activity Timeline
-          </TabsTrigger>
-          <TabsTrigger value="ledger">
-            <Gift className="h-4 w-4" />
-            Points Ledger
-          </TabsTrigger>
-          <TabsTrigger value="membership">
-            <Award className="h-4 w-4" />
-            Membership
-          </TabsTrigger>
-          <TabsTrigger value="insights">
-            <TrendingUp className="h-4 w-4" />
-            Insights
-          </TabsTrigger>
+          <TabsTrigger value="timeline">Activity Timeline</TabsTrigger>
+          <TabsTrigger value="ledger">Points Ledger</TabsTrigger>
+          <TabsTrigger value="membership">Membership</TabsTrigger>
+          <TabsTrigger value="orders">Orders</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline">
@@ -395,18 +395,13 @@ export default function CustomerProfilePage() {
           <Card>
             <CardContent className="p-6">
               {customer.membership ? (
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]">
-                    <Award className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">{customer.membership.tierName}</h4>
-                    <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
-                      {customer.membership.active ? "Active" : "Inactive"} ·{" "}
-                      {new Date(customer.membership.startDate).toLocaleDateString()} –{" "}
-                      {new Date(customer.membership.endDate).toLocaleDateString()}
-                    </p>
-                  </div>
+                <div>
+                  <h4 className="font-semibold">{customer.membership.tierName}</h4>
+                  <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+                    {customer.membership.active ? "Active" : "Inactive"} ·{" "}
+                    {new Date(customer.membership.startDate).toLocaleDateString()} –{" "}
+                    {new Date(customer.membership.endDate).toLocaleDateString()}
+                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
@@ -415,6 +410,66 @@ export default function CustomerProfilePage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="orders">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle>Related Orders</CardTitle>
+              <Button
+                size="sm"
+                onClick={() => setOrderFormOpen(true)}
+              >
+                Create Order
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {orders.length === 0 ? (
+                <p className="px-5 py-8 text-center text-sm text-[rgb(var(--color-muted-foreground))]">
+                  No orders for this client yet
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="cursor-pointer"
+                        onClick={() => router.push(`/app/customers/orders/${row.id}`)}
+                      >
+                        <TableCell className="font-medium">{row.orderNumber}</TableCell>
+                        <TableCell>{row.productName}</TableCell>
+                        <TableCell>{new Date(row.orderDate).toLocaleDateString()}</TableCell>
+                        <TableCell>{fmt(row.total)}</TableCell>
+                        <TableCell>
+                          <Badge variant={row.status === "COMPLETED" ? "success" : row.status === "CANCELLED" ? "danger" : "warning"}>
+                            {row.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          <OrderFormDialog
+            open={orderFormOpen}
+            onOpenChange={setOrderFormOpen}
+            initialCustomerId={customer.id}
+            onSaved={(saved) => {
+              setOrders((prev) => [saved, ...prev.filter((o) => o.id !== saved.id)]);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="insights">
@@ -498,7 +553,6 @@ export default function CustomerProfilePage() {
         <CardHeader>
           <CardTitle>
             <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4" />
               Tags & Notes
             </div>
           </CardTitle>
@@ -544,6 +598,8 @@ export default function CustomerProfilePage() {
 function TimelineIcon({ kind }: { kind: string }) {
   const icons: Record<string, React.ReactNode> = {
     VISIT: <ShoppingBag className="h-4 w-4 text-[rgb(var(--color-primary))]" />,
+    ORDER: <ShoppingBag className="h-4 w-4 text-[rgb(var(--color-success))]" />,
+    REVIEW: <Star className="h-4 w-4 text-[rgb(var(--color-warning))]" />,
     INVOICE: <DollarSign className="h-4 w-4 text-[rgb(var(--color-success))]" />,
     POINTS: <Star className="h-4 w-4 text-[rgb(var(--color-warning))]" />,
     REWARD: <Gift className="h-4 w-4 text-[rgb(var(--color-accent))]" />,

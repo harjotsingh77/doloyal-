@@ -81,12 +81,12 @@ export default function AdminBookingsPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <AdminStatCard label="Today" value={overview?.today ?? "—"} icon={<CalendarDays className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Upcoming" value={overview?.upcoming ?? "—"} icon={<CalendarClock className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Completed" value={overview?.completed ?? "—"} icon={<CircleCheck className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Canceled" value={overview?.canceled ?? "—"} icon={<CircleX className="h-4 w-4" />} tone="danger" />
-        <AdminStatCard label="No shows" value={overview?.noShows ?? "—"} icon={<UserX className="h-4 w-4" />} tone="warning" />
-        <AdminStatCard label="Total" value={overview?.total ?? "—"} icon={<CalendarX className="h-4 w-4" />} />
+        <AdminStatCard label="Today" value={overview?.today ?? "—"} tone="primary" />
+        <AdminStatCard label="Upcoming" value={overview?.upcoming ?? "—"} tone="accent" />
+        <AdminStatCard label="Completed" value={overview?.completed ?? "—"} tone="success" />
+        <AdminStatCard label="Canceled" value={overview?.canceled ?? "—"} tone="danger" />
+        <AdminStatCard label="No shows" value={overview?.noShows ?? "—"} tone="warning" />
+        <AdminStatCard label="Total" value={overview?.total ?? "—"} />
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -117,7 +117,7 @@ export default function AdminBookingsPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<CalendarClock className="h-10 w-10" />} title="No bookings found" description="No bookings match these filters." />
+              <EmptyState title="No bookings found" description="No bookings match these filters." />
             </div>
           ) : (
             <Table>

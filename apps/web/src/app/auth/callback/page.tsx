@@ -4,19 +4,21 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { supabase, isSupabaseConfigured, getMissingSupabaseConfig } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
+import { CLIENT_OAUTH_SLUG_KEY, useClientAuth, destinationForClientUser } from "@/lib/client-auth";
+import type { AuthUser } from "@doloyal/shared";
 
 /**
  * Supabase OAuth callback (PKCE).
  *
- * Supabase redirects here after Google sign-in with a one-time `code` param.
- * The code is exchanged for a session in the browser (the PKCE code verifier
- * lives in localStorage), then the Supabase session is bridged into the
- * existing app session before redirecting to the dashboard, so the dashboard
- * never mounts with a stale/mock identity.
+ * Owner Google sign-in lands on the dashboard.
+ * Client Google sign-in (`?client=slug`) completes the customer session and
+ * never opens the owner dashboard.
  */
 export default function AuthCallbackPage() {
   const router = useRouter();
   const { resolveSupabaseSession } = useAuth();
+  const { setSession } = useClientAuth();
   const handled = React.useRef(false);
 
   React.useEffect(() => {
@@ -31,10 +33,7 @@ export default function AuthCallbackPage() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const error = params.get("error") || params.get("error_code");
-    console.info("[auth/callback] Received on", window.location.origin + window.location.pathname, {
-      hasCode: Boolean(code),
-      error: error || null,
-    });
+    const clientSlug = params.get("client") || sessionStorage.getItem(CLIENT_OAUTH_SLUG_KEY);
 
     if (error || !isSupabaseConfigured()) {
       const missing = getMissingSupabaseConfig();
@@ -42,7 +41,7 @@ export default function AuthCallbackPage() {
         "[auth/callback] Cannot complete sign-in:",
         error ? `OAuth error=${error}` : `missing Supabase env vars=${missing.join(", ")}`,
       );
-      finish("/sign-in?auth=error");
+      finish(clientSlug ? `/book/${clientSlug}/sign-in?auth=error` : "/sign-in?auth=error");
       return;
     }
 
@@ -54,9 +53,26 @@ export default function AuthCallbackPage() {
             console.warn("exchangeCodeForSession warning:", exchangeError.message);
           }
         }
+
+        if (clientSlug) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.access_token) {
+            finish(`/book/${clientSlug}/sign-in?auth=error`);
+            return;
+          }
+          const result = await api.clientSupabaseExchange(session.access_token, clientSlug);
+          if (result?.token && result?.user) {
+            setSession(result.token, result.user as AuthUser);
+            sessionStorage.removeItem(CLIENT_OAUTH_SLUG_KEY);
+            window.location.href = destinationForClientUser(clientSlug, result.user as AuthUser);
+            return;
+          }
+          finish(`/book/${clientSlug}/sign-in?auth=error`);
+          return;
+        }
+
         const user = await resolveSupabaseSession();
         if (user) {
-          console.info("[auth/callback] Session bridged to Doloyal API for", user.email);
           finish("/app/dashboard");
           return;
         }
@@ -68,7 +84,7 @@ export default function AuthCallbackPage() {
         finish("/sign-in?auth=error");
       } catch (err) {
         console.error("Auth callback error:", err);
-        finish("/sign-in?auth=error");
+        finish(clientSlug ? `/book/${clientSlug}/sign-in?auth=error` : "/sign-in?auth=error");
       }
     })();
   }, [router, resolveSupabaseSession]);

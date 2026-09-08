@@ -36,7 +36,7 @@ export default function AdminLoyaltyPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Heart className="h-10 w-10" />} title="Loyalty data unavailable" />
+          <EmptyState title="Loyalty data unavailable" />
         </CardContent>
       </Card>
     );
@@ -50,12 +50,12 @@ export default function AdminLoyaltyPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Loyalty" }]}
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <AdminStatCard label="Points issued" value={data.pointsIssued} icon={<Coins className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Points redeemed" value={data.pointsRedeemed} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Rewards created" value={data.rewardsCreated} icon={<Gift className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Rewards redeemed" value={data.rewardsRedeemed} icon={<Gift className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Active programs" value={data.activePrograms} icon={<Heart className="h-4 w-4" />} tone="warning" />
-        <AdminStatCard label="Businesses with loyalty" value={data.totalBusinesses} icon={<Heart className="h-4 w-4" />} />
+        <AdminStatCard label="Points issued" value={data.pointsIssued} tone="primary" />
+        <AdminStatCard label="Points redeemed" value={data.pointsRedeemed} tone="success" />
+        <AdminStatCard label="Rewards created" value={data.rewardsCreated} tone="accent" />
+        <AdminStatCard label="Rewards redeemed" value={data.rewardsRedeemed} tone="accent" />
+        <AdminStatCard label="Active programs" value={data.activePrograms} tone="warning" />
+        <AdminStatCard label="Businesses with loyalty" value={data.totalBusinesses} />
       </div>
     </div>
   );

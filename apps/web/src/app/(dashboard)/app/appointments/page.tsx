@@ -80,6 +80,7 @@ import { relativeTime } from "@doloyal/shared";
 import type { Appointment, AppointmentDetail } from "@doloyal/shared";
 import type { BookingSource, PaymentStatus, AppointmentStatusExtended } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useAppSync } from "@/lib/data-sync";
 import { toast } from "sonner";
 
 type ViewMode = "table" | "kanban" | "calendar" | "timeline";
@@ -368,6 +369,11 @@ export default function AppointmentsPage() {
     loadCustomers();
   }, [loadAppointments, loadCustomers]);
 
+  useAppSync(["appointments", "customers"], () => {
+    loadAppointments();
+    loadCustomers();
+  });
+
   // Poll every 30s
   React.useEffect(() => {
     const interval = setInterval(() => {
@@ -523,7 +529,6 @@ export default function AppointmentsPage() {
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild>
                 <Button>
-                  <Plus className="h-4 w-4" />
                   New Appointment
                 </Button>
               </DialogTrigger>
@@ -895,7 +900,6 @@ function TableView({
     return (
       <div className="p-6">
         <EmptyState
-          icon={<CalendarDays className="h-6 w-6" />}
           title="No appointments found"
           description="Try adjusting your filters"
         />

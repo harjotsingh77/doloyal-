@@ -86,6 +86,15 @@ export class CustomersService {
           orderBy: { createdAt: 'desc' },
           include: { items: true },
         },
+        orders: {
+          take: 20,
+          orderBy: { orderDate: 'desc' },
+          include: { product: { select: { name: true } } },
+        },
+        reviews: {
+          take: 20,
+          orderBy: { createdAt: 'desc' },
+        },
         pointsLedger: {
           take: 50,
           orderBy: { createdAt: 'desc' },
@@ -110,6 +119,13 @@ export class CustomersService {
         preferredServicesMap.set(item.description, existing);
       }
     }
+    for (const order of customer.orders || []) {
+      const name = order.product?.name || 'Order';
+      const existing = preferredServicesMap.get(name) || { count: 0, lastAt: new Date(0) };
+      existing.count += order.quantity;
+      if (order.orderDate > existing.lastAt) existing.lastAt = order.orderDate;
+      preferredServicesMap.set(name, existing);
+    }
     const preferredServices = Array.from(preferredServicesMap.entries())
       .map(([name, data]) => ({ name, count: data.count, lastAt: data.lastAt.toISOString() }))
       .sort((a, b) => b.count - a.count)
@@ -124,6 +140,24 @@ export class CustomersService {
         amount: inv.total,
         points: undefined,
         date: inv.createdAt.toISOString(),
+      })),
+      ...(customer.orders || []).map((order) => ({
+        id: order.id,
+        kind: 'ORDER' as const,
+        title: `Order ${order.orderNumber}`,
+        description: `${order.product?.name || 'Product'} · ${order.status}`,
+        amount: order.total,
+        points: undefined,
+        date: order.orderDate.toISOString(),
+      })),
+      ...(customer.reviews || []).map((review) => ({
+        id: review.id,
+        kind: 'REVIEW' as const,
+        title: `${review.rating}-star review`,
+        description: review.status === 'APPROVED' ? 'Approved' : review.status === 'REJECTED' ? 'Rejected' : 'Pending approval',
+        amount: undefined,
+        points: undefined,
+        date: review.createdAt.toISOString(),
       })),
       ...customer.pointsLedger.map((p) => ({
         id: p.id,
@@ -202,6 +236,7 @@ export class CustomersService {
         notes: data.notes,
         tags: data.tags || [],
         status: 'ACTIVE',
+        signupSource: 'MANUAL',
       },
     });
 
@@ -247,6 +282,146 @@ export class CustomersService {
     }
 
     return prismaCustomerToShared(customer);
+  }
+
+  async ensureLinkedClient(input: {
+    tenantId: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    avatarUrl?: string | null;
+    source?: string;
+  }) {
+    const tenantId = input.tenantId;
+    const now = new Date();
+
+    const byUser = await this.prisma.customer.findFirst({
+      where: { tenantId, userId: input.userId },
+    });
+    if (byUser) {
+      return this.prisma.customer.update({
+        where: { id: byUser.id },
+        data: {
+          phone: input.phone || byUser.phone,
+          email: input.email || byUser.email,
+          avatarUrl: input.avatarUrl || byUser.avatarUrl,
+          lastLoginAt: now,
+          lastActivityAt: now,
+          status: byUser.status === 'INACTIVE' ? 'ACTIVE' : byUser.status,
+        },
+      });
+    }
+
+    const orFilters: Array<{ email?: { equals: string; mode: 'insensitive' }; phone?: string }> = [];
+    if (input.email) orFilters.push({ email: { equals: input.email, mode: 'insensitive' } });
+    if (input.phone) orFilters.push({ phone: input.phone });
+
+    const existing = orFilters.length
+      ? await this.prisma.customer.findFirst({
+          where: { tenantId, OR: orFilters },
+        })
+      : null;
+
+    if (existing) {
+      if (existing.userId && existing.userId !== input.userId) {
+        throw new ConflictException('This customer profile is already linked to another account for this business.');
+      }
+      return this.prisma.customer.update({
+        where: { id: existing.id },
+        data: {
+          userId: input.userId,
+          phone: input.phone || existing.phone,
+          email: input.email || existing.email,
+          avatarUrl: input.avatarUrl || existing.avatarUrl,
+          lastLoginAt: now,
+          lastActivityAt: now,
+          signupSource: existing.signupSource || input.source || 'CLIENT_PAGE',
+        },
+      });
+    }
+
+    const created = await this.create(tenantId, {
+      name: `${input.firstName} ${input.lastName}`.trim() || input.firstName,
+      phone: input.phone,
+      email: input.email,
+      tags: ['client-page'],
+    });
+
+    return this.prisma.customer.update({
+      where: { id: created.id },
+      data: {
+        userId: input.userId,
+        avatarUrl: input.avatarUrl || undefined,
+        signupSource: input.source || 'CLIENT_PAGE',
+        lastLoginAt: now,
+        lastActivityAt: now,
+        firstName: input.firstName || undefined,
+        lastName: input.lastName || undefined,
+      },
+    });
+  }
+
+  async touchClientLogin(tenantId: string, customerId: string) {
+    const now = new Date();
+    await this.prisma.customer.updateMany({
+      where: { id: customerId, tenantId },
+      data: { lastLoginAt: now, lastActivityAt: now },
+    });
+  }
+
+  async getClientPortal(tenantId: string, userId: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { tenantId, userId },
+      include: {
+        appointments: {
+          take: 20,
+          orderBy: { startTime: 'desc' },
+          include: { staff: true },
+        },
+        memberships: { include: { tier: true }, take: 1 },
+      },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer profile not found for this business.');
+    }
+
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: { lastActivityAt: new Date() },
+    });
+
+    const rewards = await this.prisma.reward.findMany({
+      where: { tenantId, status: 'ACTIVE' as any },
+      orderBy: { pointsCost: 'asc' },
+      take: 12,
+    });
+
+    const membership = customer.memberships[0]?.tier
+      ? { name: customer.memberships[0].tier.name, color: customer.memberships[0].tier.color }
+      : null;
+
+    return {
+      customer: prismaCustomerToShared(customer),
+      appointments: customer.appointments.map((apt) => ({
+        id: apt.id,
+        startTime: apt.startTime.toISOString(),
+        endTime: apt.endTime?.toISOString?.() ?? null,
+        status: apt.status,
+        serviceName: apt.serviceName,
+        staffName: apt.staff?.name ?? null,
+      })),
+      rewards: rewards.map((r) => ({
+        id: r.id,
+        name: r.name,
+        pointsCost: r.pointsCost,
+        description: r.description,
+      })),
+      membership,
+      referralCode: customer.referralCode,
+      pointsBalance: customer.pointsBalance,
+    };
   }
 
   async update(tenantId: string, id: string, data: { name?: string; phone?: string; email?: string; notes?: string; tags?: string[]; status?: 'ACTIVE' | 'AT_RISK' | 'INACTIVE' | 'CHURNED' }) {

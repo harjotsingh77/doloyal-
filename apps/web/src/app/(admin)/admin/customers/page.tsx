@@ -85,7 +85,6 @@ export default function AdminCustomersPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<Users className="h-10 w-10" />}
                 title="No customers found"
                 description={search ? "Try a different search term." : "Customers appear here once businesses add them."}
               />

@@ -20,6 +20,7 @@ interface AuthUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  phone?: string | null;
   avatarUrl?: string;
   twoFactorEnabled?: boolean;
   isAdmin?: boolean;
@@ -28,6 +29,10 @@ interface AuthUser {
   memberships: Membership[];
   activeTenantId: string;
   activeRole: "OWNER" | "MANAGER" | "RECEPTIONIST" | "STAFF" | "CUSTOMER";
+  sessionKind?: "staff" | "customer";
+  customerId?: string | null;
+  needsPhone?: boolean;
+  clientSlug?: string | null;
   isImpersonating?: boolean;
   impersonatedTenantId?: string;
   impersonatedTenantName?: string;
@@ -389,6 +394,9 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
     };
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (typeof window !== "undefined" && sessionStorage.getItem("doloyal_client_oauth_slug")) {
+        return;
+      }
       if (event === "SIGNED_OUT") {
         clearAuth();
       } else if (session) {
@@ -542,7 +550,7 @@ export function useAuth(): AuthContextValue {
  * - If loading → still render children (user is already available from cache)
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
   React.useEffect(() => {
@@ -551,10 +559,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  React.useEffect(() => {
+    if (user?.sessionKind === "customer" || user?.activeRole === "CUSTOMER") {
+      const slug = user.clientSlug;
+      window.location.href = slug ? `/book/${slug}` : "/sign-in";
+    }
+  }, [user]);
+
   // Always render children — user is initialized synchronously from localStorage
   // so `isAuthenticated` is true from the very first render in normal usage.
   // Only return null for the brief redirect frame when user is explicitly logged out.
   if (!isAuthenticated && !isLoading) return null;
+  if (user?.sessionKind === "customer" || user?.activeRole === "CUSTOMER") return null;
 
   return <>{children}</>;
 }

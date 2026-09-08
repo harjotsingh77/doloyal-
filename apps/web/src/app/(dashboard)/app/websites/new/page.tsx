@@ -180,7 +180,6 @@ export default function NewWebsiteProjectPage() {
           {step === 1 && (
             <div className="space-y-6">
               <SectionHeading
-                icon={<Globe className="h-4 w-4" />}
                 title="What should we build?"
                 description="Pick the kind of website that best fits your business."
               />
@@ -221,7 +220,6 @@ export default function NewWebsiteProjectPage() {
           {step === 2 && (
             <div className="space-y-5">
               <SectionHeading
-                icon={<Sparkles className="h-4 w-4" />}
                 title="About your business"
                 description="This helps our team design a site that's genuinely yours."
               />
@@ -282,7 +280,6 @@ export default function NewWebsiteProjectPage() {
           {step === 3 && (
             <div className="space-y-6">
               <SectionHeading
-                icon={<Sparkles className="h-4 w-4" />}
                 title="Design direction"
                 description="Pick the styles you love — our designers will take it from there."
               />
@@ -407,16 +404,11 @@ export default function NewWebsiteProjectPage() {
   );
 }
 
-function SectionHeading({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--color-primary)/0.08)] text-[rgb(var(--color-primary))]">
-        {icon}
-      </div>
-      <div>
-        <h2 className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{title}</h2>
-        <p className="mt-0.5 text-xs text-[rgb(var(--color-muted-foreground))]">{description}</p>
-      </div>
+    <div>
+      <h2 className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{title}</h2>
+      <p className="mt-0.5 text-xs text-[rgb(var(--color-muted-foreground))]">{description}</p>
     </div>
   );
 }
@@ -520,7 +512,6 @@ function ReviewStep({
   return (
     <div className="space-y-5">
       <SectionHeading
-        icon={<CheckCircle2 className="h-4 w-4" />}
         title="Review your request"
         description="Once submitted, our team will review it and reach out in the project chat."
       />

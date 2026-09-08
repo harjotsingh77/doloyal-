@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, Receipt } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Badge, Button, Skeleton, cn } from "@doloyal/ui";
 import type { BillingSubscription } from "@doloyal/shared";
 import { api } from "@/lib/api";
@@ -149,7 +149,6 @@ export default function BillingSummaryPage() {
           </Link>
           <Link href="/app/billing#invoices" prefetch>
             <Button variant="ghost" size="sm">
-              <Receipt className="h-4 w-4" />
               View invoices
             </Button>
           </Link>

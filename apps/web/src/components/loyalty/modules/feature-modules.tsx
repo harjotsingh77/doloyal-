@@ -181,7 +181,7 @@ export function ChallengesModule({ feature, onConfigure }: LoyaltyModuleProps) {
           />
         </Field>
         <Button size="sm" onClick={create} disabled={saving || !draft.title}>
-          <Plus className="h-3.5 w-3.5" /> Create challenge
+          Create challenge
         </Button>
       </ModuleCard>
 
@@ -269,7 +269,7 @@ export function BadgesModule({ feature, onConfigure }: LoyaltyModuleProps) {
         </Field>
         <div className="sm:col-span-2">
           <Button size="sm" onClick={create} disabled={saving || !draft.name}>
-            <Plus className="h-3.5 w-3.5" /> Create badge
+            Create badge
           </Button>
         </div>
       </ModuleCard>
@@ -506,7 +506,7 @@ export function AutomationsModule({ feature, onConfigure }: LoyaltyModuleProps) 
           </Field>
         </div>
         <Button size="sm" onClick={create} disabled={!draft.name}>
-          <Plus className="h-3.5 w-3.5" /> Create automation
+          Create automation
         </Button>
       </ModuleCard>
       {loading ? (
@@ -764,7 +764,7 @@ export function RewardsCategoryModule({
         </Field>
         <div className="sm:col-span-2">
           <Button size="sm" disabled={!draft.name} onClick={create}>
-            <Plus className="h-3.5 w-3.5" /> Create reward
+            Create reward
           </Button>
         </div>
       </ModuleCard>

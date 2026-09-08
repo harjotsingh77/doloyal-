@@ -130,7 +130,6 @@ export default function AdminBusinessesPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<Building2 className="h-10 w-10" />}
                 title="No businesses found"
                 description={search || status || plan ? "Try adjusting your filters." : "New businesses appear here as they sign up."}
               />

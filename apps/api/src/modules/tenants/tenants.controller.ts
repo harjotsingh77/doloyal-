@@ -164,6 +164,7 @@ class UpdateTenantDto {
   @IsString() @IsOptional() @MaxLength(24) brandShortName?: string;
   @IsString() @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/) backgroundColor?: string;
   @IsString() @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/) textColor?: string;
+  @IsOptional() @IsObject() clientSignInBranding?: Record<string, unknown> | null;
   @IsNumber() @IsOptional() taxRate?: number;
   @IsString() @IsOptional() gst?: string;
   @IsString() @IsOptional() registrationNumber?: string;
@@ -171,6 +172,8 @@ class UpdateTenantDto {
   @IsString() @IsOptional() description?: string;
   @IsString() @IsOptional() whatsapp?: string;
   @IsString() @IsOptional() mapsUrl?: string;
+  @IsString() @IsOptional() @MaxLength(1000) googleReviewUrl?: string;
+  @IsString() @IsOptional() @MaxLength(256) googlePlaceId?: string;
   @IsOptional() logoUrl?: string | null;
   @IsOptional() coverBannerUrl?: string | null;
   @IsOptional() faviconUrl?: string | null;

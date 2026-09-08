@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Mail, MessageSquare, Smartphone, Megaphone } from "lucide-react";
+import { Mail, MessageSquare, Smartphone } from "lucide-react";
 import { Switch } from "@doloyal/ui";
 import type { NotificationPrefsSettings } from "@doloyal/shared";
 import { useTenant, useUpdateTenant } from "@/lib/tenant-query";
@@ -103,7 +103,6 @@ export default function NotificationsSettingsPage() {
         description="Offers, promotions and newsletters — separate from operational messages."
       >
         <div className="flex items-center gap-3 rounded-xl border border-[rgb(var(--color-border))] px-4 py-3">
-          <Megaphone className="h-4 w-4 text-[rgb(var(--color-muted-foreground))]" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">Marketing emails</span>
             <span className="block text-xs text-[rgb(var(--color-muted-foreground))]">

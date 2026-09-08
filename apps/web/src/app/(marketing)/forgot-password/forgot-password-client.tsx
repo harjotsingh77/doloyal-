@@ -54,7 +54,7 @@ export function ForgotPasswordScreen() {
     try {
       await api.resetPassword(resetToken!, newPassword);
       setResetDone(true);
-      setTimeout(() => router.push("/sign-in"), 1800);
+      setTimeout(() => router.push(searchParams.get("next") || "/sign-in"), 1800);
     } catch (err) {
       setError(err instanceof Error ? err.message : "This link is invalid or has expired.");
     } finally {

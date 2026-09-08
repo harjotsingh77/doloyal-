@@ -2,24 +2,14 @@
 
 import * as React from "react";
 import {
-  FileText,
-  Plus,
   Search,
   ChevronRight,
-  DollarSign,
-  Receipt,
   Trash2,
-  X,
-  Download,
-  LayoutTemplate,
   Check,
   Eye,
   Sparkles,
-  Upload,
   FileUp,
   Pencil,
-  Settings2,
-  Palette,
   FileCode,
   Wand2,
   Loader2,
@@ -58,6 +48,7 @@ import {
 } from "@doloyal/ui";
 import type { Invoice, CreateInvoiceInput, Customer } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useAppSync } from "@/lib/data-sync";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 
@@ -948,6 +939,8 @@ export default function InvoicesPage() {
     loadData();
   }, [loadData]);
 
+  useAppSync(["invoices", "customers", "dashboard"], () => loadData());
+
   const handleViewInvoice = async (id: string) => {
     try {
       setViewLoading(true);
@@ -1048,7 +1041,6 @@ export default function InvoicesPage() {
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="h-4 w-4" />
                 New Invoice
               </Button>
             </DialogTrigger>
@@ -1113,7 +1105,6 @@ export default function InvoicesPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Line Items</span>
                     <Button variant="secondary" size="sm" onClick={addLineItem}>
-                      <Plus className="h-3.5 w-3.5" />
                       Add Item
                     </Button>
                   </div>
@@ -1241,7 +1232,7 @@ export default function InvoicesPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard
           label="Total Paid"
           value={totalPaid}
@@ -1274,7 +1265,6 @@ export default function InvoicesPage() {
               : "text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]"
           }`}
         >
-          <FileText className="h-4 w-4" />
           All Invoices
           {invoices.length > 0 && (
             <Badge variant="outline" className="ml-1 text-[0.6rem]">{invoices.length}</Badge>
@@ -1288,7 +1278,6 @@ export default function InvoicesPage() {
               : "text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]"
           }`}
         >
-          <LayoutTemplate className="h-4 w-4" />
           Templates
         </button>
       </div>
@@ -1338,7 +1327,6 @@ export default function InvoicesPage() {
             ) : invoices.length === 0 ? (
               <div className="p-6">
                 <EmptyState
-                  icon={<FileText className="h-6 w-6" />}
                   title="No invoices found"
                   description={
                     debouncedSearch || statusFilter !== "ALL"
@@ -1348,7 +1336,6 @@ export default function InvoicesPage() {
                   action={
                     !debouncedSearch && statusFilter === "ALL" ? (
                       <Button onClick={() => setCreateDialogOpen(true)}>
-                        <Plus className="h-4 w-4" />
                         New Invoice
                       </Button>
                     ) : undefined
@@ -1412,17 +1399,13 @@ export default function InvoicesPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-[rgb(var(--color-primary))]" />
                       Invoice Templates & Theme Editor
-                    </div>
                   </CardTitle>
                   <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
                     Choose a preset template or upload your own Word (.docx) file & customize your business theme.
                   </p>
                 </div>
                 <Button onClick={openNewBuilder} className="gap-2">
-                  <Upload className="h-4 w-4" />
                   Upload / Create Template
                 </Button>
               </div>
@@ -1548,10 +1531,7 @@ export default function InvoicesPage() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              <div className="flex items-center gap-2">
-                <Wand2 className="h-5 w-5 text-[#7C3AED]" />
                 {editingTplId ? "Edit Invoice Template" : "AI Template Generator & Theme Builder"}
-              </div>
             </DialogTitle>
             <DialogDescription>
               Prompt AI to generate a complete custom invoice theme, upload a Word (.docx) file, or manually edit your business colors & terms.
@@ -1827,7 +1807,6 @@ export default function InvoicesPage() {
           )}
           <DialogFooter>
             <Button variant="secondary" onClick={() => window.print()}>
-              <Download className="h-4 w-4" />
               Print / Save PDF
             </Button>
             <Button variant="secondary" onClick={() => setViewDialogOpen(false)}>

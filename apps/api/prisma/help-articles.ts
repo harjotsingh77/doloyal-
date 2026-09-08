@@ -331,6 +331,17 @@ export const HELP_ARTICLES: HelpArticleSeed[] = [
     sortOrder: 18,
   },
   {
+    slug: 'customer-reviews',
+    title: 'How do Reviews work?',
+    description: 'Collect text and video reviews on your Client Page, then approve them before they go public.',
+    content:
+      'Open Reviews in the sidebar to see average rating, pending approvals, and every review for your business.\n\nCustomers leave a text or video review on your Client Page. New reviews always arrive as Pending Approval — they are not shown publicly until you approve them.\n\nApprove a review to publish it on the Client Page. Reject it to keep it off the public page. Average rating and star breakdown only count approved reviews.',
+    category: 'Core Features',
+    keywords: ['reviews', 'ratings', 'approval', 'client page', 'feedback', 'stars', 'video review'],
+    faq: true,
+    sortOrder: 19,
+  },
+  {
     slug: 'create-rewards',
     title: 'How do I create a reward?',
     description: 'Set up points-based rewards customers can redeem.',

@@ -122,7 +122,6 @@ export default function AdminWebsiteRequestsPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<Inbox className="h-10 w-10" />}
                 title="No website requests"
                 description={search || status ? "Try adjusting your filters." : "New customer requests will appear here."}
               />

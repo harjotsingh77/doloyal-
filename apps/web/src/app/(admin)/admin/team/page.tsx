@@ -137,7 +137,7 @@ export default function AdminTeamPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<ShieldCheck className="h-10 w-10" />} title="No team members found" description="Invite your first admin team member." />
+              <EmptyState title="No team members found" description="Invite your first admin team member." />
             </div>
           ) : (
             <Table>

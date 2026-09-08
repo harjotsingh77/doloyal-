@@ -3,12 +3,16 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../common/prisma.service';
 import { permissionsForRole } from '@doloyal/shared';
+import { hasPhone } from './client-auth.service';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   tv?: number;
   imp?: string;
+  kind?: 'staff' | 'customer';
+  tid?: string;
+  slug?: string;
 }
 
 @Injectable()
@@ -33,7 +37,40 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
       throw new UnauthorizedException('Session expired. Please sign in again.');
     }
-    const activeMembership = user.memberships[0];
+
+    if (payload.kind === 'customer') {
+      if (!payload.tid) throw new UnauthorizedException('Invalid customer session.');
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: payload.tid } });
+      if (!tenant) throw new UnauthorizedException('Business not found');
+
+      const customer = await this.prisma.customer.findFirst({
+        where: { tenantId: payload.tid, userId: user.id },
+      });
+      const needsPhone = !hasPhone(user.phone);
+      return {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phone: user.phone,
+        avatarUrl: user.avatarUrl,
+        twoFactorEnabled: user.twoFactorEnabled,
+        isAdmin: false,
+        adminRole: null,
+        adminPermissions: [],
+        memberships: [],
+        activeTenantId: payload.tid,
+        activeRole: 'CUSTOMER' as const,
+        sessionKind: 'customer' as const,
+        customerId: customer?.id ?? null,
+        needsPhone,
+        clientSlug: payload.slug || tenant.slug,
+        isImpersonating: false,
+      };
+    }
+
+    const staffMemberships = user.memberships.filter((m) => m.role !== 'CUSTOMER');
+    const activeMembership = staffMemberships[0];
     if (payload.imp) {
       if (user.isAdmin !== true) {
         throw new UnauthorizedException('Not authorized to impersonate');
@@ -50,9 +87,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         isAdmin: Boolean(user.isAdmin),
         adminRole: user.adminRole ?? null,
         adminPermissions: permissionsForRole(user.adminRole),
-        memberships: user.memberships,
+        memberships: staffMemberships,
         activeTenantId: tenant.id,
         activeRole: 'OWNER' as const,
+        sessionKind: 'staff' as const,
         isImpersonating: true,
         impersonatedTenantId: tenant.id,
         impersonatedTenantName: tenant.name,
@@ -63,14 +101,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      phone: user.phone,
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: user.twoFactorEnabled,
       isAdmin: Boolean(user.isAdmin),
       adminRole: user.adminRole ?? null,
       adminPermissions: permissionsForRole(user.adminRole),
-      memberships: user.memberships,
+      memberships: staffMemberships,
       activeTenantId: activeMembership?.tenantId || '',
       activeRole: activeMembership?.role || 'OWNER',
+      sessionKind: 'staff' as const,
       isImpersonating: false,
     };
   }

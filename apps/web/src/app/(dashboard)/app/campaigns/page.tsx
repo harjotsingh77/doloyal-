@@ -2,18 +2,12 @@
 
 import * as React from "react";
 import {
-  Megaphone,
-  Plus,
-  Send,
-  BarChart3,
   Pause,
   Play,
   Clock,
   MessageSquare,
   Smartphone,
   Mail,
-  Users,
-  AlertCircle,
 } from "lucide-react";
 import {
   Button,
@@ -44,9 +38,10 @@ import {
   EmptyState,
 } from "@doloyal/ui";
 import { api } from "@/lib/api";
+import { useAppSync } from "@/lib/data-sync";
 
 type Channel = "SMS" | "EMAIL" | "WHATSAPP";
-type Status = "DRAFT" | "SCHEDULED" | "PAUSED" | "SENT";
+type Status = "DRAFT" | "SCHEDULED" | "PAUSED" | "SENDING" | "COMPLETED" | "FAILED";
 type Audience = "All" | "VIP" | "At Risk" | "Inactive";
 
 interface Campaign {
@@ -69,20 +64,31 @@ const CHANNEL_ICON: Record<Channel, React.ReactNode> = {
   WHATSAPP: <Smartphone className="h-4 w-4" />,
 };
 
-const STATUS_VARIANT: Record<Status, "primary" | "outline" | "success" | "warning"> = {
+const STATUS_VARIANT: Record<Status, "primary" | "outline" | "success" | "warning" | "danger"> = {
   DRAFT: "outline",
   SCHEDULED: "primary",
-  SENT: "success",
+  SENDING: "primary",
+  COMPLETED: "success",
   PAUSED: "warning",
+  FAILED: "danger",
 };
 
 const API_STATUS_TO_UI: Record<string, Status> = {
   DRAFT: "DRAFT",
   SCHEDULED: "SCHEDULED",
   PAUSED: "PAUSED",
-  SENDING: "SCHEDULED",
-  COMPLETED: "SENT",
-  FAILED: "DRAFT",
+  SENDING: "SENDING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+};
+
+const STATUS_LABEL: Record<Status, string> = {
+  DRAFT: "Draft",
+  SCHEDULED: "Scheduled",
+  PAUSED: "Paused",
+  SENDING: "Sending",
+  COMPLETED: "Completed",
+  FAILED: "Failed",
 };
 
 export default function CampaignsPage() {
@@ -129,6 +135,8 @@ export default function CampaignsPage() {
     load();
   }, [load]);
 
+  useAppSync(["campaigns", "customers", "dashboard"], () => void load());
+
   const showToast = (type: "success" | "error", text: string) => {
     setToast({ type, text });
     setTimeout(() => setToast(null), 5000);
@@ -136,12 +144,12 @@ export default function CampaignsPage() {
 
   const kpis = React.useMemo(() => {
     const totalSent = campaigns.reduce((s, c) => s + c.sentCount, 0);
-    const sentCampaigns = campaigns.filter((c) => c.status === "SENT");
+    const sentCampaigns = campaigns.filter((c) => c.status === "COMPLETED");
     const avgOpen = sentCampaigns.length
       ? sentCampaigns.reduce((s, c) => s + c.openRate, 0) / sentCampaigns.length
       : 0;
-    const totalRedeem = campaigns.reduce((s, c) => s + Math.round(c.sentCount * (c.redeemRate / 100)), 0);
-    const active = campaigns.filter((c) => c.status === "SCHEDULED" || c.status === "SENT").length;
+    const totalRedeem = campaigns.reduce((s, c) => s + (c.sentCount > 0 && c.redeemRate > 0 ? Math.round(c.sentCount * (c.redeemRate / 100)) : 0), 0);
+    const active = campaigns.filter((c) => c.status === "SCHEDULED" || c.status === "SENDING" || c.status === "COMPLETED").length;
     return { totalSent, avgOpen, totalRedeem, active };
   }, [campaigns]);
 
@@ -208,10 +216,7 @@ export default function CampaignsPage() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]">
-          <AlertCircle className="h-7 w-7" />
-        </div>
-        <h3 className="mt-4 text-lg font-semibold">Failed to load campaigns</h3>
+        <h3 className="text-lg font-semibold">Failed to load campaigns</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{error}</p>
         <button
           onClick={() => void load()}
@@ -246,7 +251,6 @@ export default function CampaignsPage() {
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="h-4 w-4" />
                 New Campaign
               </Button>
             </DialogTrigger>
@@ -341,44 +345,38 @@ export default function CampaignsPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Sent"
           value={kpis.totalSent}
           format={(v) => v.toLocaleString("en-IN")}
-          icon={<Send className="h-5 w-5" />}
           accent="primary"
         />
         <KpiCard
           label="Avg Open Rate"
           value={kpis.avgOpen}
           format={(v) => `${v.toFixed(1)}%`}
-          icon={<BarChart3 className="h-5 w-5" />}
           accent="accent"
         />
         <KpiCard
           label="Redemptions"
           value={kpis.totalRedeem}
           format={(v) => v.toLocaleString("en-IN")}
-          icon={<Megaphone className="h-5 w-5" />}
           accent="success"
         />
         <KpiCard
           label="Active Campaigns"
           value={kpis.active}
-          icon={<Clock className="h-5 w-5" />}
           accent="violet"
         />
       </div>
 
       {campaigns.length === 0 ? (
         <EmptyState
-          icon={<Megaphone className="h-6 w-6" />}
           title="No campaigns yet"
           description="Create your first campaign to start engaging with customers."
           action={
             <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
               New Campaign
             </Button>
           }
@@ -391,7 +389,7 @@ export default function CampaignsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base">{c.name}</CardTitle>
                   <Badge variant={STATUS_VARIANT[c.status]} className="shrink-0 text-[0.65rem] uppercase tracking-wider">
-                    {c.status}
+                    {STATUS_LABEL[c.status]}
                   </Badge>
                 </div>
                 <CardDescription>
@@ -426,7 +424,9 @@ export default function CampaignsPage() {
                       Open / Redeem
                     </p>
                     <p className="mt-0.5 font-medium">
-                      {c.openRate}% / {c.redeemRate}%
+                      {c.openRate || c.redeemRate
+                        ? `${c.openRate}% / ${c.redeemRate}%`
+                        : "No tracking yet"}
                     </p>
                   </div>
                 </div>
@@ -486,7 +486,7 @@ function CampaignsSkeleton() {
         </div>
         <Skeleton className="h-10 w-36 rounded-lg" />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
             <Skeleton className="h-4 w-24" />

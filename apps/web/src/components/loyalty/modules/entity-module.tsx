@@ -112,7 +112,7 @@ export function createEntityModule(opts: {
               </div>
               <div className="mt-4">
                 <Button size="sm" onClick={create} disabled={saving}>
-                  <Plus className="h-3.5 w-3.5" /> Create
+                  Create
                 </Button>
               </div>
             </ModuleCard>

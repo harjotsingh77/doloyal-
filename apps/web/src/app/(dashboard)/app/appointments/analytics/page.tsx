@@ -107,17 +107,15 @@ export default function BookingAnalyticsPage() {
         description="Track your booking performance"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           label="Total Bookings"
           value={totalBookings}
-          icon={<CalendarDays className="h-5 w-5" />}
           accent="primary"
         />
         <KpiCard
           label="Completed"
           value={completed}
-          icon={<CheckCircle2 className="h-5 w-5" />}
           accent="success"
           delta={completed / totalBookings * 100}
           deltaSuffix="completion rate"
@@ -125,21 +123,18 @@ export default function BookingAnalyticsPage() {
         <KpiCard
           label="Cancelled"
           value={cancelled}
-          icon={<XCircle className="h-5 w-5" />}
           accent="danger"
         />
         <KpiCard
           label="No-Show Rate"
           value={noShowRate}
           format={(v) => `${v.toFixed(1)}%`}
-          icon={<AlertCircle className="h-5 w-5" />}
           accent="warning"
         />
         <KpiCard
           label="Revenue"
           value={revenue}
           format={(v) => fmt(v)}
-          icon={<DollarSign className="h-5 w-5" />}
           accent="primary"
           delta={monthlyGrowth}
           deltaSuffix="vs last month"
@@ -148,7 +143,6 @@ export default function BookingAnalyticsPage() {
           label="Conversion Rate"
           value={bookingConversionRate.toFixed(1)}
           format={(v) => `${v}%`}
-          icon={<TrendingUp className="h-5 w-5" />}
           accent="violet"
         />
       </div>
@@ -412,7 +406,7 @@ function AnalyticsSkeleton() {
           <Skeleton className="mt-2 h-4 w-64" />
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
             <Skeleton className="h-4 w-24" />

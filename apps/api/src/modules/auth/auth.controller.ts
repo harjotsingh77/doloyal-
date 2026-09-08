@@ -1,7 +1,9 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, Req, Param, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { AuthService, type LoginMeta } from './auth.service';
+import { ClientAuthService } from './client-auth.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from './public.decorator';
+import { AllowCustomer } from '../../common/allow-customer.decorator';
 import { RateLimitGuard, RateLimit } from '../../common/rate-limit.guard';
 import { IsString, IsNotEmpty, IsOptional, IsBoolean, MinLength, IsEmail } from 'class-validator';
 import { OAuth2Client } from 'google-auth-library';
@@ -38,6 +40,30 @@ class SupabaseLoginDto {
   @IsString() @IsNotEmpty() accessToken: string;
 }
 
+class ClientSignUpDto {
+  @IsString() @IsNotEmpty() tenantSlug: string;
+  @IsString() @IsNotEmpty() firstName: string;
+  @IsString() @IsOptional() lastName?: string;
+  @IsString() @IsNotEmpty() email: string;
+  @IsString() @IsNotEmpty() password: string;
+  @IsString() @IsNotEmpty() phone: string;
+}
+
+class ClientLoginDto {
+  @IsString() @IsNotEmpty() tenantSlug: string;
+  @IsString() @IsNotEmpty() email: string;
+  @IsString() @IsNotEmpty() password: string;
+}
+
+class ClientSupabaseLoginDto {
+  @IsString() @IsNotEmpty() accessToken: string;
+  @IsString() @IsNotEmpty() tenantSlug: string;
+}
+
+class ClientCompletePhoneDto {
+  @IsString() @IsNotEmpty() phone: string;
+}
+
 class SwitchTenantDto {
   @IsString() @IsNotEmpty() tenantId: string;
 }
@@ -57,7 +83,10 @@ class TwoFactorDto {
 export class AuthController {
   private googleClient: OAuth2Client;
 
-  constructor(private readonly authService: AuthService) {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly clientAuth: ClientAuthService,
+  ) {
     this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
 
@@ -147,6 +176,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowCustomer()
   getMe(@CurrentUser() user: any) {
     return this.authService.getMe(user);
   }
@@ -192,7 +222,71 @@ export class AuthController {
 
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
+  @AllowCustomer()
   async logoutAll(@CurrentUser() user: any) {
     return this.authService.revokeAllSessions(user.id);
+  }
+
+  @Public()
+  @Get('client/config/:slug')
+  async clientConfig(@Param('slug') slug: string) {
+    return this.clientAuth.getPublicConfig(slug);
+  }
+
+  @Public()
+  @Post('client/signup')
+  @RateLimit(10, 3600)
+  async clientSignUp(@Body() dto: ClientSignUpDto, @Req() req: FastifyRequest) {
+    return {
+      data: await this.clientAuth.signUp(
+        {
+          tenantSlug: dto.tenantSlug,
+          firstName: dto.firstName,
+          lastName: dto.lastName || '',
+          email: dto.email,
+          password: dto.password,
+          phone: dto.phone,
+        },
+        this.requestMeta(req),
+      ),
+    };
+  }
+
+  @Public()
+  @Post('client/login')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(15, 900)
+  async clientLogin(@Body() dto: ClientLoginDto, @Req() req: FastifyRequest) {
+    return {
+      data: await this.clientAuth.login(dto.email, dto.password, dto.tenantSlug, this.requestMeta(req)),
+    };
+  }
+
+  @Public()
+  @Post('client/supabase/exchange')
+  @HttpCode(HttpStatus.OK)
+  async clientSupabaseLogin(@Body() dto: ClientSupabaseLoginDto, @Req() req: FastifyRequest) {
+    const profile = await this.authService.resolveSupabaseUser(dto.accessToken);
+    return {
+      data: await this.clientAuth.googleLogin(profile, dto.tenantSlug, this.requestMeta(req)),
+    };
+  }
+
+  @Post('client/complete-phone')
+  @HttpCode(HttpStatus.OK)
+  @AllowCustomer()
+  async clientCompletePhone(@Body() dto: ClientCompletePhoneDto, @CurrentUser() user: any, @Req() req: FastifyRequest) {
+    if (user.sessionKind !== 'customer') {
+      throw new UnauthorizedException('Customer session required');
+    }
+    return {
+      data: await this.clientAuth.completePhone(
+        user.id,
+        user.activeTenantId,
+        user.clientSlug || '',
+        dto.phone,
+        this.requestMeta(req),
+      ),
+    };
   }
 }

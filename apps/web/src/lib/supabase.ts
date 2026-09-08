@@ -43,7 +43,11 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
  * The Supabase Auth project must have the matching redirect URL allow-listed
  * (and the Google OAuth client must allow the same URI).
  */
-export function getAuthCallbackUrl(): string {
+export function getAuthCallbackUrl(opts?: { clientSlug?: string }): string {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/auth/callback`;
+  const base = `${window.location.origin}/auth/callback`;
+  if (opts?.clientSlug) {
+    return `${base}?client=${encodeURIComponent(opts.clientSlug)}`;
+  }
+  return base;
 }

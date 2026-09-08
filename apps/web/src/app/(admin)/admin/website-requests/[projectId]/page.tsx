@@ -126,7 +126,6 @@ export default function AdminWebsiteRequestDetailPage() {
       <Card>
         <CardContent className="p-12">
           <EmptyState
-            icon={<Globe className="h-10 w-10" />}
             title="Request not found"
             description="This website request doesn't exist."
             action={<Link href="/admin/website-requests"><Button>Back to requests</Button></Link>}
@@ -377,7 +376,6 @@ function AdminChat({ projectId, conversation }: { projectId: string; conversatio
           ) : messages.length === 0 ? (
             <div className="py-8">
               <EmptyState
-                icon={<MessageSquare className="h-8 w-8" />}
                 title="No messages yet"
                 description="Say hello to the customer and confirm you've received their request."
               />
@@ -469,7 +467,6 @@ function AttachmentInline({ message, mine }: { message: any; mine: boolean }) {
     <a href={message.attachmentUrl} download={message.attachmentName || undefined} className={cn("flex items-center gap-2 text-xs", mine ? "text-white/90" : "text-[rgb(var(--color-primary))] hover:underline")}>
       <FileText className="h-3.5 w-3.5" />
       {message.attachmentName || "Attachment"}
-      <Download className="h-3 w-3" />
     </a>
   );
 }
@@ -607,7 +604,6 @@ function FilesPanel({ project }: { project: any }) {
                     </p>
                   </div>
                   <a href={file.url} download={file.fileName || undefined} className="p-1 text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]">
-                    <Download className="h-3.5 w-3.5" />
                   </a>
                 </li>
               );
@@ -679,7 +675,7 @@ function NotesPanel({ projectId }: { projectId: string }) {
             <Skeleton className="h-10 w-2/3" />
           </div>
         ) : notes.length === 0 ? (
-          <EmptyState icon={<StickyNote className="h-8 w-8" />} title="No notes yet" description="Internal notes stay visible to admins only." />
+          <EmptyState title="No notes yet" description="Internal notes stay visible to admins only." />
         ) : (
           <ul className="space-y-3">
             {notes.map((n) => (

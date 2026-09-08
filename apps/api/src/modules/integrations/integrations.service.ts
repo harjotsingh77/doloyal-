@@ -557,6 +557,7 @@ export class IntegrationsService {
     const scopes = encodeURIComponent(def.scopes?.join(' ') || '');
     const urls: Record<string, string> = {
       GOOGLE_CALENDAR: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=code&scope=${scopes}&state=${state}&access_type=offline&prompt=consent`,
+      GOOGLE_BUSINESS_PROFILE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=code&scope=${scopes}&state=${state}&access_type=offline&prompt=consent`,
       GMAIL: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}&state=${state}&access_type=offline`,
       HUBSPOT: `https://app.hubspot.com/oauth/authorize?client_id=${process.env.HUBSPOT_CLIENT_ID}&redirect_uri=${redirectUri}&scope=${scopes}&state=${state}`,
       SLACK: `https://slack.com/oauth/v2/authorize?client_id=${process.env.SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${redirectUri}&state=${state}`,
@@ -589,6 +590,7 @@ export class IntegrationsService {
 
     const tokenEndpoints: Record<string, string> = {
       GOOGLE_CALENDAR: 'https://oauth2.googleapis.com/token',
+      GOOGLE_BUSINESS_PROFILE: 'https://oauth2.googleapis.com/token',
       GMAIL: 'https://oauth2.googleapis.com/token',
       HUBSPOT: 'https://api.hubapi.com/oauth/v1/token',
       SLACK: 'https://slack.com/api/oauth.v2.access',
@@ -930,8 +932,8 @@ export class IntegrationsService {
       throw new BadRequestException('Google Calendar access token expired. Please reconnect.');
     }
 
-    const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+    const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_BUSINESS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET || process.env.GOOGLE_BUSINESS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
@@ -1117,6 +1119,7 @@ export class IntegrationsService {
         if (apiKey) return { message: 'API key format valid' };
         throw new Error('Missing API key');
       case 'GOOGLE_CALENDAR':
+      case 'GOOGLE_BUSINESS_PROFILE':
       case 'GMAIL':
       case 'GOOGLE_DRIVE':
         if (apiKey) return { message: 'OAuth token present' };
@@ -1161,6 +1164,7 @@ export class IntegrationsService {
       case 'PIPEDRIVE':
         return { recordsProcessed: 0 };
       case 'GOOGLE_CALENDAR':
+      case 'GOOGLE_BUSINESS_PROFILE':
       case 'MICROSOFT_CALENDAR':
         return { recordsProcessed: 0 };
       case 'STRIPE':

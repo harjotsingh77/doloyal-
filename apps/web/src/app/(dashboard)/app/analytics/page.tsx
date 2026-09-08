@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, Calendar } from "lucide-react";
+import { Calendar } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -25,11 +25,58 @@ import {
   SelectValue,
   SelectContent,
   SelectItem,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from "@doloyal/ui";
-import { formatPercent } from "@doloyal/shared";
-import type { DashboardOverview } from "@doloyal/shared";
+import type { BusinessHealthInsight, DashboardMetricDetail, DashboardMetricId, DashboardOverview } from "@doloyal/shared";
+import { comparePercentagePoints, compareValues } from "@doloyal/shared";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
+import { useAppSync } from "@/lib/data-sync";
+import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
+
+const HEALTH_LABEL: Record<"healthy" | "fair" | "at_risk", string> = {
+  healthy: "Healthy",
+  fair: "Fair",
+  at_risk: "At Risk",
+};
+
+function healthStatusFromScore(score: number): keyof typeof HEALTH_LABEL {
+  if (score >= 70) return "healthy";
+  if (score >= 40) return "fair";
+  return "at_risk";
+}
+
+function healthSignalPrompt(label: string, from?: string, to?: string) {
+  const period = from && to ? ` for ${from} to ${to}` : "";
+  return `Business Health signal: "${label}"${period}. Fetch live data from the whole Doloyal SaaS (customers, invoices, orders, products, reviews, appointments, loyalty, rewards, campaigns, referrals, memberships). First write What's happening, Why this problem is happening, How to fix it, and How the fix will work. After those sections output the exact line <<<STRATEGIST>>> then write a separate Business Strategist briefing: analyze the same numbers as a strategist (priority, risk, 90-day play, what to ignore). Keep the strategist part self-contained so it can be read on its own.`;
+}
+
+function kpiDelta(change: ReturnType<typeof compareValues>) {
+  return {
+    delta: change.percentChange ?? 0,
+    deltaLabel: change.percentChangeLabel,
+  };
+}
+
+const METRIC_TITLES: Record<DashboardMetricId, string> = {
+  revenue: "Revenue",
+  customers: "Customer growth",
+  repeat_rate: "Repeat customers",
+  new_customers: "New customers",
+  inactive: "Inactive customers",
+  points: "Points redeemed",
+  orders: "Order analytics",
+  reviews: "Reviews",
+  appointments: "Appointments",
+  memberships: "Memberships",
+  ai_revenue: "Revenue insight",
+  ai_retention: "Retention insight",
+};
 
 const RANGES = [
   { label: "Last 7 days", value: "7" },
@@ -39,6 +86,7 @@ const RANGES = [
 ] as const;
 
 export default function AnalyticsPage() {
+  const router = useRouter();
   const { format: fmt, formatCompact: fmtCompact } = useCurrency();
   const [data, setData] = React.useState<DashboardOverview | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -53,6 +101,16 @@ export default function AnalyticsPage() {
   const [customTo, setCustomTo] = React.useState(() => {
     return new Date().toISOString().split("T")[0];
   });
+  const [openMetric, setOpenMetric] = React.useState<DashboardMetricId | null>(null);
+  const [openPanel, setOpenPanel] = React.useState<"services" | "health" | null>(null);
+  const [health, setHealth] = React.useState<BusinessHealthInsight | null>(null);
+  const [detail, setDetail] = React.useState<DashboardMetricDetail | null>(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const detailCache = React.useRef(new Map<string, DashboardMetricDetail>());
+
+  const fromDate = data?.period?.from || (range === "custom" ? customFrom : "");
+  const toDate = data?.period?.to || (range === "custom" ? customTo : "");
 
   React.useEffect(() => {
     let cancelled = false;
@@ -80,13 +138,71 @@ export default function AnalyticsPage() {
     };
   }, [range, customFrom, customTo, retryToken]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    const params =
+      range === "custom"
+        ? { from: customFrom, to: customTo }
+        : { days: range };
+    api
+      .getBusinessHealth(params)
+      .then((insight) => {
+        if (!cancelled) setHealth(insight);
+      })
+      .catch(() => {
+        if (!cancelled) setHealth(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range, customFrom, customTo, retryToken]);
+
+  React.useEffect(() => {
+    detailCache.current.clear();
+  }, [range, customFrom, customTo]);
+
+  React.useEffect(() => {
+    if (!openMetric || !fromDate || !toDate) return;
+    const key = `${openMetric}:${fromDate}:${toDate}`;
+    const cached = detailCache.current.get(key);
+    if (cached) {
+      setDetail(cached);
+      setDetailLoading(false);
+      setDetailError(null);
+      return;
+    }
+    let cancelled = false;
+    setDetail(null);
+    setDetailLoading(true);
+    setDetailError(null);
+    api
+      .getDashboardMetricDetail(openMetric, { from: fromDate, to: toDate })
+      .then((result) => {
+        if (cancelled) return;
+        detailCache.current.set(key, result);
+        setDetail(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDetailError(err instanceof Error ? err.message : "Failed to load details");
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openMetric, fromDate, toDate]);
+
+  useAppSync(
+    ["dashboard", "customers", "orders", "products", "reviews", "campaigns", "invoices", "loyalty", "appointments", "rewards"],
+    () => setRetryToken((t) => t + 1),
+  );
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]">
-          <AlertCircle className="h-7 w-7" />
-        </div>
-        <h3 className="mt-4 text-lg font-semibold">Failed to load analytics</h3>
+        <h3 className="text-lg font-semibold">Failed to load analytics</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
           {error}
         </p>
@@ -112,28 +228,35 @@ export default function AnalyticsPage() {
 
   const { kpis, revenueTrend, customerTrend } = data;
 
-  // Dynamically link KPI calculations with the selected period's trend data
-  const trendTotalRevenue = revenueTrend?.length
-    ? revenueTrend.reduce((acc, point) => acc + (point.revenue || 0), 0)
-    : kpis.todayRevenue;
+  const totalRevenue = kpis.periodRevenue ?? 0;
+  const totalCustomers = kpis.totalCustomers ?? kpis.todayCustomers ?? 0;
+  const newInPeriod = kpis.newCustomers ?? 0;
+  const orderCount = kpis.orderCount ?? 0;
+  const avgOrderValue =
+    orderCount > 0
+      ? (kpis.orderRevenue || 0) / orderCount
+      : 0;
 
-  const trendTotalCustomers = customerTrend?.length
-    ? customerTrend.reduce((acc, point) => acc + (point.customers || 0), 0)
-    : kpis.todayCustomers + kpis.repeatCustomers;
-
-  const totalCustomers = trendTotalCustomers || (kpis.todayCustomers + kpis.repeatCustomers + kpis.inactiveCustomers);
-  const totalRevenue = trendTotalRevenue || kpis.todayRevenue;
-  const avgOrderValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
-
-  // Real ratio from server KPIs — never a fabricated fallback.
   const repeatRate =
-    kpis.todayCustomers > 0
-      ? (kpis.repeatCustomers / kpis.todayCustomers) * 100
-      : totalCustomers > 0
-        ? (kpis.repeatCustomers / totalCustomers) * 100
-        : 0;
+    kpis.repeatCustomers + newInPeriod > 0
+      ? (kpis.repeatCustomers / (kpis.repeatCustomers + newInPeriod)) * 100
+      : 0;
+  const prevNew = kpis.previousNewCustomers ?? 0;
+  const prevRepeat = kpis.previousRepeatCustomers ?? 0;
+  const prevRepeatRate =
+    prevRepeat + prevNew > 0 ? (prevRepeat / (prevRepeat + prevNew)) * 100 : 0;
+  const prevOrderCount = kpis.previousOrderCount ?? 0;
+  const prevAov =
+    prevOrderCount > 0 ? (kpis.previousOrderRevenue || 0) / prevOrderCount : 0;
 
-  const healthScore = Math.min(
+  const revenueChange = compareValues(totalRevenue, kpis.previousPeriodRevenue ?? 0);
+  const customersChange = compareValues(totalCustomers, kpis.previousTotalCustomers ?? 0);
+  const aovChange = compareValues(avgOrderValue, prevAov);
+  const repeatChange = comparePercentagePoints(repeatRate, prevRepeatRate);
+  const membersChange = compareValues(kpis.repeatCustomers, prevRepeat);
+  const pointsChange = compareValues(kpis.pointsRedeemed30d, kpis.previousPointsRedeemed ?? 0);
+
+  const fallbackScore = Math.min(
     100,
     Math.max(
       0,
@@ -146,30 +269,35 @@ export default function AnalyticsPage() {
     )
   );
 
-  const healthFactors = [];
+  const fallbackFactors = [];
   if (repeatRate >= 50) {
-    healthFactors.push({ label: "Repeat rate is strong", positive: true });
+    fallbackFactors.push({ label: "Repeat rate is strong", positive: true });
   } else {
-    healthFactors.push({ label: "Repeat rate needs improvement", positive: false });
+    fallbackFactors.push({ label: "Repeat rate needs improvement", positive: false });
   }
   if ((kpis.monthlyGrowthPct ?? 0) > 0) {
-    healthFactors.push({ label: "Revenue is growing", positive: true });
+    fallbackFactors.push({ label: "Revenue is growing", positive: true });
   } else {
-    healthFactors.push({ label: "Revenue is declining", positive: false });
+    fallbackFactors.push({ label: "Revenue is declining", positive: false });
   }
   if (kpis.activeRewards >= 5) {
-    healthFactors.push({ label: "Active rewards program", positive: true });
+    fallbackFactors.push({ label: "Active rewards program", positive: true });
   } else {
-    healthFactors.push({ label: "Few active rewards", positive: false });
+    fallbackFactors.push({ label: "Few active rewards", positive: false });
   }
   if (kpis.inactiveCustomers <= 5) {
-    healthFactors.push({ label: "Low customer inactivity", positive: true });
+    fallbackFactors.push({ label: "Low customer inactivity", positive: true });
   } else {
-    healthFactors.push({
+    fallbackFactors.push({
       label: `${kpis.inactiveCustomers} inactive customers`,
       positive: false,
     });
   }
+
+  const healthScore = health?.score ?? fallbackScore;
+  const healthFactors = health?.factors?.length ? health.factors : fallbackFactors;
+  const healthStatus = health?.status ?? healthStatusFromScore(healthScore);
+  const healthBadge = HEALTH_LABEL[healthStatus];
 
   const periodLabel =
     range === "custom"
@@ -224,41 +352,51 @@ export default function AnalyticsPage() {
       />
 
       {/* Row 1: 6 KPI Cards in 1 clean row on desktop (linked dynamically) */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           label="Total Revenue"
           value={totalRevenue}
           format={(v) => fmt(v)}
-          delta={kpis.monthlyGrowthPct ?? undefined}
+          {...kpiDelta(revenueChange)}
           deltaSuffix="vs last period"
+          onClick={() => setOpenMetric("revenue")}
         />
         <KpiCard
           label="Total Customers"
           value={totalCustomers}
-          hint="vs last period"
+          hint={`${newInPeriod} new in range`}
+          {...kpiDelta(customersChange)}
+          onClick={() => setOpenMetric("customers")}
         />
         <KpiCard
           label="Avg Order Value"
           value={avgOrderValue}
           format={(v) => fmt(v)}
-          hint="vs last period"
+          hint={orderCount ? `${orderCount} orders in range` : "No orders in range"}
+          {...kpiDelta(aovChange)}
+          onClick={() => setOpenMetric("orders")}
         />
         <KpiCard
           label="Repeat Rate"
           value={repeatRate}
-          format={(v) => formatPercent(v / 100)}
-          hint="vs last period"
+          format={(v) => `${v.toFixed(1)}%`}
+          hint={`${kpis.repeatCustomers} with 2+ purchases`}
+          {...kpiDelta(repeatChange)}
+          onClick={() => setOpenMetric("repeat_rate")}
         />
         <KpiCard
           label="Active Members"
           value={kpis.repeatCustomers}
-          hint="vs last period"
+          hint="Customers with 2+ purchases"
+          {...kpiDelta(membersChange)}
+          onClick={() => setOpenMetric("repeat_rate")}
         />
         <KpiCard
           label="Points Issued"
           value={kpis.pointsRedeemed30d}
           format={(v) => v.toLocaleString("en-IN")}
-          hint="vs last period"
+          {...kpiDelta(pointsChange)}
+          onClick={() => setOpenMetric("points")}
         />
       </div>
 
@@ -273,6 +411,7 @@ export default function AnalyticsPage() {
           type="area"
           height={280}
           valueFormat={(v) => fmtCompact(v)}
+          onClick={() => setOpenMetric("revenue")}
         />
         <StatChart
           title="Customer Acquisition"
@@ -282,17 +421,36 @@ export default function AnalyticsPage() {
           xKey="date"
           type="bar"
           height={280}
+          onClick={() => setOpenMetric("new_customers")}
         />
       </div>
 
       {/* Row 3: Top Services & Business Health (Linked to selected period) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="flex h-full flex-col">
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => setOpenPanel("services")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOpenPanel("services");
+            }
+          }}
+          className="flex h-full cursor-pointer flex-col transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
+        >
           <CardHeader>
-            <CardTitle>Top Services</CardTitle>
-            <CardDescription>
-              Revenue and growth by service category ({periodLabel})
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Top Services</CardTitle>
+                <CardDescription>
+                  Revenue and growth by service category ({periodLabel})
+                </CardDescription>
+              </div>
+              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                View details
+              </span>
+            </div>
           </CardHeader>
           <CardContent className="flex-1 p-0">
             {topServices.length === 0 ? (
@@ -343,12 +501,30 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card className="flex h-full flex-col">
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => setOpenPanel("health")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOpenPanel("health");
+            }
+          }}
+          className="flex h-full cursor-pointer flex-col transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
+        >
           <CardHeader>
-            <CardTitle>Business Health</CardTitle>
-            <CardDescription>
-              Overall score based on key metrics ({periodLabel})
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Business Health</CardTitle>
+                <CardDescription>
+                  Overall score based on key metrics ({periodLabel})
+                </CardDescription>
+              </div>
+              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                View details
+              </span>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col justify-between px-6 pb-6 pt-0">
             <div className="flex flex-col items-center py-2">
@@ -391,8 +567,11 @@ export default function AnalyticsPage() {
                 }
                 className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wider"
               >
-                {healthScore >= 70 ? "Healthy" : healthScore >= 40 ? "Fair" : "At Risk"}
+                {healthBadge}
               </Badge>
+              <p className="mt-2 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                {health?.source === "ai" ? "Analyzed by Doloyal AI" : "Doloyal AI"}
+              </p>
             </div>
             <div className="mt-4 space-y-2.5 border-t border-[rgb(var(--color-border))] pt-4">
               {healthFactors.map((f, i) => (
@@ -415,7 +594,203 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <MetricDetailView
+        open={openMetric !== null}
+        onOpenChange={(next) => {
+          if (!next) setOpenMetric(null);
+        }}
+        title={openMetric ? METRIC_TITLES[openMetric] : "Metric"}
+        loading={detailLoading}
+        error={detailError}
+        data={detail}
+      />
+
+      <Dialog open={openPanel !== null} onOpenChange={(next) => { if (!next) setOpenPanel(null); }}>
+        <DialogContent className="max-w-3xl lg:max-w-4xl">
+          {openPanel === "services" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Top Services</DialogTitle>
+                <DialogDescription>
+                  {data.period?.from} to {data.period?.to} · growth vs the previous equivalent period
+                </DialogDescription>
+              </DialogHeader>
+              {topServices.length === 0 ? (
+                <EmptyState
+                  title="No data available for this period"
+                  description="Create paid invoices for services in this period to see your top performers."
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Service</TableHead>
+                        <TableHead>Current revenue</TableHead>
+                        <TableHead>Customers</TableHead>
+                        <TableHead>Change vs previous</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {topServices.map((s: { service: string; revenue: number; customers: number; growth: number | null }) => (
+                        <TableRow
+                          key={s.service}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setOpenPanel(null);
+                            setOpenMetric("revenue");
+                          }}
+                        >
+                          <TableCell className="font-medium">{s.service}</TableCell>
+                          <TableCell className="tabular-nums">{fmt(s.revenue)}</TableCell>
+                          <TableCell className="tabular-nums">{s.customers}</TableCell>
+                          <TableCell>
+                            {s.growth === null || s.growth === undefined ? (
+                              <span className="text-[rgb(var(--color-muted-foreground))]">No change</span>
+                            ) : (
+                              <span
+                                className={`font-medium tabular-nums ${
+                                  s.growth >= 0
+                                    ? "text-[rgb(var(--color-success))]"
+                                    : "text-[rgb(var(--color-danger))]"
+                                }`}
+                              >
+                                {s.growth >= 0 ? `+${Number(s.growth).toFixed(1)}%` : `${Number(s.growth).toFixed(1)}%`}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Business Health</DialogTitle>
+                <DialogDescription>
+                  {data.period?.from} to {data.period?.to} · {health?.source === "ai" ? "Doloyal AI using live SaaS data" : "score from current-period metrics"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[rgb(var(--color-muted-foreground))]">
+                    Health score
+                  </p>
+                  <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{healthScore}%</p>
+                  <Badge
+                    variant={healthScore >= 70 ? "success" : healthScore >= 40 ? "warning" : "danger"}
+                    className="mt-2 text-[0.65rem] font-semibold uppercase tracking-wider"
+                  >
+                    {healthBadge}
+                  </Badge>
+                  {health?.summary ? (
+                    <p className="mt-3 text-sm leading-6 text-[rgb(var(--color-foreground))]">{health.summary}</p>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <HealthStat
+                    label="Repeat rate"
+                    value={`${repeatRate.toFixed(1)}%`}
+                    onClick={() => {
+                      setOpenPanel(null);
+                      setOpenMetric("repeat_rate");
+                    }}
+                  />
+                  <HealthStat
+                    label="Revenue"
+                    value={fmt(totalRevenue)}
+                    hint={revenueChange.percentChangeLabel}
+                    onClick={() => {
+                      setOpenPanel(null);
+                      setOpenMetric("revenue");
+                    }}
+                  />
+                  <HealthStat
+                    label="Inactive customers"
+                    value={String(kpis.inactiveCustomers)}
+                    onClick={() => {
+                      setOpenPanel(null);
+                      setOpenMetric("inactive");
+                    }}
+                  />
+                  <HealthStat
+                    label="Active rewards"
+                    value={String(kpis.activeRewards)}
+                  />
+                </div>
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold">Supporting signals</h4>
+                  <div className="space-y-2">
+                    {healthFactors.map((f) => (
+                      <button
+                        key={f.label}
+                        type="button"
+                        onClick={() => {
+                          setOpenPanel(null);
+                          router.push(
+                            `/app/assistant?prompt=${encodeURIComponent(
+                              healthSignalPrompt(f.label, data.period?.from, data.period?.to),
+                            )}`,
+                          );
+                        }}
+                        className="flex w-full items-center justify-between rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 text-left text-sm transition-colors hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)]"
+                      >
+                        <span>{f.label}</span>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`text-xs font-medium ${
+                              f.positive
+                                ? "text-[rgb(var(--color-success))]"
+                                : "text-[rgb(var(--color-danger))]"
+                            }`}
+                          >
+                            {f.positive ? "Good" : "Needs attention"}
+                          </span>
+                          <span className="text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                            Ask AI
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function HealthStat({
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={`rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 text-left ${
+        onClick ? "cursor-pointer hover:bg-[rgb(var(--color-muted)/0.35)]" : ""
+      }`}
+    >
+      <p className="text-[11px] text-[rgb(var(--color-muted-foreground))]">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
+      {hint ? <p className="mt-0.5 text-[11px] text-[rgb(var(--color-muted-foreground))]">{hint}</p> : null}
+    </button>
   );
 }
 
@@ -429,7 +804,7 @@ function AnalyticsSkeleton() {
         </div>
         <Skeleton className="h-10 w-40 rounded-lg" />
       </div>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}

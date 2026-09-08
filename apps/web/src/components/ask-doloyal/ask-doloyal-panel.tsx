@@ -355,7 +355,6 @@ export function AskDoloyalPanel() {
                   onClick={() => openChat(null)}
                   className="flex items-center gap-1.5 rounded-lg bg-[rgb(var(--color-primary)/0.1)] px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.16)]"
                 >
-                  <Plus className="h-3.5 w-3.5" />
                   New chat
                 </button>
               </div>

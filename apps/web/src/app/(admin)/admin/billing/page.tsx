@@ -57,7 +57,6 @@ export default function AdminBillingPage() {
               Refresh
             </Button>
             <Button variant="outline" onClick={() => import("@/lib/api").then((m) => m.api.adminExport("invoices"))}>
-              <Download className="h-4 w-4" />
               Invoices CSV
             </Button>
             <Button onClick={() => setRefundOpen(true)}>
@@ -77,19 +76,19 @@ export default function AdminBillingPage() {
       ) : !data ? (
         <Card>
           <CardContent className="p-12">
-            <EmptyState icon={<Info className="h-10 w-10" />} title="Billing data unavailable" description="The billing overview could not be loaded." />
+            <EmptyState title="Billing data unavailable" description="The billing overview could not be loaded." />
           </CardContent>
         </Card>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <AdminStatCard label="Gross revenue" value={formatMoney(data.grossRevenue)} tone="primary" icon={<CreditCard className="h-4 w-4" />} />
-            <AdminStatCard label="Net revenue" value={formatMoney(data.netRevenue)} tone="success" icon={<CreditCard className="h-4 w-4" />} />
-            <AdminStatCard label="MRR" value={formatCompact(data.mrr)} tone="accent" icon={<CreditCard className="h-4 w-4" />} />
-            <AdminStatCard label="ARR" value={formatCompact(data.arr)} tone="accent" icon={<CreditCard className="h-4 w-4" />} />
-            <AdminStatCard label="Refunds" value={formatMoney(data.refunds)} tone="danger" icon={<Undo2 className="h-4 w-4" />} />
-            <AdminStatCard label="Failed payments (30d)" value={data.failedPayments30d} tone="warning" icon={<CreditCard className="h-4 w-4" />} />
-            <AdminStatCard label="Outstanding" value={formatMoney(data.outstandingAmount)} tone="warning" icon={<CreditCard className="h-4 w-4" />} />
+            <AdminStatCard label="Gross revenue" value={formatMoney(data.grossRevenue)} tone="primary" />
+            <AdminStatCard label="Net revenue" value={formatMoney(data.netRevenue)} tone="success" />
+            <AdminStatCard label="MRR" value={formatCompact(data.mrr)} tone="accent" />
+            <AdminStatCard label="ARR" value={formatCompact(data.arr)} tone="accent" />
+            <AdminStatCard label="Refunds" value={formatMoney(data.refunds)} tone="danger" />
+            <AdminStatCard label="Failed payments (30d)" value={data.failedPayments30d} tone="warning" />
+            <AdminStatCard label="Outstanding" value={formatMoney(data.outstandingAmount)} tone="warning" />
             <AdminStatCard label="Providers" value={data.providers.length} sub={data.providers.map((p) => p.status).join(", ")} />
           </div>
 

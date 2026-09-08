@@ -55,6 +55,15 @@ export class CampaignsService {
         status: input.scheduleDate ? 'SCHEDULED' : 'DRAFT',
         scheduleDate: input.scheduleDate ? new Date(input.scheduleDate) : null,
       },
+    }).then(async (campaign) => {
+      await this.prisma.activity.create({
+        data: {
+          tenantId,
+          type: 'NOTE_ADDED',
+          message: `Campaign "${campaign.name}" created (${campaign.status.toLowerCase()}, ${recipients} in audience)`,
+        },
+      });
+      return campaign;
     });
   }
 
@@ -82,6 +91,15 @@ export class CampaignsService {
     return this.prisma.campaign.update({
       where: { id },
       data: { status: status as any },
+    }).then(async (updated) => {
+      await this.prisma.activity.create({
+        data: {
+          tenantId,
+          type: 'NOTE_ADDED',
+          message: `Campaign "${updated.name}" ${status === 'PAUSED' ? 'paused' : `set to ${status.toLowerCase()}`}`,
+        },
+      });
+      return updated;
     });
   }
 
@@ -212,6 +230,13 @@ export class CampaignsService {
     });
 
     this.logger.log(`Campaign ${id} (${campaign.channel}) sent: ${sent} delivered, ${failed} failed (tenant=${tenantId})`);
+    await this.prisma.activity.create({
+      data: {
+        tenantId,
+        type: 'CAMPAIGN_SENT',
+        message: `Campaign "${campaign.name}" sent to ${sent} customer${sent === 1 ? '' : 's'} (${failed} failed)`,
+      },
+    });
     return {
       channel: campaign.channel,
       status,

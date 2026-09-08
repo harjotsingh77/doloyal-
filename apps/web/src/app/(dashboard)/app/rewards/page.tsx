@@ -50,6 +50,7 @@ import {
   type CreateRewardInput,
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useAppSync } from "@/lib/data-sync";
 import { useCurrency } from "@/lib/currency-context";
 
 const TABS: Array<{ key: RewardCategory | "HISTORY"; label: string }> = [
@@ -113,6 +114,8 @@ export default function RewardsPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  useAppSync(["rewards", "loyalty", "customers"], () => void load());
 
   React.useEffect(() => {
     if (!PROGRAM_TABS.has(tab)) return;
@@ -240,14 +243,14 @@ export default function RewardsPage() {
               const input = (e.currentTarget.previousElementSibling || e.currentTarget.parentElement?.querySelector("input")) as HTMLInputElement | null;
               input?.click();
             }}>
-              <Upload className="h-3.5 w-3.5" /> Import
+              Import
             </Button>
           </label>
           <Button variant="secondary" size="sm" onClick={exportCsv}>
-            <Download className="h-3.5 w-3.5" /> Export
+            Export
           </Button>
           <Button size="sm" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5" /> Create Reward
+            Create Reward
           </Button>
         </div>
       </header>
@@ -333,7 +336,7 @@ export default function RewardsPage() {
           <p className="text-sm font-medium text-slate-900">No rewards in this category</p>
           <p className="mt-1 text-sm text-slate-500">Create a reward to get started.</p>
           <Button className="mt-4" size="sm" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5" /> Create Reward
+            Create Reward
           </Button>
         </div>
       ) : (
@@ -816,7 +819,7 @@ function RedemptionTable({
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <p className="text-sm font-medium text-slate-900">Redemption History</p>
         <Button variant="secondary" size="sm" onClick={onExport}>
-          <Download className="h-3.5 w-3.5" /> Export
+          Export
         </Button>
       </div>
       {loading ? (

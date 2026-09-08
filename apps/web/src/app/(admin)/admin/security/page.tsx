@@ -113,7 +113,7 @@ export default function AdminSecurityPage() {
       </div>
 
       <Card>
-        <CardHeaderWithTitle title="Security events" icon={<Shield className="h-4 w-4" />} />
+        <CardHeaderWithTitle title="Security events" />
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -123,7 +123,7 @@ export default function AdminSecurityPage() {
             </div>
           ) : events.length === 0 ? (
             <div className="p-10">
-              <EmptyState icon={<Shield className="h-10 w-10" />} title="No security events" description="Security events appear here when they occur." />
+              <EmptyState title="No security events" description="Security events appear here when they occur." />
             </div>
           ) : (
             <Table>
@@ -160,7 +160,7 @@ export default function AdminSecurityPage() {
       <Pagination page={page} totalPages={Math.max(1, Math.ceil(total / pageSize))} total={total} pageSize={pageSize} onChange={setPage} label="Security events" />
 
       <Card>
-        <CardHeaderWithTitle title="Active admin sessions" icon={<Laptop className="h-4 w-4" />} />
+        <CardHeaderWithTitle title="Active admin sessions" />
         <CardContent className="p-0">
           {sessions.length === 0 ? (
             <p className="px-5 py-6 text-center text-xs text-[rgb(var(--color-muted-foreground))]">No active admin sessions.</p>
@@ -207,10 +207,9 @@ export default function AdminSecurityPage() {
   );
 }
 
-function CardHeaderWithTitle({ title, icon }: { title: string; icon: React.ReactNode }) {
+function CardHeaderWithTitle({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-2 px-5 pt-5 pb-2">
-      <span className="text-[rgb(var(--color-muted-foreground))]">{icon}</span>
+    <div className="px-5 pt-5 pb-2">
       <h3 className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{title}</h3>
     </div>
   );

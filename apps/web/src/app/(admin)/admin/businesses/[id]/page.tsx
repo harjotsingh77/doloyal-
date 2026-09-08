@@ -129,7 +129,7 @@ export default function AdminBusinessDetailPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Info className="h-10 w-10" />} title="Business not found" description="This business may have been removed." />
+          <EmptyState title="Business not found" description="This business may have been removed." />
         </CardContent>
       </Card>
     );

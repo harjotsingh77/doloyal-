@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button } from "@doloyal/ui";
 import { initials } from "@doloyal/shared";
 import { useAuth } from "@/lib/auth";
@@ -52,7 +52,6 @@ export default function ProfileSettingsPage() {
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <Link href="/app/settings/security" prefetch>
             <Button variant="secondary" size="sm">
-              <ShieldCheck className="h-4 w-4" />
               Security settings
             </Button>
           </Link>

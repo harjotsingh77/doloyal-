@@ -90,7 +90,7 @@ export default function AdminUserDetailPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Info className="h-10 w-10" />} title="User not found" description="This user may have been removed." />
+          <EmptyState title="User not found" description="This user may have been removed." />
         </CardContent>
       </Card>
     );

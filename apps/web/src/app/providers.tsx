@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@doloyal/ui";
 import { AuthProvider } from "@/lib/auth";
+import { ClientAuthProvider } from "@/lib/client-auth";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { BranchProvider } from "@/lib/branch-context";
 import { ThemeInitializer } from "@/components/theme-initializer";
@@ -16,9 +17,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            staleTime: 8_000,
             retry: 1,
-            refetchOnWindowFocus: false,
+            refetchOnWindowFocus: true,
           },
         },
       }),
@@ -36,9 +37,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={200}>
           <AuthProvider>
+            <ClientAuthProvider>
             <BranchProvider>
               <CurrencyProvider>{children}</CurrencyProvider>
             </BranchProvider>
+            </ClientAuthProvider>
           </AuthProvider>
         </TooltipProvider>
         <Toaster richColors closeButton position="bottom-right" toastOptions={{ duration: 4000, style: { borderRadius: "var(--radius)", fontSize: "0.875rem" } }} />

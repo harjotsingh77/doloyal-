@@ -51,7 +51,7 @@ export default function AdminPlansPage() {
       ) : !plans ? (
         <Card>
           <CardContent className="p-12">
-            <EmptyState icon={<Info className="h-10 w-10" />} title="Plans unavailable" description="The plans endpoint could not be loaded." />
+            <EmptyState title="Plans unavailable" description="The plans endpoint could not be loaded." />
           </CardContent>
         </Card>
       ) : (
@@ -71,7 +71,6 @@ export default function AdminPlansPage() {
               <Card>
                 <CardContent className="p-8">
                   <EmptyState
-                    icon={<Rocket className="h-10 w-10" />}
                     title="No enterprise contracts"
                     description="Custom contracts for enterprise businesses appear here."
                   />

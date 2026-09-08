@@ -37,6 +37,31 @@ enum CustomerStatus {
   INACTIVE
 }
 
+enum CatalogProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CatalogAvailability {
+  IN_STOCK
+  OUT_OF_STOCK
+}
+
+enum ClientOrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum ClientOrderPaymentStatus {
+  PAID
+  PENDING
+  PARTIALLY_PAID
+  REFUNDED
+}
+
 enum AppointmentStatus {
   BOOKED
   CONFIRMED
@@ -254,6 +279,7 @@ model User {
   adminSecurityEvents AdminSecurityEvent[]
   platformSettings   PlatformSetting[]        @relation("PlatformSettingEditor")
   planConfigsEdited  PlanConfig[]             @relation("PlanConfigEditor")
+  customers          Customer[]
 }
 
 model Tenant {
@@ -297,6 +323,10 @@ model Tenant {
   registrationNumber    String?
   whatsapp              String?
   mapsUrl               String?
+  /// Direct Google review URL (e.g. search.google.com/local/writereview?placeid=…).
+  googleReviewUrl       String?
+  /// Google Place ID used to open/write reviews and to import Place Details reviews.
+  googlePlaceId         String?
   socialLinks           Json?
   legalPolicies         Json?
   businessStatus        Json?
@@ -387,6 +417,13 @@ model Tenant {
   workflowRuns           WorkflowRun[]
   emailLogs              EmailLog[]
   resendDomains          ResendDomain[]
+  reviews                Review[]
+  productCategories      ProductCategory[]
+  products               Product[]
+  clientOrders           ClientOrder[]
+  /// Visual overrides for the customer Client Sign-in page only.
+  /// Null / customized=false → Doloyal defaults. Reset must not delete customers.
+  clientSignInBranding   Json?
 }
 
 model Membership {
@@ -637,6 +674,8 @@ model Staff {
 model Customer {
   id              String         @id @default(uuid())
   tenantId        String
+  /// Linked Doloyal user account. Null for walk-in / imported customers.
+  userId          String?
   firstName       String
   lastName        String
   email           String?
@@ -655,10 +694,15 @@ model Customer {
   referralCode    String?
   cashbackBalance Float          @default(0.0)
   lastVisitAt     DateTime?
+  lastLoginAt     DateTime?
+  lastActivityAt  DateTime?
+  /// How this customer joined (CLIENT_PAGE, MANUAL, IMPORT, BOOKING).
+  signupSource    String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   tenant                  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                    User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
   appointments            Appointment[]
   invoices                Invoice[]
   pointsLedger            PointsLedger[]
@@ -680,11 +724,15 @@ model Customer {
   cashbackTxns            CashbackTransaction[]
   rewardClaims            RewardEngagementClaim[]
   emailLogs               EmailLog[]
+  reviews                 Review[]
+  orders                  ClientOrder[]
 
   @@unique([tenantId, referralCode])
+  @@unique([tenantId, userId])
   @@index([tenantId, phone])
   @@index([tenantId, email])
   @@index([tenantId, dob])
+  @@index([userId])
 }
 
 model Service {
@@ -702,6 +750,88 @@ model Service {
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoiceItems InvoiceItem[]
+}
+
+/// Tenant-scoped catalog of products and services used across client
+/// engagement, loyalty, campaigns, reviews, and offers. Purchase history
+/// and product-specific promotions can hang off this entity later.
+model ProductCategory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Product {
+  id                String               @id @default(uuid())
+  tenantId          String
+  name              String
+  sku               String
+  description       String?
+  categoryId        String?
+  price             Float
+  originalPrice     Float?
+  discount          Float?
+  stockQuantity     Int                  @default(0)
+  lowStockThreshold Int                  @default(5)
+  unit              String?
+  brand             String?
+  productCode       String?
+  imageUrl          String?
+  status            CatalogProductStatus @default(ACTIVE)
+  availability      CatalogAvailability  @default(IN_STOCK)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  orders   ClientOrder[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, status])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, updatedAt])
+}
+
+/// Connects a client (customer) with a catalog product through a sale/order.
+model ClientOrder {
+  id                String                    @id @default(uuid())
+  tenantId          String
+  orderNumber       String
+  customerId        String
+  productId         String
+  quantity          Int                       @default(1)
+  unitPrice         Float
+  discount          Float                     @default(0)
+  tax               Float                     @default(0)
+  total             Float
+  status            ClientOrderStatus         @default(PENDING)
+  paymentStatus     ClientOrderPaymentStatus  @default(PENDING)
+  orderDate         DateTime                  @default(now())
+  notes             String?
+  assignedStaffId   String?
+  assignedStaffName String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, paymentStatus])
+  @@index([tenantId, orderDate])
+  @@index([tenantId, customerId])
+  @@index([tenantId, productId])
 }
 
 model Appointment {
@@ -1795,11 +1925,28 @@ model WebsitePage {
 
 enum IntegrationType {
   GOOGLE_CALENDAR
+  GOOGLE_BUSINESS_PROFILE
   STRIPE
   RAZORPAY
   RESEND
   WHATSAPP
   SMS
+}
+
+enum ReviewSource {
+  DOLOYAL
+  GOOGLE
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReviewType {
+  TEXT
+  VIDEO
 }
 
 enum IntegrationStatus {
@@ -1810,6 +1957,42 @@ enum IntegrationStatus {
   /// The stored OAuth grant is no longer usable (e.g. refresh token was
   /// revoked). The user must reconnect the provider.
   REAUTH_REQUIRED
+}
+
+/// A customer review left on a Doloyal Client Page. Public Client Pages only show APPROVED rows.
+model Review {
+  id              String       @id @default(uuid())
+  tenantId        String
+  customerId      String?
+  source          ReviewSource @default(DOLOYAL)
+  type            ReviewType   @default(TEXT)
+  status          ReviewStatus @default(PENDING)
+  rating          Int
+  body            String       @default("")
+  authorName      String
+  authorAvatarUrl String?
+  videoUrl        String?
+  thumbnailUrl    String?
+  rejectionReason String?
+  googleReviewId  String?
+  googleAuthorUrl String?
+  publishedAt     DateTime     @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  approvedBy      String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, googleReviewId])
+  @@index([tenantId, status, publishedAt])
+  @@index([tenantId, type, publishedAt])
+  @@index([tenantId, source, publishedAt])
+  @@index([tenantId, rating])
+  @@index([tenantId, customerId])
+  @@index([tenantId, publishedAt])
 }
 
 /// A connected third-party service integration for a tenant.

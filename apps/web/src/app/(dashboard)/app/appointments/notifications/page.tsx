@@ -239,7 +239,6 @@ export default function NotificationsPage() {
               {filteredNotifications.length === 0 ? (
                 <div className="p-6">
                   <EmptyState
-                    icon={<Bell className="h-6 w-6" />}
                     title="No notifications"
                     description="Notifications will appear here when appointments are booked"
                   />
@@ -305,7 +304,6 @@ export default function NotificationsPage() {
             <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => openTemplateDialog()}>
-                  <Plus className="h-4 w-4" />
                   Create Template
                 </Button>
               </DialogTrigger>
@@ -381,10 +379,9 @@ export default function NotificationsPage() {
             <Card>
               <CardContent className="py-12">
                 <EmptyState
-                  icon={<Edit className="h-6 w-6" />}
                   title="No templates yet"
                   description="Create your first notification template"
-                  action={<Button onClick={() => openTemplateDialog()}><Plus className="h-4 w-4" />Create Template</Button>}
+                  action={<Button onClick={() => openTemplateDialog()}>Create Template</Button>}
                 />
               </CardContent>
             </Card>

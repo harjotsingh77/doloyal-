@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bot,
   CalendarDays,
+  ChevronDown,
   CircleHelp,
   CreditCard,
   Crown,
@@ -14,14 +15,18 @@ import {
   Gift,
   Globe,
   IdCard,
+  LogIn,
   LayoutDashboard,
   Link as LinkIcon,
   Link2,
   Megaphone,
+  Package,
   Puzzle,
   Settings,
   Settings2,
   Share2,
+  ShoppingCart,
+  Star,
   ShieldCheck,
   Sparkles,
   Store,
@@ -53,12 +58,16 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Gift,
   Crown,
   Share2,
+  ShoppingCart,
+  Star,
   Megaphone,
+  Package,
   Workflow,
   Globe,
   Link2,
   FileText,
   IdCard,
+  LogIn,
   Store,
   Puzzle,
   Settings,
@@ -129,10 +138,29 @@ export const Sidebar = React.memo(function Sidebar({
     const resolved = resolveHref(href);
     if (resolved === "/app" || resolved === `${workspaceBase}/dashboard`)
       return pathname === resolved || pathname === "/app/dashboard";
+    if (href === "/app/customers") {
+      if (pathname === resolved) return true;
+      if (
+        pathname.startsWith(`${resolved}/`) &&
+        !pathname.includes("/products") &&
+        !pathname.includes("/orders")
+      )
+        return true;
+      return false;
+    }
     return pathname.startsWith(resolved);
   };
 
+  const isAncestorActive = (item: { href: string; children?: { href: string }[] }) => {
+    if (isActive(item.href)) return true;
+    return Boolean(item.children?.some((child) => isActive(child.href) || pathname.startsWith(resolveHref(child.href))));
+  };
+
+  const groupHasActive = (items: { href: string; children?: { href: string }[] }[]) =>
+    items.some((item) => isAncestorActive(item));
+
   const logoHref = mode === "branch" && selectedBranch ? `${workspaceBase}/dashboard` : "/app/dashboard";
+  const [openParents, setOpenParents] = React.useState<Record<string, boolean>>({});
 
   const sidebarContent = (
     <div
@@ -183,10 +211,20 @@ export const Sidebar = React.memo(function Sidebar({
 
       {/* Navigation Groups */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {APP_NAV_GROUPS.map((group, groupIdx) => (
+        {APP_NAV_GROUPS.map((group, groupIdx) => {
+          const items = group.items.filter((item) => !item.hidden);
+          if (items.length === 0) return null;
+          return (
           <div key={group.section} className={cn("mb-5", groupIdx === 0 ? "mt-0" : "")}>
             {!collapsed ? (
-              <p className="px-3 pb-2 text-[0.68rem] font-semibold uppercase tracking-wider text-[rgb(var(--color-muted-foreground))]">
+              <p
+                className={cn(
+                  "px-3 pb-2 text-[0.68rem] font-semibold uppercase tracking-wider",
+                  groupHasActive(items)
+                    ? "text-[rgb(var(--color-primary))]"
+                    : "text-[rgb(var(--color-muted-foreground))]",
+                )}
+              >
                 {group.section}
               </p>
             ) : (
@@ -194,67 +232,150 @@ export const Sidebar = React.memo(function Sidebar({
             )}
 
             <ul className="flex flex-col gap-1">
-              {group.items.map((item) => {
+              {items.map((item) => {
                 const href = resolveHref(item.href);
-                const active = isActive(item.href);
+                const hasChildren = Boolean(item.children?.length);
+                const ancestor = isAncestorActive(item);
+                const active = hasChildren ? false : isActive(item.href);
+                const nestedOpen =
+                  hasChildren &&
+                  !collapsed &&
+                  (openParents[item.href] ?? ancestor);
                 return (
                   <li key={item.href}>
-                    <Link
-                      href={item.badge === "soon" ? "#" : href}
-                      prefetch={item.badge === "soon" ? undefined : true}
-                      onClick={(e) => {
-                        if (item.badge === "soon") e.preventDefault();
-                        onMobileClose?.();
-                      }}
-                      className={cn(
-                        "group relative flex items-center gap-3 rounded-[0.625rem] px-3 py-2.5 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
-                          : "text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]",
-                        collapsed && "justify-center px-2 py-2.5",
-                      )}
-                    >
-                      {active && !collapsed && (
-                        <motion.div
-                          layoutId="sidebar-active"
-                          className="absolute inset-0 rounded-[0.625rem] bg-[rgb(var(--color-primary)/0.1)]"
-                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                        />
-                      )}
-                      <span className="relative z-10">
-                        <DynamicIcon
-                          name={item.icon}
-                          className={cn("h-4.5 w-4.5 shrink-0", collapsed && "h-5 w-5")}
-                        />
-                      </span>
-                      {!collapsed && (
-                        <span className="relative z-10 truncate">{item.label}</span>
-                      )}
-                      {!collapsed && item.badge && (
-                        <Badge
-                          variant={item.badge === "new" ? "primary" : "outline"}
-                          className="ml-auto text-[0.62rem] uppercase leading-none py-0.5 px-2 font-semibold"
+                    <div className="relative flex items-center">
+                      <Link
+                        href={item.badge === "soon" ? "#" : href}
+                        prefetch={item.badge === "soon" ? undefined : true}
+                        onClick={(e) => {
+                          if (item.badge === "soon") e.preventDefault();
+                          if (hasChildren && !collapsed) {
+                            setOpenParents((prev) => ({ ...prev, [item.href]: true }));
+                          }
+                          onMobileClose?.();
+                        }}
+                        className={cn(
+                          "group relative flex min-w-0 flex-1 items-center gap-3 rounded-[0.625rem] px-3 py-2.5 text-sm font-medium transition-colors",
+                          hasChildren && !collapsed && "pr-8",
+                          active
+                            ? "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
+                            : ancestor
+                              ? "text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-muted))]"
+                              : "text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]",
+                          collapsed && "justify-center px-2 py-2.5",
+                        )}
+                      >
+                        {active && !collapsed && (
+                          <motion.div
+                            layoutId="sidebar-active"
+                            className="absolute inset-0 rounded-[0.625rem] bg-[rgb(var(--color-primary)/0.1)]"
+                            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                          />
+                        )}
+                        <span className="relative z-10">
+                          <DynamicIcon
+                            name={item.icon}
+                            className={cn("h-4.5 w-4.5 shrink-0", collapsed && "h-5 w-5")}
+                          />
+                        </span>
+                        {!collapsed && (
+                          <span className="relative z-10 truncate">{item.label}</span>
+                        )}
+                        {!collapsed && item.badge && (
+                          <Badge
+                            variant={item.badge === "new" ? "primary" : "outline"}
+                            className="ml-auto text-[0.62rem] uppercase leading-none py-0.5 px-2 font-semibold"
+                          >
+                            {item.badge}
+                          </Badge>
+                        )}
+                        {collapsed && item.badge && (
+                          <span
+                            className={cn(
+                              "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full",
+                              item.badge === "new"
+                                ? "bg-[rgb(var(--color-primary))]"
+                                : "bg-[rgb(var(--color-muted-foreground))]",
+                            )}
+                          />
+                        )}
+                      </Link>
+                      {hasChildren && !collapsed && (
+                        <button
+                          type="button"
+                          aria-label={nestedOpen ? `Collapse ${item.label}` : `Expand ${item.label}`}
+                          aria-expanded={nestedOpen}
+                          className="absolute right-1 z-20 rounded-md p-1 text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenParents((prev) => ({
+                              ...prev,
+                              [item.href]: !(prev[item.href] ?? ancestor),
+                            }));
+                          }}
                         >
-                          {item.badge}
-                        </Badge>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              nestedOpen ? "rotate-0" : "-rotate-90",
+                            )}
+                          />
+                        </button>
                       )}
-                      {collapsed && item.badge && (
-                        <span
-                          className={cn(
-                            "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full",
-                            item.badge === "new"
-                              ? "bg-[rgb(var(--color-primary))]"
-                              : "bg-[rgb(var(--color-muted-foreground))]",
-                          )}
-                        />
-                      )}
-                    </Link>
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {nestedOpen && item.children ? (
+                        <motion.ul
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="mt-1 ml-4 overflow-hidden border-l border-[rgb(var(--color-border))] pl-2"
+                        >
+                          {item.children.map((child) => {
+                            const childHref = resolveHref(child.href);
+                            const childActive = isActive(child.href);
+                            return (
+                              <li key={child.href}>
+                                <Link
+                                  href={child.badge === "soon" ? "#" : childHref}
+                                  prefetch={child.badge === "soon" ? undefined : true}
+                                  onClick={(e) => {
+                                    if (child.badge === "soon") e.preventDefault();
+                                    onMobileClose?.();
+                                  }}
+                                  className={cn(
+                                    "group relative flex items-center gap-3 rounded-[0.625rem] px-3 py-2 text-sm font-medium transition-colors",
+                                    childActive
+                                      ? "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
+                                      : "text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]",
+                                  )}
+                                >
+                                  <DynamicIcon name={child.icon} className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{child.label}</span>
+                                  {child.badge ? (
+                                    <Badge
+                                      variant={child.badge === "new" ? "primary" : "outline"}
+                                      className="ml-auto text-[0.62rem] uppercase leading-none py-0.5 px-2 font-semibold"
+                                    >
+                                      {child.badge}
+                                    </Badge>
+                                  ) : null}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </motion.ul>
+                      ) : null}
+                    </AnimatePresence>
                   </li>
                 );
               })}
             </ul>
           </div>
-        ))}
+          );
+        })}
 
         {user?.isAdmin ? (
           <div className="mt-4 pt-3 border-t border-[rgb(var(--color-border))]">

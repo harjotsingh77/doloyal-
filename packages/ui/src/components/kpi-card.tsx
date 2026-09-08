@@ -12,22 +12,16 @@ export interface KpiCardProps {
   format?: (v: number) => string;
   delta?: number; // percent change vs previous period
   deltaSuffix?: string;
+  deltaLabel?: string;
+  deltaInvert?: boolean;
   icon?: React.ReactNode;
   accent?: "primary" | "success" | "danger" | "warning" | "accent" | "violet";
-  hint?: string;
+  hint?: React.ReactNode;
   loading?: boolean;
   delay?: number;
   className?: string;
+  onClick?: () => void;
 }
-
-const ACCENT_BG: Record<NonNullable<KpiCardProps["accent"]>, string> = {
-  primary: "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]",
-  accent: "bg-[rgb(var(--color-accent)/0.15)] text-[rgb(var(--color-accent))]",
-  success: "bg-[rgb(var(--color-success)/0.12)] text-[rgb(var(--color-success))]",
-  danger: "bg-[rgb(var(--color-danger)/0.12)] text-[rgb(var(--color-danger))]",
-  warning: "bg-[rgb(var(--color-warning)/0.15)] text-[rgb(var(--color-warning))]",
-  violet: "bg-[rgb(139,92,246/0.15)] text-[rgb(139,92,246)]",
-};
 
 function useCountUp(target: number, durationMs = 800) {
   const ref = React.useRef(0);
@@ -61,12 +55,13 @@ export function KpiCard({
   format,
   delta,
   deltaSuffix = "vs last period",
-  icon,
-  accent = "primary",
+  deltaLabel,
+  deltaInvert,
   hint,
   loading,
   delay = 0,
   className,
+  onClick,
 }: KpiCardProps) {
   const isNumeric = typeof value === "number";
   const animated = useCountUp(isNumeric ? (value as number) : 0);
@@ -76,50 +71,77 @@ export function KpiCard({
       : Math.round(animated).toLocaleString("en-IN")
     : (value as string);
 
-  const positive = (delta ?? 0) >= 0;
+  const positive = deltaInvert ? (delta ?? 0) <= 0 : (delta ?? 0) >= 0;
+  const footer = delta !== undefined || hint || onClick;
+  const deltaTone =
+    delta === 0 || deltaLabel === "No change" || deltaLabel === "New"
+      ? "text-[rgb(var(--color-muted-foreground))]"
+      : positive
+        ? "text-[rgb(var(--color-success))]"
+        : "text-[rgb(var(--color-danger))]";
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.25, delay, ease: [0.16, 1, 0.3, 1] }}
       className={cn("h-full", className)}
     >
-      <Card interactive className="relative flex h-full flex-col justify-between overflow-hidden p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-[0.8rem] font-medium text-[rgb(var(--color-muted-foreground))]">
-              {label}
-            </p>
-            <div className="mt-2 text-[1.75rem] font-semibold leading-tight tracking-tight text-[rgb(var(--color-foreground))]">
-              {loading ? <span className="opacity-40">—</span> : display}
-            </div>
-          </div>
-          {icon ? (
-            <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", ACCENT_BG[accent])}>
-              {icon}
-            </div>
-          ) : null}
+      <Card
+        onClick={onClick}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onKeyDown={
+          onClick
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onClick();
+                }
+              }
+            : undefined
+        }
+        className={cn(
+          "group flex h-full flex-col rounded-lg p-4 shadow-none",
+          onClick &&
+            "cursor-pointer transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)] hover:shadow-sm",
+        )}
+      >
+        <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-[rgb(var(--color-muted-foreground))]">
+          {label}
+        </p>
+        <div className="mt-2 text-[1.5rem] font-semibold leading-none tracking-tight tabular-nums text-[rgb(var(--color-foreground))]">
+          {loading ? <span className="opacity-40">—</span> : display}
         </div>
-        {delta !== undefined ? (
-          <div className="mt-3 flex items-center gap-1.5 text-xs">
-            <span
-              className={cn(
-                "inline-flex items-center gap-0.5 font-medium",
-                positive ? "text-[rgb(var(--color-success))]" : "text-[rgb(var(--color-danger))]",
-              )}
-            >
-              {positive ? (
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              ) : (
-                <ArrowDownRight className="h-3.5 w-3.5" />
-              )}
-              {Math.abs(delta).toFixed(1)}%
-            </span>
-            <span className="text-[rgb(var(--color-muted-foreground))]">{deltaSuffix}</span>
+        {footer ? (
+          <div className="mt-2 text-[11px] leading-4 text-[rgb(var(--color-muted-foreground))]">
+            {delta !== undefined ? (
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span
+                  className={cn(
+                    "inline-flex items-center font-semibold tabular-nums",
+                    deltaTone,
+                  )}
+                >
+                  {delta !== 0 && deltaLabel !== "No change" && deltaLabel !== "New" ? (
+                    positive ? (
+                      <ArrowUpRight className="h-3 w-3" />
+                    ) : (
+                      <ArrowDownRight className="h-3 w-3" />
+                    )
+                  ) : null}
+                  {deltaLabel ?? `${Math.abs(delta ?? 0).toFixed(1)}%`}
+                </span>
+                <span>{deltaSuffix}</span>
+              </div>
+            ) : null}
+            {hint ? <div className={delta !== undefined ? "mt-0.5" : undefined}>{hint}</div> : null}
+            {onClick ? (
+              <span className="mt-1 block text-[10px] font-medium text-[rgb(var(--color-muted-foreground))] opacity-70 transition-opacity group-hover:opacity-100">
+                View details
+              </span>
+            ) : null}
           </div>
-        ) : hint ? (
-          <p className="mt-3 text-xs text-[rgb(var(--color-muted-foreground))]">{hint}</p>
         ) : null}
       </Card>
     </motion.div>

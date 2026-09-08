@@ -145,7 +145,7 @@ export default function AdminFeedbackPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<MessageSquare className="h-10 w-10" />} title="No feedback found" description="Customer feedback appears here as it comes in." />
+              <EmptyState title="No feedback found" description="Customer feedback appears here as it comes in." />
             </div>
           ) : (
             <Table>

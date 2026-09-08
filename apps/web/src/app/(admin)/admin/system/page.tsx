@@ -43,7 +43,7 @@ export default function AdminSystemPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Server className="h-10 w-10" />} title="System health unavailable" />
+          <EmptyState title="System health unavailable" />
         </CardContent>
       </Card>
     );
@@ -58,10 +58,10 @@ export default function AdminSystemPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminStatCard label="Overall status" value={data.overall.replace(/_/g, " ")} icon={<Activity className="h-4 w-4" />} tone={data.overall === "OPERATIONAL" ? "success" : data.overall === "DEGRADED" ? "warning" : "danger"} />
-        <AdminStatCard label="Uptime" value={`${data.uptime}%`} icon={<Clock className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Incidents (24h)" value={data.incidents24h} icon={<Activity className="h-4 w-4" />} tone={data.incidents24h > 0 ? "warning" : "success"} />
-        <AdminStatCard label="Last checked" value={relativeTime(data.lastChecked)} icon={<Clock className="h-4 w-4" />} />
+        <AdminStatCard label="Overall status" value={data.overall.replace(/_/g, " ")} tone={data.overall === "OPERATIONAL" ? "success" : data.overall === "DEGRADED" ? "warning" : "danger"} />
+        <AdminStatCard label="Uptime" value={`${data.uptime}%`} tone="primary" />
+        <AdminStatCard label="Incidents (24h)" value={data.incidents24h} tone={data.incidents24h > 0 ? "warning" : "success"} />
+        <AdminStatCard label="Last checked" value={relativeTime(data.lastChecked)} />
       </div>
 
       <Card>

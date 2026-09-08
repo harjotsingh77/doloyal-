@@ -312,7 +312,6 @@ export default function WebsiteBuilderPage() {
                       toast.error(err.message);
                     }
                   }}>
-                    <Plus className="h-3.5 w-3.5" />
                   </Button>
                 </div>
                 {pages.map((page: any) => (
@@ -491,7 +490,7 @@ export default function WebsiteBuilderPage() {
                     const sidebarTab = document.querySelector('[data-value="components"]');
                     if (sidebarTab) (sidebarTab as HTMLElement).click();
                   }}>
-                    <Plus className="h-4 w-4" /> Add Section
+                    Add Section
                   </Button>
                 </div>
               </div>

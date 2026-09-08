@@ -40,6 +40,67 @@ import type {
   ConnectionLogLevel,
 } from "./enums";
 
+export type ClientSignInLayout = "centered" | "split";
+
+export interface ClientSignInBranding {
+  customized: boolean;
+  welcomeMessage?: string | null;
+  tagline?: string | null;
+  primaryColor?: string | null;
+  backgroundColor?: string | null;
+  textColor?: string | null;
+  accentColor?: string | null;
+  logoUrl?: string | null;
+  layout?: ClientSignInLayout | null;
+  fontFamily?: string | null;
+  cardColor?: string | null;
+  cornerRadius?: number | null;
+  buttonLabel?: string | null;
+  showGoogle?: boolean;
+  showForgotPassword?: boolean;
+  showLogo?: boolean;
+  heroImageUrl?: string | null;
+}
+
+export interface ClientSignInPublicConfig {
+  slug: string;
+  businessName: string;
+  tenantId: string;
+  customized: boolean;
+  logoUrl: string | null;
+  welcomeMessage: string;
+  tagline: string | null;
+  primaryColor: string;
+  backgroundColor: string;
+  textColor: string;
+  accentColor: string;
+  cardColor: string;
+  fontFamily: string;
+  layout: ClientSignInLayout;
+  cornerRadius: number;
+  buttonLabel: string;
+  showGoogle: boolean;
+  showForgotPassword: boolean;
+  showLogo: boolean;
+  heroImageUrl: string | null;
+}
+
+export interface ClientPortal {
+  customer: Customer;
+  appointments: Array<{
+    id: string;
+    startTime: string;
+    endTime?: string | null;
+    status: string;
+    serviceName?: string | null;
+    staffName?: string | null;
+  }>;
+  rewards: Array<{ id: string; name: string; pointsCost: number; description?: string | null }>;
+  membership: { name: string; color?: string | null } | null;
+  referralCode: string | null;
+  pointsBalance: number;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -62,6 +123,8 @@ export interface Tenant {
   description?: string | null;
   whatsapp?: string | null;
   mapsUrl?: string | null;
+  googleReviewUrl?: string | null;
+  googlePlaceId?: string | null;
   currency: string;
   timezone: string;
   language?: string;
@@ -78,6 +141,8 @@ export interface Tenant {
   /** Optional customer-facing surface colors. Null → Doloyal neutrals. */
   backgroundColor?: string | null;
   textColor?: string | null;
+  /** Client Sign-in page visual overrides. Null → Doloyal defaults. */
+  clientSignInBranding?: ClientSignInBranding | null;
   taxRate: number;
   businessHours?: BusinessHoursSettings | null;
   socialLinks?: SocialLinksSettings | null;
@@ -169,6 +234,7 @@ export interface AuthUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  phone?: string | null;
   avatarUrl?: string;
   twoFactorEnabled?: boolean;
   isAdmin?: boolean;
@@ -177,6 +243,11 @@ export interface AuthUser {
   memberships: Membership[];
   activeTenantId: string;
   activeRole: Role;
+  /** Distinguishes owner/staff dashboard sessions from customer Client Page sessions. */
+  sessionKind?: "staff" | "customer";
+  customerId?: string | null;
+  needsPhone?: boolean;
+  clientSlug?: string | null;
 }
 
 // ─── Team Management ────────────────────────────────────────────────────────
@@ -377,6 +448,10 @@ export interface Customer {
   source?: string | null;
   createdAt: string;
   lastVisitAt?: string | null;
+  lastLoginAt?: string | null;
+  lastActivityAt?: string | null;
+  status?: "ACTIVE" | "AT_RISK" | "INACTIVE" | "CHURNED";
+  userId?: string | null;
   // Aggregates (computed)
   pointsBalance: number;
   lifetimeValue: number;
@@ -934,10 +1009,36 @@ export interface DashboardOverview {
     activeRewards: number;
     pointsRedeemed30d: number;
     membershipSales30d: number;
+    outstandingPoints: number;
+    walletHolders: number;
+    pointsIssued30d: number;
+    redemptionRatePct: number;
+    campaignRevenue: number;
+    campaignCustomers: number;
+    campaignReached: number;
+    campaignsSent: number;
     appointmentsToday: number;
+    appointmentsInPeriod?: number;
     pendingReviews: number;
     /** null when no prior-period baseline exists yet */
     monthlyGrowthPct: number | null;
+    totalCustomers?: number;
+    orderCount?: number;
+    orderRevenue?: number;
+    approvedReviews?: number;
+    averageRating?: number;
+    previousPeriodRevenue?: number;
+    previousTotalCustomers?: number;
+    previousRepeatCustomers?: number;
+    previousNewCustomers?: number;
+    previousInactiveCustomers?: number;
+    previousPointsRedeemed?: number;
+    previousOrderCount?: number;
+    previousOrderRevenue?: number;
+    previousApprovedReviews?: number;
+    previousAverageRating?: number;
+    previousAppointmentsInPeriod?: number;
+    previousMembershipSales?: number;
   };
   revenueTrend: KpiPoint[]; // last 30 days
   customerTrend: KpiPoint[]; // last 30 days
@@ -950,11 +1051,114 @@ export interface DashboardOverview {
   recentActivity: ActivityEntry[];
 }
 
+export type BusinessHealthStatus = "healthy" | "fair" | "at_risk";
+
+export interface BusinessHealthFactor {
+  label: string;
+  positive: boolean;
+}
+
+export interface BusinessHealthInsight {
+  score: number;
+  status: BusinessHealthStatus;
+  summary: string;
+  factors: BusinessHealthFactor[];
+  source: "ai" | "rules";
+  generatedAt: string;
+  period: { from: string; to: string };
+}
+
+export type DashboardMetricId =
+  | "revenue"
+  | "customers"
+  | "repeat_rate"
+  | "new_customers"
+  | "inactive"
+  | "points"
+  | "orders"
+  | "reviews"
+  | "appointments"
+  | "memberships"
+  | "ai_revenue"
+  | "ai_retention";
+
+export type MetricChangeKind = "up" | "down" | "flat" | "new" | "no_change";
+export type MetricValueUnit = "currency" | "number" | "percent" | "points";
+
+export interface MetricValueChange {
+  current: number;
+  previous: number;
+  difference: number;
+  percentChange: number | null;
+  percentChangeLabel: string;
+  kind: MetricChangeKind;
+}
+
+export interface MetricHistoryRow {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  current: number;
+  previous: number;
+  difference: number;
+  percentChange: number | null;
+  percentChangeLabel: string;
+  kind: MetricChangeKind;
+  extra?: Record<string, number>;
+}
+
+export interface MetricTrendPoint {
+  date: string;
+  current: number;
+  previous: number;
+}
+
+export interface MetricSupportingStat {
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+export interface MetricRecordRow {
+  id: string;
+  title: string;
+  subtitle?: string;
+  value?: string;
+  href?: string;
+  meta?: Record<string, string>;
+}
+
+export interface MetricInsightCopy {
+  summary: string;
+  factors: string[];
+  recommendation: string;
+}
+
+export interface DashboardMetricDetail {
+  metric: DashboardMetricId;
+  title: string;
+  description?: string;
+  unit: MetricValueUnit;
+  changeIsPercentagePoints?: boolean;
+  currentPeriod: { from: string; to: string };
+  previousPeriod: { from: string; to: string };
+  comparison: MetricValueChange;
+  series: MetricTrendPoint[];
+  history: MetricHistoryRow[];
+  extraColumns?: { key: string; label: string }[];
+  supporting: MetricSupportingStat[];
+  records?: MetricRecordRow[];
+  recordsTitle?: string;
+  insight?: MetricInsightCopy;
+  empty: boolean;
+}
+
 // Customer profile detail ----------------------------------------------------
 
 export interface CustomerTimelineEntry {
   id: string;
-  kind: "VISIT" | "INVOICE" | "POINTS" | "REWARD" | "MEMBERSHIP" | "NOTE";
+  kind: "VISIT" | "INVOICE" | "ORDER" | "REVIEW" | "POINTS" | "REWARD" | "MEMBERSHIP" | "NOTE";
   title: string;
   description?: string;
   amount?: number;
@@ -1245,6 +1449,8 @@ export interface PublicBusinessInfo {
   id: string;
   name: string;
   slug: string;
+  /** Customer-facing brand name when set; otherwise `name`. */
+  brandName?: string | null;
   logoUrl?: string | null;
   coverBannerUrl?: string | null;
   address?: string | null;
@@ -1255,7 +1461,13 @@ export interface PublicBusinessInfo {
   instagram?: string | null;
   facebook?: string | null;
   mapsUrl?: string | null;
-  brandColor: string;
+  googleReviewUrl?: string | null;
+  googlePlaceId?: string | null;
+  brandColor?: string | null;
+  secondaryColor?: string | null;
+  backgroundColor?: string | null;
+  textColor?: string | null;
+  fontFamily?: string | null;
   currency: string;
   timezone: string;
   rating?: number;
@@ -2447,3 +2659,156 @@ export interface WorkflowAuditEntry {
   details?: Record<string, unknown>;
   createdAt: string;
 }
+
+export type ReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type ReviewType = "TEXT" | "VIDEO";
+export type ReviewFilter = "ALL" | ReviewStatus | ReviewType;
+
+export interface Review {
+  id: string;
+  tenantId: string;
+  customerId: string | null;
+  type: ReviewType;
+  status: ReviewStatus;
+  rating: number;
+  body: string;
+  authorName: string;
+  authorAvatarUrl?: string | null;
+  hasVideo: boolean;
+  mediaUrl?: string | null;
+  thumbnailUrl?: string | null;
+  rejectionReason?: string | null;
+  publishedAt: string;
+  createdAt: string;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+}
+
+export interface ReviewSummary {
+  averageRating: number;
+  approvedCount: number;
+  totalReviews: number;
+  pendingCount: number;
+  rejectedCount: number;
+  videoCount: number;
+  approvedVideoCount: number;
+  textCount: number;
+  breakdown: { 1: number; 2: number; 3: number; 4: number; 5: number };
+}
+
+export interface ReviewListPage {
+  items: Review[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface PublicReviewPage {
+  businessName: string;
+  logoUrl?: string | null;
+  brandColor: string;
+  averageRating: number;
+  totalReviews: number;
+  videoCount: number;
+  breakdown: { 1: number; 2: number; 3: number; 4: number; 5: number };
+  reviews: Review[];
+}
+
+export type CatalogStockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+
+export interface ProductCategory {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CatalogProduct {
+  id: string;
+  tenantId: string;
+  name: string;
+  sku: string;
+  description: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  price: number;
+  originalPrice: number | null;
+  discount: number | null;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  unit: string | null;
+  brand: string | null;
+  productCode: string | null;
+  imageUrl: string | null;
+  status: "ACTIVE" | "INACTIVE";
+  availability: "IN_STOCK" | "OUT_OF_STOCK";
+  stockStatus: CatalogStockStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CatalogProductSummary {
+  total: number;
+  active: number;
+  lowStock: number;
+  outOfStock: number;
+}
+
+export interface CatalogProductListPage {
+  items: CatalogProduct[];
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export type ClientOrderStatusValue = "PENDING" | "CONFIRMED" | "PROCESSING" | "COMPLETED" | "CANCELLED";
+export type ClientOrderPaymentStatusValue = "PAID" | "PENDING" | "PARTIALLY_PAID" | "REFUNDED";
+
+export interface ClientOrder {
+  id: string;
+  tenantId: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string | null;
+  productId: string;
+  productName: string;
+  productSku: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  tax: number;
+  total: number;
+  status: ClientOrderStatusValue;
+  paymentStatus: ClientOrderPaymentStatusValue;
+  orderDate: string;
+  notes: string | null;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClientOrderSummary {
+  total: number;
+  pending: number;
+  processing: number;
+  completed: number;
+  cancelled: number;
+  totalValue: number;
+}
+
+export interface ClientOrderListPage {
+  items: ClientOrder[];
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+

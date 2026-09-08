@@ -1,15 +1,18 @@
 import type {
-  DashboardOverview, Customer, CustomerProfile, LoyaltyConfig,
+  DashboardOverview, DashboardMetricDetail, DashboardMetricId, Customer, CustomerProfile, LoyaltyConfig,
   PointsLedgerEntry, Reward, RewardRedemption,
   MembershipTier, CustomerMembership, Appointment, Invoice,
   AuthUser, Tenant, BookingLink, BookingLinkAnalytics,
   BookingConfirmation, BookingAnalytics, NotificationRecord,
   NotificationTemplate, WidgetSettings, AvailabilitySettings,
   BlockedDateRecord, PublicBusinessInfo, PublicService,
-  PublicStaff, BookingSlot, AppointmentDetail,
+  PublicStaff,   BookingSlot, AppointmentDetail,
   ConnectedWebsite, ConnectedWebsiteCreateResult, WebsiteConnectionApiKey,
   WebsiteConnectionWebhook, ConnectionLogEntry, CreateConnectedWebsiteInput,
   BillingSubscription, BillingHistoryEntry, SubscriptionPaymentMethod,
+  Review, ReviewSummary, ReviewListPage, PublicReviewPage, ReviewFilter,
+  CatalogProduct, CatalogProductSummary, CatalogProductListPage, ProductCategory,
+  ClientOrder, ClientOrderSummary, ClientOrderListPage,
 } from "@doloyal/shared";
 import type {
   CustomerQuery, CreateCustomerInput, UpdateCustomerInput,
@@ -18,9 +21,13 @@ import type {
   CreateMembershipTierInput, CreateInvoiceInput, AssistantMessageInput,
   CreateBookingLinkInput, UpdateBookingLinkInput,
   UpdateAvailabilityInput, BlockDateInput,
+  CreateProductInput, UpdateProductInput, ProductQuery, CreateProductCategoryInput,
+  CreateClientOrderInput, UpdateClientOrderInput, ClientOrderQuery,
 } from "@doloyal/shared";
 import type { ApiResponse, Paginated } from "@doloyal/shared";
+import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
+import { notifyFromApiPath, notifyAppChange } from "./data-sync";
 
 const BASE_URL = getApiBaseUrl();
 const APP_BASE_URL =
@@ -42,7 +49,11 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   assertApiBaseUrlConfigured();
-  const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+  const staffToken = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+  const clientToken = typeof window !== "undefined" ? localStorage.getItem("doloyal_client_token") : null;
+  const isPublicPath = path.startsWith("/public/");
+  const useClientToken = path.startsWith("/auth/client") || path.startsWith("/client/");
+  const token = isPublicPath ? null : useClientToken ? clientToken : staffToken;
   const headers: Record<string, string> = {
     ...((options.headers as Record<string, string>) ?? {}),
   };
@@ -63,12 +74,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (ct.includes("json")) { try { body = await res.json(); } catch {} }
     throw new ApiError(res.status, body.error?.code ?? "UNKNOWN", body.error?.message ?? `Request failed with status ${res.status}`, body.error?.details);
   }
-  if (res.status === 204 || !ct.includes("json")) return undefined as T;
+  const method = (options.method || "GET").toUpperCase();
+  if (res.status === 204 || !ct.includes("json")) {
+    notifyFromApiPath(path, method);
+    return undefined as T;
+  }
   const envelope = (await res.json()) as ApiResponse<T> & Record<string, unknown>;
   if (envelope && typeof envelope.error === "object" && envelope.error !== null && "code" in envelope.error) {
     const err = envelope.error as { code: string; message: string; details?: unknown };
     throw new ApiError(res.status, err.code, err.message, err.details);
   }
+  notifyFromApiPath(path, method);
   return envelope.data as T;
 }
 
@@ -91,26 +107,33 @@ function loadMockModule() {
   return mockModulePromise;
 }
 
+function isDemoSessionToken(token: string | null) {
+  return !token || token === "mock-token" || token === "demo-token";
+}
+
+function isMutationMockKey(mockKey: string) {
+  return /^(create|update|delete|approve|reject|send|redeem|import|setCampaign|changeProduct|duplicateProduct|unpublish)/i.test(
+    mockKey,
+  );
+}
+
 async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mockArgs: any[]): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-  const useMock =
-    DEMO_MODE && (!token || token === "mock-token" || token === "demo-token");
-
-  if (useMock) {
-    const { MOCK } = await loadMockModule();
-    const mockFn = MOCK[mockKey];
-    if (mockFn) return mockFn(...mockArgs) as T;
-  }
+  const allowMock = DEMO_MODE && isDemoSessionToken(token);
 
   try {
     return await apiCall();
   } catch (err) {
-    if (!DEMO_MODE) throw err;
+    // Prefer the live API even in development. Mock data is only used when
+    // there is no real tenant session and the request actually failed.
+    if (!allowMock) throw err;
     const { MOCK } = await loadMockModule();
     const mockFn = MOCK[mockKey];
     if (mockFn) {
       console.warn(`API request for "${mockKey}" failed, falling back to mock data:`, err);
-      return mockFn(...mockArgs) as T;
+      const result = mockFn(...mockArgs) as T;
+      if (isMutationMockKey(mockKey)) notifyAppChange(["all"]);
+      return result;
     }
     throw err;
   }
@@ -128,6 +151,30 @@ export const api = {
     return withFallback(
       () => request<DashboardOverview>(`/dashboard/overview${qs ? `?${qs}` : ""}`),
       "getDashboardOverview",
+      params,
+    );
+  },
+
+  getBusinessHealth: (params?: { days?: string | number; from?: string; to?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.days) searchParams.set("days", String(params.days));
+    if (params?.from) searchParams.set("from", params.from);
+    if (params?.to) searchParams.set("to", params.to);
+    const qs = searchParams.toString();
+    return request<import("@doloyal/shared").BusinessHealthInsight>(
+      `/assistant/business-health${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  getDashboardMetricDetail: (metric: DashboardMetricId, params?: { from?: string; to?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.from) searchParams.set("from", params.from);
+    if (params?.to) searchParams.set("to", params.to);
+    const qs = searchParams.toString();
+    return withFallback(
+      () => request<DashboardMetricDetail>(`/dashboard/metrics/${metric}${qs ? `?${qs}` : ""}`),
+      "getDashboardMetricDetail",
+      metric,
       params,
     );
   },
@@ -155,6 +202,98 @@ export const api = {
 
   deleteCustomer: (id: string) =>
     withFallback(() => request<void>(`/customers/${id}`, { method: "DELETE" }), "deleteCustomer", id),
+
+  listProducts: (params?: ProductQuery) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set("search", params.search);
+    if (params?.categoryId) searchParams.set("categoryId", params.categoryId);
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.stock) searchParams.set("stock", params.stock);
+    if (params?.sort) searchParams.set("sort", params.sort);
+    if (params?.order) searchParams.set("order", params.order);
+    if (params?.page) searchParams.set("page", String(params.page));
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    const qs = searchParams.toString();
+    return request<CatalogProductListPage>(`/products${qs ? `?${qs}` : ""}`);
+  },
+
+  getProductSummary: () => request<CatalogProductSummary>("/products/summary"),
+
+  getProduct: (id: string) => request<CatalogProduct>(`/products/${id}`),
+
+  createProduct: (data: CreateProductInput) =>
+    request<CatalogProduct>("/products", { method: "POST", body: JSON.stringify(data) }),
+
+  updateProduct: (id: string, data: UpdateProductInput) =>
+    request<CatalogProduct>(`/products/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  duplicateProduct: (id: string) =>
+    request<CatalogProduct>(`/products/${id}/duplicate`, { method: "POST", body: "{}" }),
+
+  changeProductStatus: (id: string, status?: "ACTIVE" | "INACTIVE") =>
+    request<CatalogProduct>(`/products/${id}/status`, {
+      method: "POST",
+      body: JSON.stringify(status ? { status } : {}),
+    }),
+
+  deleteProduct: (id: string) => request<{ ok: boolean }>(`/products/${id}`, { method: "DELETE" }),
+
+  listProductCategories: () => request<ProductCategory[]>("/products/categories"),
+
+  createProductCategory: (data: CreateProductCategoryInput) =>
+    request<ProductCategory>("/products/categories", { method: "POST", body: JSON.stringify(data) }),
+
+  uploadProductImage: async (id: string, file: File) => {
+    assertApiBaseUrlConfigured();
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/products/${id}/image`, { method: "POST", headers, body: form });
+    if (!res.ok) {
+      let message = "Image upload failed";
+      try {
+        const b = await res.json();
+        message = b.error?.message ?? message;
+      } catch {}
+      throw new ApiError(res.status, "UPLOAD_FAILED", message);
+    }
+    const envelope = (await res.json()) as ApiResponse<CatalogProduct>;
+    if (isApiError(envelope) || !("data" in envelope)) {
+      const err = "error" in envelope ? envelope.error : { code: "UPLOAD_FAILED", message: "Image upload failed" };
+      throw new ApiError(res.status, err.code, err.message);
+    }
+    notifyFromApiPath(`/products/${id}/image`, "POST");
+    return envelope.data;
+  },
+
+  listOrders: (params?: ClientOrderQuery) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set("search", params.search);
+    if (params?.productId) searchParams.set("productId", params.productId);
+    if (params?.customerId) searchParams.set("customerId", params.customerId);
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.paymentStatus) searchParams.set("paymentStatus", params.paymentStatus);
+    if (params?.from) searchParams.set("from", params.from);
+    if (params?.to) searchParams.set("to", params.to);
+    if (params?.page) searchParams.set("page", String(params.page));
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    const qs = searchParams.toString();
+    return request<ClientOrderListPage>(`/orders${qs ? `?${qs}` : ""}`);
+  },
+
+  getOrderSummary: () => request<ClientOrderSummary>("/orders/summary"),
+
+  getOrder: (id: string) => request<ClientOrder>(`/orders/${id}`),
+
+  createOrder: (data: CreateClientOrderInput) =>
+    request<ClientOrder>("/orders", { method: "POST", body: JSON.stringify(data) }),
+
+  updateOrder: (id: string, data: UpdateClientOrderInput) =>
+    request<ClientOrder>(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  deleteOrder: (id: string) => request<{ ok: boolean }>(`/orders/${id}`, { method: "DELETE" }),
 
   importCustomers: (file: File) =>
     withFallback(async () => {
@@ -193,6 +332,7 @@ export const api = {
       if ("error" in envelope) {
         throw new ApiError(res.status, envelope.error.code, envelope.error.message, envelope.error.details);
       }
+      notifyFromApiPath("/customers/import", "POST");
       return envelope.data;
     }, "importCustomers", file),
 
@@ -1410,6 +1550,125 @@ export const api = {
   getTenant: () =>
     withFallback(() => request<Tenant>("/tenants/current"), "getTenant"),
 
+  getReviewSummary: () =>
+    request<ReviewSummary>("/reviews/summary"),
+
+  listReviews: (params?: {
+    search?: string;
+    filter?: ReviewFilter;
+    rating?: number;
+    customerId?: string;
+    limit?: number;
+    cursor?: string;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set("search", params.search);
+    if (params?.filter && params.filter !== "ALL") searchParams.set("filter", params.filter);
+    if (params?.rating) searchParams.set("rating", String(params.rating));
+    if (params?.customerId) searchParams.set("customerId", params.customerId);
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.cursor) searchParams.set("cursor", params.cursor);
+    const qs = searchParams.toString();
+    return request<ReviewListPage>(`/reviews${qs ? `?${qs}` : ""}`);
+  },
+
+  getReview: (id: string) => request<Review>(`/reviews/${encodeURIComponent(id)}`),
+
+  createReview: (data: {
+    name: string;
+    rating: number;
+    body?: string;
+    type?: "TEXT" | "VIDEO";
+    status?: "PENDING" | "APPROVED";
+    authorAvatarUrl?: string;
+    thumbnailUrl?: string;
+    customerId?: string;
+  }) =>
+    request<Review>("/reviews", { method: "POST", body: JSON.stringify(data) }),
+
+  createVideoReview: async (form: FormData) => {
+    assertApiBaseUrlConfigured();
+    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/reviews/video`, { method: "POST", headers, body: form });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let message = "Could not save the video review.";
+      if (ct.includes("json")) {
+        try {
+          const body = await res.json();
+          message = body?.error?.message || message;
+        } catch {
+          /* ignore */
+        }
+      }
+      throw new ApiError(res.status, "UPLOAD_FAILED", message);
+    }
+    const envelope = (await res.json()) as { data: Review };
+    notifyFromApiPath("/reviews/video", "POST");
+    return envelope.data;
+  },
+
+  approveReview: (id: string) =>
+    request<Review>(`/reviews/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+
+  rejectReview: (id: string, reason?: string) =>
+    request<Review>(`/reviews/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || undefined }),
+    }),
+
+  unpublishReview: (id: string) =>
+    request<Review>(`/reviews/${encodeURIComponent(id)}/unpublish`, { method: "POST" }),
+
+  deleteReview: (id: string) =>
+    request<{ ok: boolean }>(`/reviews/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  getPublicReviewPage: (slug: string) =>
+    request<PublicReviewPage>(`/public/reviews/${encodeURIComponent(slug)}`),
+
+  lookupReviewCustomer: (slug: string, phone: string, name?: string) => {
+    const searchParams = new URLSearchParams({ phone });
+    if (name) searchParams.set("name", name);
+    return request<{ customer: { id: string; name: string; avatarUrl?: string | null } | null }>(
+      `/public/reviews/${encodeURIComponent(slug)}/lookup?${searchParams.toString()}`,
+    );
+  },
+
+  submitPublicReview: (
+    slug: string,
+    data: { name: string; phone?: string; email?: string; rating: number; body: string },
+  ) =>
+    request<{ message: string; review: Review }>(`/public/reviews/${encodeURIComponent(slug)}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  submitPublicVideoReview: async (slug: string, form: FormData) => {
+    assertApiBaseUrlConfigured();
+    const res = await fetch(`${BASE_URL}/public/reviews/${encodeURIComponent(slug)}/video`, {
+      method: "POST",
+      body: form,
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let message = "Could not submit your video review.";
+      if (ct.includes("json")) {
+        try {
+          const body = await res.json();
+          message = body?.error?.message || message;
+        } catch {
+          /* ignore */
+        }
+      }
+      throw new ApiError(res.status, "UPLOAD_FAILED", message);
+    }
+    const envelope = (await res.json()) as { data: { message: string; review: Review } };
+    notifyFromApiPath(`/public/reviews/${slug}/video`, "POST");
+    return envelope.data;
+  },
+
   uploadTenantImage: (file: File, kind: "logo" | "cover" | "favicon") =>
     withFallback(async () => {
       assertApiBaseUrlConfigured();
@@ -1837,6 +2096,51 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ accessToken }),
     }),
+
+  getClientSignInConfig: (slug: string) =>
+    request<import("@doloyal/shared").ClientSignInPublicConfig>(`/auth/client/config/${encodeURIComponent(slug)}`),
+
+  clientLogin: (email: string, password: string, tenantSlug: string) =>
+    request<{ token: string; user: any; needsPhone?: boolean }>("/auth/client/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password, tenantSlug }),
+    }),
+
+  clientSignUp: (data: {
+    tenantSlug: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+    phone: string;
+  }) =>
+    request<{ token: string; user: any; needsPhone?: boolean }>("/auth/client/signup", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  clientSupabaseExchange: (accessToken: string, tenantSlug: string) =>
+    request<{ token: string; user: any; needsPhone?: boolean }>("/auth/client/supabase/exchange", {
+      method: "POST",
+      body: JSON.stringify({ accessToken, tenantSlug }),
+    }),
+
+  clientCompletePhone: (phone: string) =>
+    request<{ token: string; user: any; needsPhone?: boolean }>("/auth/client/complete-phone", {
+      method: "POST",
+      body: JSON.stringify({ phone }),
+    }),
+
+  getClientPortal: () =>
+    request<{
+      needsPhone: boolean;
+      customer?: import("@doloyal/shared").Customer;
+      appointments?: import("@doloyal/shared").ClientPortal["appointments"];
+      rewards?: import("@doloyal/shared").ClientPortal["rewards"];
+      membership?: import("@doloyal/shared").ClientPortal["membership"];
+      referralCode?: string | null;
+      pointsBalance?: number;
+    }>("/client/me"),
 
   forgotPassword: (email: string) =>
     request<{ message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),

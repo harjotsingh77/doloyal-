@@ -143,7 +143,6 @@ export default function AdminSubscriptionsPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<Package className="h-10 w-10" />}
                 title="No subscriptions found"
                 description={search || status || plan ? "Try adjusting your filters." : "Subscriptions appear here as businesses upgrade."}
               />

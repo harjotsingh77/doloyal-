@@ -103,7 +103,6 @@ export default function AdminHelpCenterPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Help Center" }]}
         actions={
           <Button onClick={() => setEdit("new")}>
-            <Plus className="h-4 w-4" />
             New article
           </Button>
         }
@@ -149,7 +148,7 @@ export default function AdminHelpCenterPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<LifeBuoy className="h-10 w-10" />} title="No articles found" description="Knowledge base articles appear here." />
+              <EmptyState title="No articles found" description="Knowledge base articles appear here." />
             </div>
           ) : (
             <Table>

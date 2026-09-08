@@ -125,6 +125,10 @@ export interface NavItem {
   /** Permissions required to see this item; empty = visible to all staff. */
   requires?: string[];
   badge?: "new" | "soon";
+  /** Nested items shown under an expandable parent. */
+  children?: NavItem[];
+  /** Temporarily hide from the sidebar without deleting the route. Set false to show again. */
+  hidden?: boolean;
 }
 
 export interface NavGroup {
@@ -142,23 +146,32 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    section: "Client",
+    items: [
+      { label: "Client", href: "/app/customers", icon: "Users", requires: ["customers:read"] },
+      { label: "Product", href: "/app/customers/products", icon: "Package", requires: ["customers:read"] },
+      { label: "Order", href: "/app/customers/orders", icon: "ShoppingCart", requires: ["customers:read"] },
+      { label: "Client Sign-in", href: "/app/client-signin", icon: "LogIn", badge: "new" },
+      { label: "Client Page", href: "/app/client-page", icon: "Globe", badge: "new" },
+    ],
+  },
+  {
     section: "Engagement & Loyalty",
     items: [
-      { label: "Customers", href: "/app/customers", icon: "Users", requires: ["customers:read"] },
       { label: "Appointments", href: "/app/appointments", icon: "CalendarDays", requires: ["appointments:read"] },
       { label: "Booking Links", href: "/app/appointments/booking-links", icon: "Link", requires: ["appointments:manage"] },
       { label: "Loyalty", href: "/app/loyalty", icon: "Sparkles", requires: ["loyalty:read"] },
       { label: "Rewards", href: "/app/rewards", icon: "Gift", requires: ["loyalty:read"] },
       { label: "Memberships", href: "/app/memberships", icon: "Crown", requires: ["loyalty:read"] },
       { label: "Referrals", href: "/app/referrals", icon: "Share2" },
+      { label: "Reviews", href: "/app/reviews", icon: "Star" },
       { label: "Campaigns", href: "/app/campaigns", icon: "Megaphone", requires: ["campaigns:manage"] },
     ],
   },
   {
     section: "AI & Websites",
     items: [
-      { label: "Workflows", href: "/app/workflows", icon: "Workflow", badge: "new" },
-      { label: "Client Page", href: "/app/client-page", icon: "Globe", badge: "new" },
+      { label: "Workflows", href: "/app/workflows", icon: "Workflow", badge: "new", hidden: true },
     ],
   },
   {
@@ -180,7 +193,11 @@ export const APP_NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export const APP_NAV: NavItem[] = APP_NAV_GROUPS.flatMap((g) => g.items);
+function flattenNavItems(items: NavItem[]): NavItem[] {
+  return items.flatMap((item) => [item, ...(item.children ? flattenNavItems(item.children) : [])]);
+}
+
+export const APP_NAV: NavItem[] = APP_NAV_GROUPS.flatMap((g) => flattenNavItems(g.items));
 
 /** Suggested prompts shown on the AI assistant empty state. */
 export const ASSISTANT_SUGGESTIONS = [

@@ -202,6 +202,8 @@ type Draft = {
   email: string;
   website: string;
   mapsUrl: string;
+  googleReviewUrl: string;
+  googlePlaceId: string;
   address: string;
   city: string;
   state: string;
@@ -239,6 +241,8 @@ function draftFrom(t: Tenant): Draft {
     email: t.email ?? "",
     website: t.website ?? "",
     mapsUrl: t.mapsUrl ?? "",
+    googleReviewUrl: t.googleReviewUrl ?? "",
+    googlePlaceId: t.googlePlaceId ?? "",
     address: t.address ?? "",
     city: t.city ?? "",
     state: t.state ?? "",
@@ -327,6 +331,8 @@ export default function BusinessProfilePage() {
       return "Website must start with http:// or https://";
     if (draft.mapsUrl.trim() && !/^https?:\/\//i.test(draft.mapsUrl.trim()))
       return "Google Maps link must start with http:// or https://";
+    if (draft.googleReviewUrl.trim() && !/^https?:\/\//i.test(draft.googleReviewUrl.trim()))
+      return "Google review URL must start with http:// or https://";
     for (const [key, label] of [
       ["brandColor", "Primary color"],
       ["secondaryColor", "Secondary color"],
@@ -360,6 +366,8 @@ export default function BusinessProfilePage() {
         email: draft.email.trim().toLowerCase(),
         website: draft.website.trim(),
         mapsUrl: draft.mapsUrl.trim(),
+        googleReviewUrl: draft.googleReviewUrl.trim(),
+        googlePlaceId: draft.googlePlaceId.trim(),
         address: draft.address,
         city: draft.city.trim(),
         state: draft.state.trim(),
@@ -548,6 +556,33 @@ export default function BusinessProfilePage() {
           description="Paste a Google Maps link to show your location publicly."
         >
           <Input id="bp-maps" type="url" value={draft.mapsUrl} onChange={(e) => set("mapsUrl", e.target.value)} placeholder="https://maps.google.com/…" />
+        </SettingRow>
+        <SettingRow
+          label="Google review URL"
+          htmlFor="bp-google-review"
+          stacked
+          description="Customers use this to leave a review on Google. Paste a Google review link or a g.page URL."
+        >
+          <Input
+            id="bp-google-review"
+            type="url"
+            value={draft.googleReviewUrl}
+            onChange={(e) => set("googleReviewUrl", e.target.value)}
+            placeholder="https://search.google.com/local/writereview?placeid=…"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Google Place ID"
+          htmlFor="bp-place-id"
+          stacked
+          description="Used to open Google reviews and to import Place reviews when a Places API key is configured. Leave blank if you do not have one."
+        >
+          <Input
+            id="bp-place-id"
+            value={draft.googlePlaceId}
+            onChange={(e) => set("googlePlaceId", e.target.value)}
+            placeholder="ChIJ…"
+          />
         </SettingRow>
         <div className="grid gap-x-6 sm:grid-cols-2">
           <SettingRow label="Time zone" description="Used for appointments, reminders and reports.">

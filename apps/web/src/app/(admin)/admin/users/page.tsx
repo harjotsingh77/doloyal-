@@ -128,7 +128,6 @@ export default function AdminUsersPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<UsersIcon className="h-10 w-10" />}
                 title="No users found"
                 description={search || role || status ? "Try adjusting your filters." : "Users appear here as they sign up."}
               />

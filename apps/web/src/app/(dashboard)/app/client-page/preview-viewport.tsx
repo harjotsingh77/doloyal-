@@ -95,6 +95,14 @@ function usePreviewMount(frame: HTMLIFrameElement | null) {
         if (!classes.includes("light")) classes.push("light");
         doc.documentElement.className = classes.join(" ");
         doc.documentElement.setAttribute("style", source.getAttribute("style") ?? "");
+        // Parent dashboard often has overflow:hidden on <html>. The iframe must
+        // scroll so the builder can jump to a selected section.
+        doc.documentElement.style.overflowY = "auto";
+        doc.documentElement.style.overflowX = "hidden";
+        doc.documentElement.style.height = "100%";
+        doc.body.style.overflow = "visible";
+        doc.body.style.minHeight = "100%";
+        doc.body.style.margin = "0";
       };
 
       copyStyles();
@@ -221,9 +229,15 @@ export function PreviewViewport({
             style={{ width: screenWidth, height: screenHeight, borderRadius: chrome.screenRadius }}
           >
             <iframe
-              ref={setFrame}
+              ref={(node) => {
+                if (node && node.dataset.previewReady !== "1") {
+                  node.dataset.previewReady = "1";
+                  node.srcdoc = BLANK_DOC;
+                }
+                setFrame(node);
+              }}
               title={`${viewport.label} preview of your client page`}
-              srcDoc={BLANK_DOC}
+              scrolling="yes"
               className="block border-0 bg-white"
               style={{
                 width: viewport.width,
@@ -238,7 +252,7 @@ export function PreviewViewport({
           {viewport.label} · {viewport.width} × {viewport.height} · {Math.round(scale * 100)}%
         </p>
       </div>
-      {mount && createPortal(children, mount)}
+      {mount && createPortal(<div data-client-preview="">{children}</div>, mount)}
     </div>
   );
 }

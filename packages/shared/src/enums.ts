@@ -150,6 +150,12 @@ export const STAFF_PERMISSION_MODULES: Array<{
       { key: "customers:read", label: "View customers", description: "Read customer list and profiles" },
       { key: "customers:write", label: "Edit customers", description: "Create and update customer records" },
       { key: "customers:delete", label: "Delete customers", description: "Remove customer records" },
+      { key: "products:read", label: "View products", description: "Read the product catalog" },
+      { key: "products:write", label: "Manage products", description: "Create, edit and organize products and categories" },
+      { key: "products:delete", label: "Delete products", description: "Remove products from the catalog" },
+      { key: "orders:read", label: "View orders", description: "Read client orders" },
+      { key: "orders:write", label: "Manage orders", description: "Create and update client orders" },
+      { key: "orders:delete", label: "Delete orders", description: "Cancel or remove client orders" },
     ],
   },
   {
@@ -198,6 +204,14 @@ export const STAFF_PERMISSION_MODULES: Array<{
     permissions: [
       { key: "referrals:read", label: "View referrals", description: "Read referral programs and activity" },
       { key: "referrals:manage", label: "Manage referrals", description: "Configure campaigns and approve conversions" },
+    ],
+  },
+  {
+    module: "Reviews",
+    key: "reviews",
+    permissions: [
+      { key: "reviews:read", label: "View reviews", description: "See customer reviews and moderation status" },
+      { key: "reviews:manage", label: "Manage reviews", description: "Approve, reject, unpublish, and add reviews" },
     ],
   },
   {
@@ -291,6 +305,10 @@ export const STAFF_ROLE_DEFAULT_PERMISSIONS: Record<
     "dashboard:read",
     "customers:read",
     "customers:write",
+    "products:read",
+    "products:write",
+    "orders:read",
+    "orders:write",
     "appointments:read",
     "appointments:manage",
     "bookinglinks:read",
@@ -303,6 +321,8 @@ export const STAFF_ROLE_DEFAULT_PERMISSIONS: Record<
     "memberships:manage",
     "referrals:read",
     "referrals:manage",
+    "reviews:read",
+    "reviews:manage",
     "campaigns:read",
     "campaigns:create",
     "campaigns:manage",
@@ -319,6 +339,10 @@ export const STAFF_ROLE_DEFAULT_PERMISSIONS: Record<
   RECEPTIONIST: [
     "customers:read",
     "customers:write",
+    "products:read",
+    "products:write",
+    "orders:read",
+    "orders:write",
     "appointments:read",
     "appointments:manage",
     "loyalty:read",
@@ -326,13 +350,17 @@ export const STAFF_ROLE_DEFAULT_PERMISSIONS: Record<
     "invoices:manage",
     "rewards:redeem",
     "bookinglinks:read",
+    "reviews:read",
   ],
   STAFF: [
     "dashboard:read",
     "customers:read",
+    "products:read",
+    "orders:read",
     "appointments:read",
     "invoices:read",
     "bookinglinks:read",
+    "reviews:read",
   ],
 };
 
@@ -365,6 +393,40 @@ export const LOYALTY_MODE_LABELS: Record<LoyaltyMode, string> = {
   HYBRID: "Hybrid (spend + visits)",
   SUBSCRIPTION: "Subscription-based",
 };
+
+export const CATALOG_PRODUCT_STATUSES = ["ACTIVE", "INACTIVE"] as const;
+export type CatalogProductStatus = (typeof CATALOG_PRODUCT_STATUSES)[number];
+
+export const CATALOG_AVAILABILITIES = ["IN_STOCK", "OUT_OF_STOCK"] as const;
+export type CatalogAvailability = (typeof CATALOG_AVAILABILITIES)[number];
+
+export const CATALOG_STOCK_FILTERS = ["ALL", "IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"] as const;
+export type CatalogStockFilter = (typeof CATALOG_STOCK_FILTERS)[number];
+
+export const PRODUCT_UNITS = ["Piece", "Service", "Session", "Package"] as const;
+export type ProductUnit = (typeof PRODUCT_UNITS)[number];
+
+export const CLIENT_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "COMPLETED", "CANCELLED"] as const;
+export type ClientOrderStatus = (typeof CLIENT_ORDER_STATUSES)[number];
+
+export const CLIENT_ORDER_STATUS_LABELS: Record<ClientOrderStatus, string> = {
+  PENDING: "Pending",
+  CONFIRMED: "Confirmed",
+  PROCESSING: "Processing",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
+
+export const CLIENT_ORDER_PAYMENT_STATUSES = ["PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED"] as const;
+export type ClientOrderPaymentStatus = (typeof CLIENT_ORDER_PAYMENT_STATUSES)[number];
+
+export const CLIENT_ORDER_PAYMENT_LABELS: Record<ClientOrderPaymentStatus, string> = {
+  PAID: "Paid",
+  PENDING: "Pending",
+  PARTIALLY_PAID: "Partially Paid",
+  REFUNDED: "Refunded",
+};
+
 
 export const POINTS_LEDGER_TYPE = ["EARN", "REDEEM", "ADJUST", "EXPIRE", "BONUS"] as const;
 export type PointsLedgerType = (typeof POINTS_LEDGER_TYPE)[number];

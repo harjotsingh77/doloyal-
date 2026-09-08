@@ -63,7 +63,7 @@ export const SETTINGS_NAV: SettingsNavGroup[] = [
           "color", "primary", "secondary", "accent", "font", "favicon", "preview", "theme color",
           "currency", "language", "timezone", "date format", "time format", "region", "locale",
           "opening", "closing", "break", "weekly off", "schedule", "timing", "open hours",
-          "city", "state", "zip", "country",
+          "city", "state", "zip", "country", "google", "review", "place id", "gbp",
         ],
       },
     ],

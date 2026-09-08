@@ -194,13 +194,12 @@ interface AnalyticsWidgetProps {
   title: string;
   value: string;
   badge: string;
-  icon: React.ReactNode;
   accentColor: string;
   trend?: number[];
   subtitle?: string;
 }
 
-function AnalyticsWidget({ title, value, badge, icon, accentColor, trend, subtitle }: AnalyticsWidgetProps) {
+function AnalyticsWidget({ title, value, badge, accentColor, trend, subtitle }: AnalyticsWidgetProps) {
   // Mini sparkline bars
   const bars = trend || [40, 65, 45, 80, 55, 70, 90];
   const maxBar = Math.max(...bars);
@@ -219,17 +218,9 @@ function AnalyticsWidget({ title, value, badge, icon, accentColor, trend, subtit
       <div className="flex flex-1 flex-col p-5">
         {/* Header row */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-200 group-hover:scale-110"
-              style={{ backgroundColor: `${accentColor}12`, color: accentColor }}
-            >
-              {icon}
-            </div>
-            <span className="text-[13px] font-semibold" style={{ color: PALETTE.muted }}>
-              {title}
-            </span>
-          </div>
+          <span className="text-[13px] font-semibold" style={{ color: PALETTE.muted }}>
+            {title}
+          </span>
           <span
             className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold"
             style={{ backgroundColor: `${accentColor}0D`, color: accentColor }}
@@ -717,7 +708,7 @@ export default function BookingLinksPage() {
           <Pencil className="mr-2 h-3.5 w-3.5 text-slate-500" /> Edit Details
         </DropdownMenuItem>
         <DropdownMenuItem className="rounded-lg text-xs" onClick={() => void handleDuplicateLink(link.id)}>
-          <CopyPlus className="mr-2 h-3.5 w-3.5 text-slate-500" /> Duplicate Link
+          Duplicate Link
         </DropdownMenuItem>
         <DropdownMenuItem className="rounded-lg text-xs" onClick={() => setQrModalLink(link)}>
           <QrCode className="mr-2 h-3.5 w-3.5 text-slate-500" /> View QR Code
@@ -933,7 +924,6 @@ export default function BookingLinksPage() {
                 loading={refreshing}
                 onClick={() => void fetchBookingLinks(true)}
               >
-                {!refreshing ? <RefreshCw className="h-4 w-4 mr-1.5" /> : null}
                 Refresh
               </Button>
               <Button
@@ -942,7 +932,6 @@ export default function BookingLinksPage() {
                 style={{ backgroundColor: PALETTE.primary }}
                 onClick={() => handleOpenWizard()}
               >
-                <Plus className="h-4 w-4 mr-1.5" />
                 New Booking Link
               </Button>
             </div>
@@ -976,7 +965,6 @@ export default function BookingLinksPage() {
                 title="Booking Links"
                 value={String(overviewStats.totalLinks)}
                 badge="+2 this week"
-                icon={<Link2 className="h-4.5 w-4.5" />}
                 accentColor={PALETTE.primary}
                 trend={[30, 45, 35, 60, 50, 55, 70]}
                 subtitle={`${links.filter(l => getLinkStatus(l) === 'active').length} active right now`}
@@ -985,7 +973,6 @@ export default function BookingLinksPage() {
                 title="Appointments"
                 value={String(overviewStats.totalBookings)}
                 badge="+18%"
-                icon={<CalendarDays className="h-4.5 w-4.5" />}
                 accentColor={PALETTE.success}
                 trend={[20, 35, 50, 40, 65, 55, 80]}
                 subtitle="Booked via all links"
@@ -994,7 +981,6 @@ export default function BookingLinksPage() {
                 title="Active Visitors"
                 value={String(overviewStats.activeVisitors)}
                 badge="Live"
-                icon={<Users className="h-4.5 w-4.5" />}
                 accentColor={PALETTE.warning}
                 trend={[60, 45, 70, 55, 80, 65, 90]}
                 subtitle="Browsing your booking pages"
@@ -1003,7 +989,6 @@ export default function BookingLinksPage() {
                 title="Conversion Rate"
                 value={`${overviewStats.conversionRate}%`}
                 badge={overviewStats.conversionRate >= 25 ? "Excellent" : "Growing"}
-                icon={<Percent className="h-4.5 w-4.5" />}
                 accentColor={overviewStats.conversionRate >= 25 ? PALETTE.success : PALETTE.primary}
                 trend={[35, 42, 38, 50, 45, 55, 60]}
                 subtitle="Visit → Booking ratio"
@@ -1161,7 +1146,7 @@ export default function BookingLinksPage() {
                   style={{ backgroundColor: PALETTE.primary }}
                   onClick={() => handleOpenWizard()}
                 >
-                  <Plus className="h-4 w-4 mr-1.5" /> Create First Booking Link
+                  Create First Booking Link
                 </Button>
               </div>
             ) : viewMode === "grid" ? (
@@ -1690,7 +1675,7 @@ export default function BookingLinksPage() {
                     a.click();
                   }}
                 >
-                  <Download className="h-3.5 w-3.5 mr-1" /> Download
+                  Download
                 </Button>
                 <Button
                   size="sm"

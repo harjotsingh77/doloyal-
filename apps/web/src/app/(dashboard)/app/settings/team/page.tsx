@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, UserPlus, Users } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Badge, Button, Skeleton } from "@doloyal/ui";
 import { api } from "@/lib/api";
 import { useSettingsChrome } from "../settings-chrome";
@@ -60,10 +60,10 @@ export default function TeamSettingsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard icon={<Users className="h-4 w-4" />} label="Members" value={stats.total} />
-            <StatCard icon={<UserPlus className="h-4 w-4" />} label="Pending invites" value={stats.pendingInvitations} />
-            <StatCard icon={<Users className="h-4 w-4" />} label="Admins" value={stats.admins} />
-            <StatCard icon={<Users className="h-4 w-4" />} label="Online now" value={stats.online} />
+            <StatCard label="Members" value={stats.total} />
+            <StatCard label="Pending invites" value={stats.pendingInvitations} />
+            <StatCard label="Admins" value={stats.admins} />
+            <StatCard label="Online now" value={stats.online} />
           </div>
         )}
       </SettingsSection>
@@ -88,20 +88,15 @@ export default function TeamSettingsPage() {
 }
 
 function StatCard({
-  icon,
   label,
   value,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: number;
 }) {
   return (
     <div className="rounded-xl border border-[rgb(var(--color-border))] p-4">
-      <div className="flex items-center gap-1.5 text-[rgb(var(--color-muted-foreground))]">
-        {icon}
-        <span className="text-xs">{label}</span>
-      </div>
+      <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{label}</p>
       <p className="mt-1.5 text-xl font-semibold tabular-nums">{value}</p>
     </div>
   );

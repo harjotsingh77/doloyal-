@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { RateLimitGuard } from './common/rate-limit.guard';
 import { TenantContextGuard } from './common/tenant-context.guard';
 import { RolesGuard } from './common/roles.guard';
+import { StaffOnlyGuard } from './common/staff-only.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -35,6 +36,9 @@ import { AdminModule } from './modules/admin/admin.module';
 import { WorkflowsModule } from './modules/workflows/workflow.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { ProductsModule } from './modules/products/products.module';
+import { OrdersModule } from './modules/orders/orders.module';
 
 @Module({
   imports: [
@@ -71,6 +75,9 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     WorkflowsModule,
     CampaignsModule,
     CheckoutModule,
+    ReviewsModule,
+    ProductsModule,
+    OrdersModule,
   ],
   providers: [
     Reflector,
@@ -78,6 +85,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: TenantContextGuard },
+    { provide: APP_GUARD, useClass: StaffOnlyGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })

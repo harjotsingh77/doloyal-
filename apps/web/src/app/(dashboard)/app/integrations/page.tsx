@@ -472,7 +472,6 @@ export default function IntegrationsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          icon={<Search className="h-7 w-7" />}
           title="No integrations found"
           description="Try searching for another integration or changing the category."
         />

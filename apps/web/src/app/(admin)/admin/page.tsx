@@ -86,7 +86,6 @@ export default function AdminDashboardPage() {
         <Card>
           <CardContent className="p-12">
             <EmptyState
-              icon={<Info className="h-10 w-10" />}
               title="Could not load the dashboard"
               description="The admin API may be unavailable. Check that the API server is running, then refresh."
             />
@@ -100,21 +99,18 @@ export default function AdminDashboardPage() {
               label="Total businesses"
               value={data.kpis.totalBusinesses.value}
               delta={data.kpis.activeBusinesses.delta ?? undefined}
-              icon={<Building2 className="h-4 w-4" />}
               accent="primary"
             />
             <KpiCard
               label="New signups"
               value={data.kpis.newSignups.value}
               delta={data.kpis.newSignups.delta ?? undefined}
-              icon={<Users className="h-4 w-4" />}
               accent="accent"
             />
             <KpiCard
               label="Paid businesses"
               value={data.kpis.paidBusinesses.value}
               delta={data.kpis.paidBusinesses.delta ?? undefined}
-              icon={<CreditCard className="h-4 w-4" />}
               accent="success"
             />
             <KpiCard
@@ -122,31 +118,26 @@ export default function AdminDashboardPage() {
               value={data.kpis.mrr.value}
               format={(v) => formatCompact(v)}
               delta={data.kpis.mrr.delta ?? undefined}
-              icon={<TrendingUp className="h-4 w-4" />}
               accent="violet"
             />
             <KpiCard
               label="ARR"
               value={data.kpis.arr.value}
               format={(v) => formatCompact(v)}
-              icon={<TrendingUp className="h-4 w-4" />}
             />
             <KpiCard
               label="Trial → paid rate"
               value={`${data.kpis.trialToPaidRate.value}%`}
-              icon={<Sparkles className="h-4 w-4" />}
               accent="warning"
             />
             <KpiCard
               label="Churn (30d)"
               value={`${data.kpis.churnRate.value}%`}
-              icon={<TrendingDown className="h-4 w-4" />}
               accent="danger"
             />
             <KpiCard
               label="Open tickets"
               value={data.kpis.openTickets.value}
-              icon={<LifeBuoy className="h-4 w-4" />}
             />
           </div>
 

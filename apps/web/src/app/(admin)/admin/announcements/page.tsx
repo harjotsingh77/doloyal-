@@ -106,7 +106,6 @@ export default function AdminAnnouncementsPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Announcements" }]}
         actions={
           <Button onClick={() => setEdit("new")}>
-            <Plus className="h-4 w-4" />
             New announcement
           </Button>
         }
@@ -135,7 +134,7 @@ export default function AdminAnnouncementsPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<Megaphone className="h-10 w-10" />} title="No announcements yet" description="Create your first announcement to reach all businesses." />
+              <EmptyState title="No announcements yet" description="Create your first announcement to reach all businesses." />
             </div>
           ) : (
             <Table>

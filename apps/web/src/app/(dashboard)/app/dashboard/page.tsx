@@ -5,23 +5,12 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
   DollarSign,
-  Users,
-  RotateCcw,
   UserPlus,
-  UserX,
   Gift,
   Trophy,
   CalendarClock,
   TrendingUp,
   Activity,
-  Sparkles,
-  Wand2,
-  Bell,
-  Wallet,
-  ArrowRight,
-  Plus,
-  Calendar,
-  SendHorizonal,
 } from "lucide-react";
 import {
   KpiCard,
@@ -34,7 +23,6 @@ import {
   CardContent,
   EmptyState,
   Badge,
-  Button,
   Table,
   TableHeader,
   TableBody,
@@ -46,9 +34,19 @@ import {
   formatPercent,
   relativeTime,
 } from "@doloyal/shared";
-import type { DashboardOverview } from "@doloyal/shared";
+import type { DashboardMetricDetail, DashboardMetricId, DashboardOverview } from "@doloyal/shared";
+import { comparePercentagePoints, compareValues } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
+import { useAppSync } from "@/lib/data-sync";
+import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
+
+function kpiDelta(change: ReturnType<typeof compareValues>) {
+  return {
+    delta: change.percentChange ?? 0,
+    deltaLabel: change.percentChangeLabel,
+  };
+}
 
 const toYMD = (d: Date | string) => {
   const date = new Date(d);
@@ -88,7 +86,6 @@ function DateRangePicker({
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <div className="flex items-center gap-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-1.5 shadow-sm transition-all focus-within:border-[rgb(var(--color-primary))] focus-within:ring-2 focus-within:ring-[rgb(var(--color-primary)/0.2)]">
-        <Calendar className="h-4 w-4 shrink-0 text-[rgb(var(--color-primary))]" />
         <input
           type="date"
           value={fromDate}
@@ -147,19 +144,20 @@ export default function DashboardPage() {
   const defaultStart = new Date(defaultEnd.getTime() - 30 * 86400000);
   const [fromDate, setFromDate] = React.useState<string>(toYMD(defaultStart));
   const [toDate, setToDate] = React.useState<string>(toYMD(defaultEnd));
+  const [openMetric, setOpenMetric] = React.useState<DashboardMetricId | null>(null);
+  const [detail, setDetail] = React.useState<DashboardMetricDetail | null>(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const detailCache = React.useRef(new Map<string, DashboardMetricDetail>());
 
   React.useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        setLoading(true);
         setError(null);
-        const overview = await api.getDashboardOverview();
-        if (!cancelled) {
-          setData(overview);
-          if (overview.period?.from) setFromDate(toYMD(overview.period.from));
-          if (overview.period?.to) setToDate(toYMD(overview.period.to));
-        }
+        if (!data) setLoading(true);
+        const overview = await api.getDashboardOverview({ from: fromDate, to: toDate });
+        if (!cancelled) setData(overview);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load dashboard");
@@ -172,7 +170,49 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [retryToken]);
+  }, [retryToken, fromDate, toDate]);
+
+  React.useEffect(() => {
+    detailCache.current.clear();
+  }, [fromDate, toDate]);
+
+  React.useEffect(() => {
+    if (!openMetric) return;
+    const key = `${openMetric}:${fromDate}:${toDate}`;
+    const cached = detailCache.current.get(key);
+    if (cached) {
+      setDetail(cached);
+      setDetailLoading(false);
+      setDetailError(null);
+      return;
+    }
+    let cancelled = false;
+    setDetail(null);
+    setDetailLoading(true);
+    setDetailError(null);
+    api
+      .getDashboardMetricDetail(openMetric, { from: fromDate, to: toDate })
+      .then((result) => {
+        if (cancelled) return;
+        detailCache.current.set(key, result);
+        setDetail(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDetailError(err instanceof Error ? err.message : "Failed to load details");
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openMetric, fromDate, toDate]);
+
+  useAppSync(
+    ["dashboard", "customers", "orders", "reviews", "campaigns", "invoices", "loyalty", "appointments"],
+    () => setRetryToken((t) => t + 1),
+  );
 
   const dynamicMetrics = React.useMemo(() => {
     if (!data) return null;
@@ -207,23 +247,24 @@ export default function DashboardPage() {
       revenueTrend,
       customerTrend,
       periodRevenue: data.kpis?.periodRevenue ?? data.kpis?.todayRevenue ?? 0,
-      periodCustomers: data.kpis?.newCustomers ?? 0,
+      periodCustomers: data.kpis?.totalCustomers ?? data.kpis?.newCustomers ?? 0,
       periodRepeatCustomers: data.kpis?.repeatCustomers ?? 0,
       periodNewCustomers: data.kpis?.newCustomers ?? 0,
       periodPointsRedeemed: data.kpis?.pointsRedeemed30d ?? 0,
-      periodAppointments: data.kpis?.appointmentsToday ?? 0,
+      periodAppointments: data.kpis?.appointmentsInPeriod ?? data.kpis?.appointmentsToday ?? 0,
       periodMembershipSales: data.kpis?.membershipSales30d ?? 0,
       periodGrowthPct: data.kpis?.monthlyGrowthPct ?? null,
+      orderCount: data.kpis?.orderCount ?? 0,
+      orderRevenue: data.kpis?.orderRevenue ?? 0,
+      approvedReviews: data.kpis?.approvedReviews ?? 0,
+      averageRating: data.kpis?.averageRating ?? 0,
     };
   }, [data, fromDate, toDate]);
 
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]">
-          <Activity className="h-7 w-7" />
-        </div>
-        <h3 className="mt-4 text-lg font-semibold">Failed to load dashboard</h3>
+        <h3 className="text-lg font-semibold">Failed to load dashboard</h3>
         <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
           {error}
         </p>
@@ -241,7 +282,7 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  if (!data || !dynamicMetrics) return <EmptyState icon={<Activity className="h-7 w-7" />} title="No dashboard data" description="Dashboard will populate once your business has activity." />;
+  if (!data || !dynamicMetrics) return <EmptyState title="No dashboard data" description="Dashboard will populate once your business has activity." />;
 
   const {
     kpis,
@@ -262,163 +303,200 @@ export default function DashboardPage() {
     periodMembershipSales,
     periodGrowthPct,
     diffDays,
+    orderCount,
+    orderRevenue,
+    approvedReviews,
+    averageRating,
   } = dynamicMetrics;
 
-  // Real ratio from server-computed values — never fabricated.
   const periodRepeatRate =
-    periodCustomers > 0
-      ? Math.round((periodRepeatCustomers / periodCustomers) * 100)
+    periodRepeatCustomers + periodNewCustomers > 0
+      ? Math.round((periodRepeatCustomers / Math.max(periodRepeatCustomers + periodNewCustomers, 1)) * 100)
       : 0;
+  const prevRepeatCustomers = kpis.previousRepeatCustomers ?? 0;
+  const prevNewCustomers = kpis.previousNewCustomers ?? 0;
+  const prevRepeatRate =
+    prevRepeatCustomers + prevNewCustomers > 0
+      ? Math.round((prevRepeatCustomers / Math.max(prevRepeatCustomers + prevNewCustomers, 1)) * 100)
+      : 0;
+  const revenueChange = compareValues(periodRevenue, kpis.previousPeriodRevenue ?? 0);
+  const customersChange = compareValues(periodCustomers, kpis.previousTotalCustomers ?? 0);
+  const repeatChange = comparePercentagePoints(periodRepeatRate, prevRepeatRate);
+  const newCustomersChange = compareValues(periodNewCustomers, prevNewCustomers);
+  const inactiveChange = compareValues(kpis.inactiveCustomers, kpis.previousInactiveCustomers ?? 0);
+  const pointsChange = compareValues(periodPointsRedeemed, kpis.previousPointsRedeemed ?? 0);
+  const ordersChange = compareValues(orderCount, kpis.previousOrderCount ?? 0);
+  const reviewsChange = compareValues(approvedReviews, kpis.previousApprovedReviews ?? 0);
+  const appointmentsChange = compareValues(periodAppointments, kpis.previousAppointmentsInPeriod ?? 0);
+  const membershipsChange = compareValues(periodMembershipSales, kpis.previousMembershipSales ?? 0);
   const growthLabel =
     periodGrowthPct === null ? "—" : formatPercent(periodGrowthPct);
 
+  const openMetricTitle: Record<DashboardMetricId, string> = {
+    revenue: "Revenue",
+    customers: "Customer growth",
+    repeat_rate: "Repeat customers",
+    new_customers: "New customers",
+    inactive: "Inactive customers",
+    points: "Points redeemed",
+    orders: "Order analytics",
+    reviews: "Reviews",
+    appointments: "Appointments",
+    memberships: "Memberships",
+    ai_revenue: "Revenue insight",
+    ai_retention: "Retention insight",
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Dashboard"
         description={
-          <div className="mt-2">
-            <DateRangePicker
-              fromDate={fromDate}
-              toDate={toDate}
-              onChange={(from, to) => {
-                setFromDate(from);
-                setToDate(to);
-              }}
-            />
-          </div>
+          <DateRangePicker
+            fromDate={fromDate}
+            toDate={toDate}
+            onChange={(from, to) => {
+              setFromDate(from);
+              setToDate(to);
+            }}
+          />
         }
         actions={
           <Badge variant="primary">
-            <TrendingUp className="h-3.5 w-3.5" />
             {growthLabel} vs last period
           </Badge>
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <InsightCard
-          icon={<Wand2 className="h-5 w-5" />}
           title="AI Revenue Insight"
           badge={periodGrowthPct === null ? "New" : periodGrowthPct >= 0 ? "Growing" : "Declining"}
           badgeVariant={periodGrowthPct === null ? "accent" : periodGrowthPct >= 0 ? "success" : "danger"}
+          onClick={() => setOpenMetric("ai_revenue")}
         >
-          <p className="text-sm text-[rgb(var(--color-foreground))]">
+          <p className="text-[13px] leading-5 text-[rgb(var(--color-foreground))]">
             {periodGrowthPct === null
               ? `No prior-period baseline yet. Revenue for this ${diffDays}-day window is ${fmt(periodRevenue)} across ${periodCustomers} customers. Growth tracking unlocks once the previous period has data.`
               : periodGrowthPct >= 0
               ? `Revenue is trending up ${formatPercent(periodGrowthPct)} over this ${diffDays}-day period (${fromDate} to ${toDate}). Total revenue of ${fmt(periodRevenue)} is driven by ${periodCustomers} customers.`
-              : `Revenue declined ${formatPercent(Math.abs(periodGrowthPct))} in this period. Consider launching a win-back campaign to re-engage inactive customers.`}
+              : `Revenue declined ${Math.abs(periodGrowthPct).toFixed(1)}% in this period. Consider launching a win-back campaign to re-engage inactive customers.`}
           </p>
-          <div className="mt-3 flex items-center gap-4 text-xs text-[rgb(var(--color-muted-foreground))]">
-            <span>Period Revenue: {fmt(periodRevenue)}</span>
-            <span className="h-3 w-px bg-[rgb(var(--color-border))]" />
-            <span>Growth: {growthLabel}</span>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[rgb(var(--color-border))] pt-2.5 text-[11px] text-[rgb(var(--color-muted-foreground))]">
+            <span>Period revenue {fmt(periodRevenue)}</span>
+            <span>Growth {growthLabel}</span>
           </div>
         </InsightCard>
 
         <InsightCard
-          icon={<Sparkles className="h-5 w-5" />}
           title="AI Retention Insight"
           badge={periodRepeatRate >= 50 ? "Healthy" : "Attention Needed"}
           badgeVariant={periodRepeatRate >= 50 ? "success" : "warning"}
+          onClick={() => setOpenMetric("ai_retention")}
         >
-          <p className="text-sm text-[rgb(var(--color-foreground))]">
+          <p className="text-[13px] leading-5 text-[rgb(var(--color-foreground))]">
             {periodRepeatRate >= 50
               ? `Repeat rate is ${periodRepeatRate}% with ${periodRepeatCustomers} returning customers in this period. ${periodNewCustomers} new customers joined.`
               : `Only ${periodRepeatRate}% of customers in this period are repeat visitors. Target them with a loyalty re-engagement offer.`}
           </p>
-          <div className="mt-3 flex items-center gap-4 text-xs text-[rgb(var(--color-muted-foreground))]">
-            <span>Repeat: {periodRepeatCustomers}</span>
-            <span className="h-3 w-px bg-[rgb(var(--color-border))]" />
-            <span>New: {periodNewCustomers}</span>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[rgb(var(--color-border))] pt-2.5 text-[11px] text-[rgb(var(--color-muted-foreground))]">
+            <span>Repeat {periodRepeatCustomers}</span>
+            <span>New {periodNewCustomers}</span>
           </div>
         </InsightCard>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
           label={`Revenue (${diffDays}d)`}
           value={periodRevenue}
           format={(v) => fmt(v)}
-          delta={periodGrowthPct ?? undefined}
-          icon={<DollarSign className="h-5 w-5" />}
-          accent="primary"
+          {...kpiDelta(revenueChange)}
+          onClick={() => setOpenMetric("revenue")}
         />
         <KpiCard
-          label={`Total Customers (${diffDays}d)`}
+          label="Total Customers"
           value={periodCustomers}
-          icon={<Users className="h-5 w-5" />}
-          accent="accent"
+          hint={`${periodNewCustomers} new in this period`}
+          {...kpiDelta(customersChange)}
+          onClick={() => setOpenMetric("customers")}
         />
         <KpiCard
           label="Repeat Rate"
           value={periodRepeatRate}
           format={(v) => `${v}%`}
-          hint={`${periodRepeatCustomers} repeat of ${periodCustomers} total`}
-          icon={<RotateCcw className="h-5 w-5" />}
-          accent="success"
+          hint={`${periodRepeatCustomers} customers with 2+ purchases`}
+          {...kpiDelta(repeatChange)}
+          onClick={() => setOpenMetric("repeat_rate")}
         />
         <KpiCard
           label="New Customers"
           value={periodNewCustomers}
-          icon={<UserPlus className="h-5 w-5" />}
-          accent="violet"
+          {...kpiDelta(newCustomersChange)}
+          onClick={() => setOpenMetric("new_customers")}
         />
         <KpiCard
           label="Inactive Customers"
           value={kpis.inactiveCustomers}
-          icon={<UserX className="h-5 w-5" />}
-          accent="danger"
+          {...kpiDelta(inactiveChange)}
+          deltaInvert
+          onClick={() => setOpenMetric("inactive")}
         />
         <KpiCard
           label={`Points Redeemed (${diffDays}d)`}
           value={periodPointsRedeemed}
           format={(v) => v.toLocaleString("en-IN")}
-          icon={<Gift className="h-5 w-5" />}
-          accent="warning"
+          {...kpiDelta(pointsChange)}
+          onClick={() => setOpenMetric("points")}
         />
-        <div onClick={() => router.push("/app/appointments")} className="cursor-pointer">
-          <KpiCard
-            label={`Appointments (${diffDays}d)`}
-            value={periodAppointments}
-            icon={<CalendarClock className="h-5 w-5" />}
-            accent="accent"
-          />
-        </div>
         <KpiCard
-          label={`Membership Sales (${diffDays}d)`}
+          label={`Orders (${diffDays}d)`}
+          value={orderCount}
+          hint={orderRevenue ? fmt(orderRevenue) : "No order revenue yet"}
+          {...kpiDelta(ordersChange)}
+          onClick={() => setOpenMetric("orders")}
+        />
+        <KpiCard
+          label="Reviews"
+          value={approvedReviews}
+          hint={approvedReviews ? `${averageRating.toFixed(1)} avg · ${kpis.pendingReviews} pending` : `${kpis.pendingReviews} pending`}
+          {...kpiDelta(reviewsChange)}
+          onClick={() => setOpenMetric("reviews")}
+        />
+        <KpiCard
+          label={`Appointments (${diffDays}d)`}
+          value={periodAppointments}
+          {...kpiDelta(appointmentsChange)}
+          onClick={() => setOpenMetric("appointments")}
+        />
+        <KpiCard
+          label={`Memberships (${diffDays}d)`}
           value={periodMembershipSales}
-          format={(v) => fmt(v)}
-          icon={<Trophy className="h-5 w-5" />}
-          accent="primary"
+          {...kpiDelta(membershipsChange)}
+          onClick={() => setOpenMetric("memberships")}
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <QuickActionButton
-          icon={<Plus className="h-5 w-5" />}
           label="Add Customer"
           onClick={() => router.push("/app/customers")}
         />
         <QuickActionButton
-          icon={<DollarSign className="h-5 w-5" />}
           label="Create Invoice"
           onClick={() => router.push("/app/invoices")}
         />
         <QuickActionButton
-          icon={<Calendar className="h-5 w-5" />}
           label="Book Appointment"
           onClick={() => router.push("/app/appointments")}
         />
         <QuickActionButton
-          icon={<SendHorizonal className="h-5 w-5" />}
           label="Send Campaign"
           onClick={() => router.push("/app/campaigns")}
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <StatChart
           title="Revenue Trend"
           description={`Selected range (${fromDate} – ${toDate})`}
@@ -426,6 +504,7 @@ export default function DashboardPage() {
           series={[{ key: "revenue", label: "Revenue" }]}
           xKey="date"
           type="area"
+          height={220}
           valueFormat={(v) => fmtCompact(v)}
         />
         <StatChart
@@ -435,71 +514,30 @@ export default function DashboardPage() {
           series={[{ key: "customers", label: "Customers" }]}
           xKey="date"
           type="bar"
+          height={220}
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <div className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-[rgb(var(--color-primary))]" />
-                Wallet Preview
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-5">
-              <div className="flex items-center justify-between rounded-lg bg-[rgb(var(--color-muted))] px-4 py-3">
-                <div>
-                  <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Points Activity (30d)</p>
-                  <p className="mt-0.5 text-lg font-semibold">{kpis.pointsRedeemed30d.toLocaleString("en-IN")}</p>
-                </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--color-warning)/0.15)] text-[rgb(var(--color-warning))]">
-                  <Gift className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-lg border border-[rgb(var(--color-border))] px-4 py-3">
-                  <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Active Rewards</p>
-                  <p className="mt-0.5 text-lg font-semibold">{kpis.activeRewards}</p>
-                </div>
-                <div className="rounded-lg border border-[rgb(var(--color-border))] px-4 py-3">
-                  <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Membership Sales (30d)</p>
-                  <p className="mt-0.5 text-lg font-semibold">{fmt(kpis.membershipSales30d)}</p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => router.push("/app/loyalty")}
-              >
-                View Loyalty Program
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <CampaignPerformanceCard
+          revenue={kpis.campaignRevenue ?? 0}
+          customers={kpis.campaignCustomers ?? 0}
+          reached={kpis.campaignReached ?? 0}
+          campaignsSent={kpis.campaignsSent ?? 0}
+          formatMoney={fmt}
+          onView={() => router.push("/app/campaigns")}
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>
-              <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-[rgb(var(--color-accent))]" />
-                Notifications
-              </div>
-            </CardTitle>
+            <CardTitle>Notifications</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div
                 onClick={() => router.push("/app/appointments")}
-                className="flex cursor-pointer items-center gap-3 rounded-lg border border-[rgb(var(--color-border))] px-4 py-3 transition-colors hover:bg-[rgb(var(--color-muted))]"
+                className="flex cursor-pointer items-center gap-3 rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 transition-colors hover:bg-[rgb(var(--color-muted)/0.45)]"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--color-accent)/0.15)] text-[rgb(var(--color-accent))]">
-                  <CalendarClock className="h-5 w-5" />
-                </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium">
                     {kpis.appointmentsToday > 0
@@ -518,10 +556,10 @@ export default function DashboardPage() {
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-3 rounded-lg border border-[rgb(var(--color-border))] px-4 py-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--color-warning)/0.15)] text-[rgb(var(--color-warning))]">
-                  <Activity className="h-5 w-5" />
-                </div>
+              <div
+                onClick={() => router.push("/app/reviews")}
+                className="flex cursor-pointer items-center gap-3 rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 transition-colors hover:bg-[rgb(var(--color-muted)/0.45)]"
+              >
                 <div className="flex-1">
                   <p className="text-sm font-medium">
                     {kpis.pendingReviews > 0
@@ -530,7 +568,7 @@ export default function DashboardPage() {
                   </p>
                   <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                     {kpis.pendingReviews > 0
-                      ? "Customer feedback waiting for your response"
+                      ? "Open the reviews queue to approve or reject"
                       : "All reviews are handled"}
                   </p>
                 </div>
@@ -545,7 +583,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Top Customers</CardTitle>
@@ -639,7 +677,7 @@ export default function DashboardPage() {
             {recentActivity.map((a) => (
               <div
                 key={a.id}
-                className="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-[rgb(var(--color-muted))]"
+                className="flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-[rgb(var(--color-muted)/0.45)]"
               >
                 <ActivityIcon type={a.type} />
                 <div className="flex-1 min-w-0">
@@ -665,59 +703,185 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      <MetricDetailView
+        open={openMetric !== null}
+        onOpenChange={(next) => {
+          if (!next) setOpenMetric(null);
+        }}
+        title={openMetric ? openMetricTitle[openMetric] : "Metric"}
+        loading={detailLoading}
+        error={detailError}
+        data={detail}
+      />
     </div>
   );
 }
 
+function CampaignPerformanceCard({
+  revenue,
+  customers,
+  reached,
+  campaignsSent,
+  formatMoney,
+  onView,
+}: {
+  revenue: number;
+  customers: number;
+  reached: number;
+  campaignsSent: number;
+  formatMoney: (v: number) => string;
+  onView: () => void;
+}) {
+  const conversionPct = reached > 0 ? Math.round((customers / reached) * 1000) / 10 : 0;
+  const hasActivity = revenue > 0 || customers > 0 || reached > 0 || campaignsSent > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Campaign Performance</CardTitle>
+            <p className="mt-0.5 text-xs text-[rgb(var(--color-muted-foreground))]">
+              Customers and revenue after a campaign send
+            </p>
+          </div>
+          <span className="shrink-0 rounded-md bg-[rgb(var(--color-muted))] px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-muted-foreground))]">
+            {campaignsSent} sent
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {hasActivity ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[rgb(var(--color-muted-foreground))]">
+                Revenue
+              </p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+                {formatMoney(revenue)}
+              </p>
+            </div>
+
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-xs">
+                <span className="text-[rgb(var(--color-muted-foreground))]">Converted</span>
+                <span className="font-semibold tabular-nums">{conversionPct}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[rgb(var(--color-muted))]">
+                <motion.div
+                  className="h-full rounded-full bg-[rgb(var(--color-primary))]"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, conversionPct)}%` }}
+                  transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5">
+                <p className="text-[11px] text-[rgb(var(--color-muted-foreground))]">Customers</p>
+                <p className="mt-0.5 text-lg font-semibold tabular-nums">
+                  {customers.toLocaleString("en-IN")}
+                </p>
+              </div>
+              <div className="rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5">
+                <p className="text-[11px] text-[rgb(var(--color-muted-foreground))]">Reached</p>
+                <p className="mt-0.5 text-lg font-semibold tabular-nums">
+                  {reached.toLocaleString("en-IN")}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onView}
+              className="h-9 w-full rounded-md bg-[rgb(var(--color-primary))] px-4 text-sm font-medium text-white hover:brightness-110"
+            >
+              View campaigns
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p className="text-sm font-medium">No campaign results yet</p>
+            <p className="mt-1 max-w-sm text-xs leading-5 text-[rgb(var(--color-muted-foreground))]">
+              Send a campaign to see how many customers came back and how much they spent.
+            </p>
+            <button
+              type="button"
+              onClick={onView}
+              className="mt-3 h-8 rounded-md border border-[rgb(var(--color-border))] px-3 text-sm font-medium hover:bg-[rgb(var(--color-muted)/0.45)]"
+            >
+              Create campaign
+            </button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function InsightCard({
-  icon,
   title,
   badge,
   badgeVariant,
+  onClick,
   children,
 }: {
-  icon: React.ReactNode;
   title: string;
   badge: string;
   badgeVariant: "success" | "warning" | "danger" | "primary" | "accent";
+  onClick?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]">
-            {icon}
-          </div>
-          <span className="text-sm font-semibold">{title}</span>
-        </div>
+    <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={`rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 ${
+        onClick
+          ? "cursor-pointer transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
+          : ""
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] font-semibold">{title}</span>
         <Badge variant={badgeVariant} className="text-[0.6rem] uppercase tracking-wider">
           {badge}
         </Badge>
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-2">{children}</div>
+      {onClick ? (
+        <p className="mt-2 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">View details</p>
+      ) : null}
     </div>
   );
 }
 
 function QuickActionButton({
-  icon,
   label,
   onClick,
 }: {
-  icon: React.ReactNode;
   label: string;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-3 text-sm font-medium transition-colors hover:bg-[rgb(var(--color-muted))] active:bg-[rgb(var(--color-muted))]"
+      className="flex h-9 items-center justify-center rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-[13px] font-medium transition-colors hover:bg-[rgb(var(--color-muted)/0.45)]"
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]">
-        {icon}
-      </div>
-      <span>{label}</span>
+      {label}
     </button>
   );
 }
@@ -733,7 +897,7 @@ function ActivityIcon({ type }: { type: string }) {
     CAMPAIGN_SENT: <Activity className="h-4 w-4 text-[rgb(var(--color-danger))]" />,
   };
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--color-muted))]">
+    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--color-muted))]">
       {icons[type] ?? <Activity className="h-4 w-4 text-[rgb(var(--color-muted-foreground))]" />}
     </div>
   );
@@ -741,7 +905,7 @@ function ActivityIcon({ type }: { type: string }) {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <Skeleton className="h-8 w-48" />
@@ -750,36 +914,33 @@ function DashboardSkeleton() {
         <Skeleton className="h-8 w-36 rounded-full" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="mt-3 h-12 w-full" />
-            <Skeleton className="mt-2 h-3 w-36" />
+          <div key={i} className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-2 h-10 w-full" />
+            <Skeleton className="mt-3 h-3 w-36" />
           </div>
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="mt-3 h-8 w-32" />
-            <Skeleton className="mt-3 h-3 w-28" />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3.5">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="mt-2 h-6 w-24" />
+            <Skeleton className="mt-2 h-3 w-28" />
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4">
-            <Skeleton className="h-9 w-9 rounded-lg" />
-            <Skeleton className="mt-2 h-4 w-24" />
-          </div>
+          <Skeleton key={i} className="h-9 w-full rounded-md" />
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-6">
           <Skeleton className="h-5 w-36" />
           <Skeleton className="mt-1 h-3 w-48" />

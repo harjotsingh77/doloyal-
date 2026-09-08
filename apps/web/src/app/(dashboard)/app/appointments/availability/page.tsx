@@ -343,7 +343,6 @@ export default function AvailabilityPage() {
             <Dialog open={addDateOpen} onOpenChange={setAddDateOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">
-                  <Plus className="h-4 w-4" />
                   Add Blocked Date
                 </Button>
               </DialogTrigger>
@@ -406,12 +405,10 @@ export default function AvailabilityPage() {
         <CardContent>
           {blockedDates.length === 0 ? (
             <EmptyState
-              icon={<CalendarX className="h-6 w-6" />}
               title="No blocked dates"
               description="Add dates when your business is closed to prevent unwanted bookings"
               action={
                 <Button size="sm" onClick={() => setAddDateOpen(true)}>
-                  <Plus className="h-4 w-4" />
                   Add Blocked Date
                 </Button>
               }

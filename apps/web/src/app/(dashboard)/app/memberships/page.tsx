@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Crown, Plus } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog,
   DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -50,7 +49,7 @@ export default function MembershipsPage() {
   return <div className="space-y-6">
     <PageHeader title="Memberships" description="Create and manage customer membership tiers" actions={
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild><Button><Plus className="h-4 w-4" />Add Tier</Button></DialogTrigger>
+        <DialogTrigger asChild><Button>Add Tier</Button></DialogTrigger>
         <DialogContent><DialogHeader><DialogTitle>Add membership tier</DialogTitle><DialogDescription>Set the price and benefits customers receive.</DialogDescription></DialogHeader>
           <div className="space-y-4"><Field label="Tier" required><Select value={name} onValueChange={(value) => setName(value as typeof name)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["SILVER", "GOLD", "PLATINUM"].map((tier) => <SelectItem key={tier} value={tier}>{tier}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Price" required><Input type="number" min="0" value={price} onChange={(event) => setPrice(event.target.value)} /></Field>
@@ -60,7 +59,7 @@ export default function MembershipsPage() {
       </Dialog>
     } />
     {loading ? <div className="grid gap-4 md:grid-cols-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</div> : tiers.length === 0 ?
-      <EmptyState icon={<Crown className="h-6 w-6" />} title="No membership tiers" description="Create a tier to begin enrolling customers." action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Add Tier</Button>} /> :
+      <EmptyState title="No membership tiers" description="Create a tier to begin enrolling customers." action={<Button onClick={() => setOpen(true)}>Add Tier</Button>} /> :
       <div className="grid gap-4 md:grid-cols-3">{tiers.map((tier) => <Card key={tier.id}><CardHeader><div className="flex items-center justify-between"><CardTitle>{tier.name}</CardTitle><Badge variant="primary">Active</Badge></div></CardHeader><CardContent><p className="text-2xl font-semibold">{format(tier.price)}</p><p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{tier.validityDays} days validity</p>{tier.benefits.length > 0 && <ul className="mt-4 space-y-1 text-sm text-[rgb(var(--color-muted-foreground))]">{tier.benefits.map((benefit) => <li key={benefit}>• {benefit}</li>)}</ul>}</CardContent></Card>)}</div>}
   </div>;
 }

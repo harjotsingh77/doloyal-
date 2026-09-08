@@ -1,41 +1,15 @@
 "use client";
 
 import * as React from "react";
-import type { PublicBusinessInfo, PublicService } from "@doloyal/shared";
+import type { ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
 import { MasterClientTemplate, type MasterConfig } from "./master-template";
-
-/**
- * The one and only renderer for a business's customer-facing client page.
- *
- * It is rendered in exactly four places, with identical markup every time:
- *   1. the published page at /book/<slug>      (mode="published")
- *   2. the builder's desktop preview           (mode="preview", 1440px viewport)
- *   3. the builder's tablet preview            (mode="preview",  768px viewport)
- *   4. the builder's mobile preview            (mode="preview",  390px viewport)
- *
- * The only difference between the four is the width of the viewport it is
- * rendered into — the builder previews use a real iframe (see PreviewViewport)
- * so the page's own responsive breakpoints decide the layout. Nothing here is
- * viewport-aware, which is what keeps the preview honest: if it looks a certain
- * way in the builder, it looks that way when published.
- */
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
+import { scrollAnchorIntoView } from "./portal-shared";
+import { clientPageBrand, liveCopy } from "./client-page-brand";
+import { readableTextColor } from "@/lib/branding";
+import { cn } from "@doloyal/ui";
 
 type StoredSection = { id?: unknown; enabled?: unknown; hidden?: unknown; title?: unknown };
 
-/**
- * Normalises a saved `pageConfig` (draft or published) into template props.
- * Shared by the published page and the builder so both read the same fields
- * the same way and can never drift apart.
- */
 export function masterConfigFromPageConfig(
   pageConfig: unknown,
   brandColor?: string | null,
@@ -46,7 +20,7 @@ export function masterConfigFromPageConfig(
   const text = (...keys: string[]) => {
     for (const key of keys) {
       const value = raw[key];
-      if (typeof value === "string" && value.trim()) return value;
+      if (typeof value === "string" && liveCopy(value)) return value;
     }
     return undefined;
   };
@@ -59,13 +33,14 @@ export function masterConfigFromPageConfig(
   }
 
   return {
-    // Supports both the legacy hero field names and the ones the builder writes.
     heroHeading: text("heroHeading", "heroTitle"),
     heroDescription: text("heroDescription", "heroSubtitle"),
     heroBadge: text("heroBadge"),
     heroButtonLabel: text("heroButtonLabel"),
+    bookingButtonLabel: text("bookingButtonLabel"),
     featuredTitle: text("featuredTitle"),
     showSearch: typeof raw.showSearch === "boolean" ? raw.showSearch : undefined,
+    pinChrome: typeof raw.pinChrome === "boolean" ? raw.pinChrome : undefined,
     ...(stored.length
       ? { visibleSections: stored.filter((s) => s?.enabled !== false && !s?.hidden).map((s) => String(s.id)) }
       : {}),
@@ -85,57 +60,102 @@ export function ClientPageRenderer({
   onSelect,
   onNavigate,
   headerAccessory,
+  portal,
+  onLogout,
+  focusKey,
 }: {
   business: PublicBusinessInfo;
   services: PublicService[];
   currency: string;
   config?: MasterConfig;
-  /** "published" is the live customer page; "preview" adds builder selection chrome. */
   mode?: "published" | "preview";
-  onBook: () => void;
-  /** Builder only: id of the section currently open in the settings panel. */
+  onBook: (service?: PublicService) => void;
   selectedId?: string;
   onSelect?: (id: string) => void;
   onNavigate?: (id: string) => void;
-  /** Published page only: extra header controls (e.g. the theme toggle). */
   headerAccessory?: React.ReactNode;
+  portal?: ClientPortal | null;
+  onLogout?: () => void;
+  focusKey?: number;
 }) {
-  const brandColor = config?.brandColor || business.brandColor || "rgb(var(--color-primary))";
-  const bookLabel = config?.heroButtonLabel?.trim() || "Book Now";
+  const brand = clientPageBrand(business);
+  const accent = config?.brandColor && /^#[0-9a-fA-F]{6}$/.test(config.brandColor) ? config.brandColor : brand.accent;
+  const accentForeground = readableTextColor(accent);
+  const bookLabel = config?.heroButtonLabel?.trim() || "Book a visit";
   const selectable = mode === "preview" ? onSelect : undefined;
+  const builder = mode === "preview";
+  const subtitle = brand.tagline || brand.description;
+  const pinChrome = config?.pinChrome === true;
+
+  React.useEffect(() => {
+    const id = "client-lounge-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,520;9..144,600&family=Outfit:wght@400;500;600&display=swap";
+    document.head.appendChild(link);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-[rgb(var(--color-background))]" data-client-page-mode={mode}>
-      <header className="sticky top-0 z-50 border-b border-black/[0.08] bg-white/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3 lg:px-8">
-          <div className="flex items-center gap-3">
-            {business.logoUrl ? (
-              <img
-                src={business.logoUrl}
-                alt={business.name}
-                className="h-8 w-8 rounded-[var(--radius-sm)] object-cover"
-              />
+    <div
+      className="client-lounge min-h-screen [&_[id^='portal-']]:scroll-mt-28"
+      data-client-page-mode={mode}
+      style={{
+        background: brand.background,
+        color: brand.ink,
+        fontFamily: brand.fontFamily,
+        ["--lounge-accent" as string]: accent,
+        ["--lounge-accent-fg" as string]: accentForeground,
+        ["--lounge-ink" as string]: brand.ink,
+        ["--lounge-bg" as string]: brand.background,
+        ["--lounge-header-h" as string]: "5.25rem",
+        ["--font-lounge-display" as string]: "Fraunces, Iowan Old Style, Palatino, Georgia, serif",
+        ...(pinChrome ? { paddingTop: "var(--lounge-header-h)" } : {}),
+      }}
+    >
+      <header className={cn(
+        "z-40 px-3 pt-3 pb-2 sm:px-5",
+        pinChrome ? "fixed inset-x-0 top-0 bg-[color:var(--lounge-bg)]/95 backdrop-blur-xl" : "relative",
+      )}>
+        <div className="mx-auto flex max-w-[1520px] items-center justify-between rounded-full bg-white/90 px-3 py-2 ring-1 ring-black/[0.08] sm:px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            {brand.logoUrl ? (
+              <img src={brand.logoUrl} alt={brand.displayName} className="h-9 w-9 rounded-full object-cover" />
             ) : (
               <div
-                className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-xs font-bold text-white"
-                style={{ backgroundColor: brandColor }}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-semibold"
+                style={{ backgroundColor: accent, color: accentForeground }}
+                title={builder ? "Add a logo in Brand settings" : undefined}
               >
-                {getInitials(business.name)}
+                {brand.initials}
               </div>
             )}
-            <div>
-              <h1 className="text-sm font-bold leading-tight">{business.name}</h1>
-              <p className="text-[0.65rem] text-[rgb(var(--color-muted-foreground))]">
-                {business.tagline || "Book an appointment"}
-              </p>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold leading-tight">{brand.displayName}</h1>
+              {subtitle ? (
+                <p className="truncate text-[11px] text-[color:var(--lounge-ink)]/45">{subtitle}</p>
+              ) : builder ? (
+                <p className="truncate text-[11px] text-amber-800/80">Add a tagline or description in Brand settings</p>
+              ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={onBook}
-              className="hidden h-8 items-center rounded-md px-3 text-xs font-medium text-white sm:inline-flex"
-              style={{ backgroundColor: brandColor }}
+              onClick={(event) => {
+                if (onNavigate) onNavigate("portal-reviews");
+                else scrollAnchorIntoView("portal-reviews", event.currentTarget);
+              }}
+              className="hidden h-9 items-center rounded-full px-3.5 text-xs font-semibold text-[color:var(--lounge-ink)] ring-1 ring-black/10 sm:inline-flex"
+            >
+              Leave a note
+            </button>
+            <button
+              type="button"
+              onClick={() => onBook()}
+              className="hidden h-9 items-center rounded-full px-4 text-xs font-semibold sm:inline-flex"
+              style={{ backgroundColor: accent, color: accentForeground }}
             >
               {bookLabel}
             </button>
@@ -144,7 +164,7 @@ export function ClientPageRenderer({
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-4 py-6 md:py-10 lg:px-8">
+      <main className="mx-auto max-w-[1520px] px-4 pb-6 pt-2 md:px-6 md:pb-8">
         <MasterClientTemplate
           business={business}
           services={services}
@@ -154,6 +174,9 @@ export function ClientPageRenderer({
           onNavigate={onNavigate}
           selectedId={selectedId}
           onSelect={selectable}
+          focusKey={focusKey}
+          portal={portal}
+          onLogout={onLogout}
         />
       </main>
     </div>

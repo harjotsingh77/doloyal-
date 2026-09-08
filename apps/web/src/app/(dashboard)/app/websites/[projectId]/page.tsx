@@ -127,7 +127,6 @@ export default function WebsiteProjectPage() {
       <Card>
         <CardContent className="p-12">
           <EmptyState
-            icon={<Globe className="h-10 w-10" />}
             title="Project not found"
             description="This website project doesn't exist or you don't have access to it."
             action={<Link href="/app/websites"><Button>Back to Website Builder</Button></Link>}
@@ -350,7 +349,6 @@ function ChatPanel({ projectId, conversation }: { projectId: string; conversatio
           ) : messages.length === 0 ? (
             <div className="py-10">
               <EmptyState
-                icon={<MessageSquare className="h-8 w-8" />}
                 title="Start the conversation"
                 description="Say hello and share any details, links, or files with our team."
               />
@@ -461,7 +459,6 @@ function MessageBubble({ message, isMine }: { message: any; isMine: boolean }) {
               >
                 <FileText className="h-3.5 w-3.5" />
                 {message.attachmentName || "Attachment"}
-                <Download className="h-3 w-3" />
               </a>
             )}
           </div>
@@ -581,7 +578,6 @@ function OverviewPanel({ project, onChanged }: { project: any; onChanged: () => 
                     </div>
                     <div className="flex items-center gap-1">
                       <a href={file.url} download={file.fileName || undefined} className="p-1 text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]">
-                        <Download className="h-3.5 w-3.5" />
                       </a>
                       {canDelete && (
                         <button

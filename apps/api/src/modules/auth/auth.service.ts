@@ -56,7 +56,7 @@ export class AuthService {
       },
     });
 
-    const payload = { sub: user.id, email: user.email, tv: 0 };
+    const payload = { sub: user.id, email: user.email, tv: 0, kind: 'staff' as const };
     const token = this.jwtService.sign(payload);
 
     return {
@@ -98,15 +98,19 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const activeMembership = user.memberships[0];
-    if (!activeMembership) throw new UnauthorizedException('No tenant access');
+    const activeMembership = user.memberships.find((m) => m.role !== 'CUSTOMER');
+    if (!activeMembership) {
+      throw new UnauthorizedException(
+        'This account is registered as a customer. Sign in from the business Client Page.',
+      );
+    }
 
     await this.staff.markLogin(user.id, activeMembership.tenantId, {
       successful: true,
       ...(meta || {}),
     });
 
-    const payload = { sub: user.id, email: user.email, tv: user.tokenVersion ?? 0 };
+    const payload = { sub: user.id, email: user.email, tv: user.tokenVersion ?? 0, kind: 'staff' as const };
     const token = this.jwtService.sign(payload);
 
     await this.touchSession(user.id, {
@@ -178,15 +182,19 @@ export class AuthService {
       })!;
     }
 
-    const activeMembership = user!.memberships[0];
-    if (!activeMembership) throw new UnauthorizedException('No tenant access');
+    const activeMembership = user!.memberships.find((m) => m.role !== 'CUSTOMER');
+    if (!activeMembership) {
+      throw new UnauthorizedException(
+        'This account is registered as a customer. Sign in from the business Client Page.',
+      );
+    }
 
     await this.staff.markLogin(user!.id, activeMembership.tenantId, {
       successful: true,
       ...(meta || {}),
     });
 
-    const payload = { sub: user!.id, email: user!.email, tv: user!.tokenVersion ?? 0 };
+    const payload = { sub: user!.id, email: user!.email, tv: user!.tokenVersion ?? 0, kind: 'staff' as const };
     const token = this.jwtService.sign(payload);
 
     return {
@@ -247,13 +255,48 @@ export class AuthService {
   }
 
   async getMe(user: any): Promise<AuthUser> {
+    if (user?.sessionKind === 'customer' || user?.activeRole === 'CUSTOMER') {
+      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+      if (!dbUser) return user;
+      const customer = user.activeTenantId
+        ? await this.prisma.customer.findFirst({
+            where: { tenantId: user.activeTenantId, userId: user.id },
+          })
+        : null;
+      return {
+        id: dbUser.id,
+        externalId: dbUser.googleId || dbUser.clerkId || dbUser.id,
+        email: dbUser.email,
+        firstName: dbUser.firstName,
+        lastName: dbUser.lastName,
+        phone: dbUser.phone ?? null,
+        avatarUrl: dbUser.avatarUrl ?? undefined,
+        twoFactorEnabled: Boolean(dbUser.twoFactorEnabled),
+        isAdmin: false,
+        adminRole: null,
+        adminPermissions: [],
+        memberships: [],
+        activeTenantId: user.activeTenantId,
+        activeRole: 'CUSTOMER',
+        sessionKind: 'customer',
+        customerId: customer?.id ?? null,
+        needsPhone: !dbUser.phone || String(dbUser.phone).replace(/\D/g, '').length < 8,
+        clientSlug: user.clientSlug ?? null,
+      };
+    }
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
       include: { memberships: true },
     });
     if (!dbUser) return user;
-    const activeMembership = dbUser.memberships.find(m => m.tenantId === user.activeTenantId) || dbUser.memberships[0];
-    return this.mapUser(dbUser, activeMembership?.tenantId || user.activeTenantId, activeMembership?.role || user.activeRole);
+    const staffMemberships = dbUser.memberships.filter((m) => m.role !== 'CUSTOMER');
+    const activeMembership =
+      staffMemberships.find((m) => m.tenantId === user.activeTenantId) || staffMemberships[0];
+    return this.mapUser(
+      { ...dbUser, memberships: staffMemberships },
+      activeMembership?.tenantId || user.activeTenantId,
+      activeMembership?.role || user.activeRole,
+    );
   }
 
   async switchTenant(userId: string, tenantId: string): Promise<AuthUser> {
@@ -459,6 +502,7 @@ export class AuthService {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      phone: user.phone ?? null,
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: Boolean(user.twoFactorEnabled),
       isAdmin: Boolean(user.isAdmin),
@@ -472,6 +516,7 @@ export class AuthService {
       })),
       activeTenantId: tenantId,
       activeRole: role as any,
+      sessionKind: 'staff',
     };
   }
 }

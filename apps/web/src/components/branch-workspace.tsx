@@ -150,9 +150,6 @@ export function BranchSwitcher() {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push("/app/branches")} className="cursor-pointer">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-[rgb(var(--color-border))] text-[rgb(var(--color-muted-foreground))]">
-            <Plus className="h-4 w-4" />
-          </span>
           <span className="text-sm">New Branch...</span>
         </DropdownMenuItem>
       </DropdownMenuContent>

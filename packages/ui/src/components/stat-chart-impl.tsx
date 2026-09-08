@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { CHART_PALETTE } from "../brand";
+import { cn } from "../lib/utils";
 
 export interface SeriesConfig {
   key: string;
@@ -36,6 +37,7 @@ export interface StatChartProps {
   className?: string;
   /** Hide axis lines/ticks for a cleaner editorial look. */
   minimal?: boolean;
+  onClick?: () => void;
 }
 
 const tooltipStyle = {
@@ -59,17 +61,46 @@ export default function StatChartImpl({
   tickFormat = (v) => String(v),
   className,
   minimal,
+  onClick,
 }: StatChartProps) {
   const Chart = type === "bar" ? BarChart : type === "line" ? LineChart : AreaChart;
 
   return (
-    <Card className={className}>
+    <Card
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        className,
+        onClick &&
+          "cursor-pointer transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm",
+      )}
+    >
       {title ? (
         <CardHeader className="pb-2">
-          <CardTitle>{title}</CardTitle>
-          {description ? (
-            <p className="text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
-          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>{title}</CardTitle>
+              {description ? (
+                <p className="text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
+              ) : null}
+            </div>
+            {onClick ? (
+              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                View details
+              </span>
+            ) : null}
+          </div>
         </CardHeader>
       ) : null}
       <CardContent>

@@ -91,9 +91,14 @@ export default function SignInPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="password" className="text-sm font-medium text-[rgb(var(--color-foreground))]">
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium text-[rgb(var(--color-foreground))]">
+                    Password
+                  </label>
+                  <Link href="/forgot-password" className="text-xs font-medium text-[rgb(var(--color-primary))] hover:underline">
+                    Forgot password
+                  </Link>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-muted-foreground))]" />
                   <Input id="password" type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10" required />

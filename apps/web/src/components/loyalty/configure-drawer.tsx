@@ -240,7 +240,7 @@ export function FeatureConfigureDrawer({ feature, open, onClose, onSave }: Props
                 ])
               }
             >
-              <Plus className="h-3.5 w-3.5" /> Create Tier
+              Create Tier
             </Button>
             <ToggleRow label="Upgrade Notification" checked={draft.upgradeNotification !== false} onChange={(v) => set("upgradeNotification", v)} />
             <ToggleRow label="Downgrade Rules" checked={!!draft.downgradeRules} onChange={(v) => set("downgradeRules", v)} />

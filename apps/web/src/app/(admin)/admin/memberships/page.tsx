@@ -37,7 +37,7 @@ export default function AdminMembershipsPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<SquareStack className="h-10 w-10" />} title="Memberships data unavailable" />
+          <EmptyState title="Memberships data unavailable" />
         </CardContent>
       </Card>
     );
@@ -51,10 +51,10 @@ export default function AdminMembershipsPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Memberships" }]}
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminStatCard label="Active memberships" value={data.activeMemberships} icon={<SquareStack className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="New (30d)" value={data.newMemberships30d} icon={<SquareStack className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Canceled (30d)" value={data.canceledMemberships30d} icon={<SquareStack className="h-4 w-4" />} tone="danger" />
-        <AdminStatCard label="Membership revenue" value={formatCompact(data.membershipRevenue)} icon={<SquareStack className="h-4 w-4" />} tone="accent" />
+        <AdminStatCard label="Active memberships" value={data.activeMemberships} tone="primary" />
+        <AdminStatCard label="New (30d)" value={data.newMemberships30d} tone="success" />
+        <AdminStatCard label="Canceled (30d)" value={data.canceledMemberships30d} tone="danger" />
+        <AdminStatCard label="Membership revenue" value={formatCompact(data.membershipRevenue)} tone="accent" />
       </div>
 
       <Card>

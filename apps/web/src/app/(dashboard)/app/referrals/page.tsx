@@ -388,7 +388,6 @@ export default function ReferralsPage() {
             Refresh
           </Button>
           <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
-            <Download className="h-3.5 w-3.5" />
             Export Report
           </Button>
           <Button variant="secondary" size="sm" onClick={() => setLinkOpen(true)}>
@@ -402,7 +401,6 @@ export default function ReferralsPage() {
               setCampaignOpen(true);
             }}
           >
-            <Plus className="h-3.5 w-3.5" />
             Create Campaign
           </Button>
         </div>
@@ -621,7 +619,7 @@ export default function ReferralsPage() {
               setCampaignOpen(true);
             }}
           >
-            <Plus className="h-3.5 w-3.5" /> Add Campaign
+            Add Campaign
           </Button>
         </div>
 
@@ -643,7 +641,7 @@ export default function ReferralsPage() {
                   setCampaignOpen(true);
                 }}
               >
-                <Plus className="h-3.5 w-3.5" /> Create Campaign
+                Create Campaign
               </Button>
             }
           />

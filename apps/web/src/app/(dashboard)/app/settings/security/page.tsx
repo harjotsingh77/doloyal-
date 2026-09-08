@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { KeyRound, ShieldCheck, MonitorSmartphone, LogOut } from "lucide-react";
+import { ShieldCheck, MonitorSmartphone, LogOut } from "lucide-react";
 import { Button, Input, Field, Badge, cn } from "@doloyal/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -190,7 +190,6 @@ export default function SecuritySettingsPage() {
             disabled={!pw.current || !pw.next || !pw.confirm}
             onClick={updatePassword}
           >
-            <KeyRound className="h-4 w-4" />
             Update password
           </Button>
         </div>

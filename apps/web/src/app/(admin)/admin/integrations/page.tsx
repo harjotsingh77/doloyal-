@@ -46,7 +46,7 @@ export default function AdminIntegrationsPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Link2 className="h-10 w-10" />} title="Integrations data unavailable" />
+          <EmptyState title="Integrations data unavailable" />
         </CardContent>
       </Card>
     );
@@ -61,16 +61,16 @@ export default function AdminIntegrationsPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <AdminStatCard label="Total connected" value={data.totalConnected} icon={<Link2 className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Failures (24h)" value={data.failures24h} icon={<ShieldAlert className="h-4 w-4" />} tone={data.failures24h > 0 ? "danger" : "success"} />
-        <AdminStatCard label="Payments" value={data.paymentsStatus.replace(/_/g, " ")} icon={<Link2 className="h-4 w-4" />} tone={data.paymentsStatus.includes("FAIL") ? "danger" : "accent"} />
+        <AdminStatCard label="Total connected" value={data.totalConnected} tone="primary" />
+        <AdminStatCard label="Failures (24h)" value={data.failures24h} tone={data.failures24h > 0 ? "danger" : "success"} />
+        <AdminStatCard label="Payments" value={data.paymentsStatus.replace(/_/g, " ")} tone={data.paymentsStatus.includes("FAIL") ? "danger" : "accent"} />
       </div>
 
       <Card>
         <CardContent className="p-0">
           {data.items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<Link2 className="h-10 w-10" />} title="No integrations connected" description="Integration connections appear here as businesses connect them." />
+              <EmptyState title="No integrations connected" description="Integration connections appear here as businesses connect them." />
             </div>
           ) : (
             <ul className="divide-y divide-[rgb(var(--color-border))]">

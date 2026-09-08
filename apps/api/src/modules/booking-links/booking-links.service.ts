@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../common/prisma.service';
 import { prismaAppointmentToShared } from '../../common/helpers';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
+import { resolveGoogleReviewUrl } from '../reviews/reviews.service';
 import {
   DEFAULT_AUTOMATIONS,
   DEFAULT_AUTH_MODE,
@@ -371,7 +372,7 @@ export class BookingLinksService {
   }
 
   async updatePage(tenantId: string, id: string, dto: any) {
-    return this.update(tenantId, id, {
+    const payload: Record<string, unknown> = {
       pageConfig: dto.pageConfig,
       branding: dto.branding,
       seo: dto.seo,
@@ -380,8 +381,15 @@ export class BookingLinksService {
       metaDescription: dto.metaDescription,
       name: dto.name,
       description: dto.description,
-      status: dto.status ?? 'DRAFT',
-    });
+    };
+    if (dto.status === 'PUBLISHED' || dto.status === 'DRAFT') {
+      payload.status = dto.status;
+    }
+    if (dto.status === 'PUBLISHED') {
+      payload.isActive = true;
+      payload.isPaused = false;
+    }
+    return this.update(tenantId, id, payload);
   }
 
   async publish(tenantId: string, id: string) {
@@ -527,13 +535,22 @@ export class BookingLinksService {
     // The Client Page is a presentation layer over Business Profile. Tenant
     // branding must always win so profile changes are reflected immediately,
     // rather than being frozen inside a booking-link configuration.
-    const brandColor = tenant.brandColor || branding.primaryColor || branding.themeColor || '#2563EB';
+    const brandColor = tenant.brandColor || branding.primaryColor || branding.themeColor || null;
+    const reviewStats = await this.prisma.review.aggregate({
+      where: { tenantId: tenant.id, status: 'APPROVED' },
+      _avg: { rating: true },
+      _count: { _all: true },
+    });
+    const rating = reviewStats._count._all
+      ? Math.round((reviewStats._avg.rating || 0) * 10) / 10
+      : undefined;
 
     return {
       id: tenant.id,
       name: tenant.name,
+      brandName: tenant.brandName ?? null,
       slug: tenant.slug,
-      logoUrl: tenant.logoUrl || branding.logoUrl,
+      logoUrl: tenant.logoUrl || branding.logoUrl || null,
       coverBannerUrl: tenant.coverBannerUrl || branding.coverBannerUrl || null,
       address: tenant.address,
       phone: tenant.phone,
@@ -543,12 +560,17 @@ export class BookingLinksService {
       instagram: (tenant as any).instagram || (tenant as any).socialLinks?.instagram || null,
       facebook: (tenant as any).facebook || (tenant as any).socialLinks?.facebook || null,
       mapsUrl: (tenant as any).mapsUrl || null,
-      brandColor,
+      googleReviewUrl: resolveGoogleReviewUrl(tenant),
+      brandColor: brandColor || null,
+      secondaryColor: tenant.secondaryColor ?? null,
+      backgroundColor: tenant.backgroundColor ?? null,
+      textColor: tenant.textColor ?? null,
+      fontFamily: tenant.fontFamily ?? null,
       timezone: tenant.timezone,
       currency: tenant.currency,
-      rating: 4.8,
-      tagline: tenant.tagline || pageConfig.tagline || bookingLink.description || 'Book your next appointment online',
-      about: tenant.description || pageConfig.about || bookingLink.description || null,
+      rating,
+      tagline: tenant.tagline || pageConfig.tagline || null,
+      about: tenant.description || pageConfig.about || null,
       businessHours: hours,
       pageConfig,
       seo,

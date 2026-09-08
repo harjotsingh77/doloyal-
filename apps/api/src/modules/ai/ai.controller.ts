@@ -46,6 +46,11 @@ class ChatDto {
   @ValidateNested({ each: true })
   @Type(() => AttachmentDto)
   attachments?: AttachmentDto[];
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(8)
+  currency?: string;
 }
 
 class RenameDto {
@@ -65,6 +70,7 @@ class FeedbackDto {
 class RegenerateDto {
   @IsString() conversationId: string;
   @IsString() messageId: string;
+  @IsString() @IsOptional() @MaxLength(8) currency?: string;
 }
 
 @Controller('assistant')
@@ -72,6 +78,16 @@ export class AiController {
   private readonly logger = new Logger(AiController.name);
 
   constructor(private readonly aiService: AiService) {}
+
+  @Get('business-health')
+  getBusinessHealth(
+    @CurrentUser() user: any,
+    @Query('days') days?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.aiService.getBusinessHealth(user.activeTenantId, { days, from, to });
+  }
 
   @Get('conversations')
   listConversations(@CurrentUser() user: any) {
@@ -119,6 +135,7 @@ export class AiController {
       dto.message,
       dto.conversationId,
       (dto.attachments || []) as ChatAttachmentInput[],
+      dto.currency,
     );
   }
 
@@ -170,6 +187,7 @@ export class AiController {
           onToken: (token) => write('token', { token }),
           onMeta: (meta) => write('meta', meta),
         },
+        dto.currency,
       );
       write('done', result);
     } catch (err: any) {
@@ -227,6 +245,7 @@ export class AiController {
           onToken: (token) => write('token', { token }),
           onMeta: (meta) => write('meta', meta),
         },
+        dto.currency,
       );
       write('done', result);
     } catch (err: any) {

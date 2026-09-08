@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Search,
-  Plus,
-  Users,
   ChevronRight,
-  Upload,
-  Download,
 } from "lucide-react";
 import {
   Button,
@@ -45,18 +41,10 @@ import {
 import { relativeTime } from "@doloyal/shared";
 import type { Customer, CustomerQuery, Paginated } from "@doloyal/shared";
 import { api } from "@/lib/api";
-import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
-
-const CHURN_RISK_COLORS: Record<string, "success" | "warning" | "accent" | "danger"> = {
-  LOW: "success",
-  MEDIUM: "warning",
-  HIGH: "accent",
-  CRITICAL: "danger",
-};
+import { useAppSync } from "@/lib/data-sync";
 
 export default function CustomersPage() {
-  const { format: fmt } = useCurrency();
   const router = useRouter();
   const [customers, setCustomers] = React.useState<Customer[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -115,6 +103,8 @@ export default function CustomersPage() {
     setCursor(null);
     loadCustomers();
   }, [loadCustomers]);
+
+  useAppSync(["customers", "orders", "loyalty", "reviews"], () => loadCustomers());
 
   const handleAddCustomer = async () => {
     if (!addName.trim() || !addPhone.trim()) {
@@ -247,7 +237,6 @@ export default function CustomersPage() {
               loading={importing}
               disabled={exporting}
             >
-              <Upload className="h-4 w-4" />
               Import
             </Button>
             <Button
@@ -256,13 +245,11 @@ export default function CustomersPage() {
               loading={exporting}
               disabled={importing}
             >
-              <Download className="h-4 w-4" />
               Export
             </Button>
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
-                  <Plus className="h-4 w-4" />
                   Add Customer
                 </Button>
               </DialogTrigger>
@@ -376,7 +363,6 @@ export default function CustomersPage() {
           ) : customers.length === 0 ? (
             <div className="p-6">
               <EmptyState
-                icon={<Users className="h-6 w-6" />}
                 title="No customers found"
                 description={
                   debouncedSearch || bandFilter !== "ALL" || churnFilter !== "ALL"
@@ -386,7 +372,6 @@ export default function CustomersPage() {
                 action={
                   !debouncedSearch && bandFilter === "ALL" && churnFilter === "ALL" ? (
                     <Button onClick={() => setAddDialogOpen(true)}>
-                      <Plus className="h-4 w-4" />
                       Add Customer
                     </Button>
                   ) : undefined
@@ -400,11 +385,11 @@ export default function CustomersPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Points</TableHead>
-                  <TableHead>Visits</TableHead>
-                  <TableHead>LTV</TableHead>
-                  <TableHead>Band</TableHead>
-                  <TableHead>Risk</TableHead>
+                  <TableHead>Signup</TableHead>
+                  <TableHead>Last login</TableHead>
+                  <TableHead>Last activity</TableHead>
                   <TableHead>Last Visit</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -419,34 +404,18 @@ export default function CustomersPage() {
                     <TableCell className="font-medium">{c.name}</TableCell>
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{c.phone}</TableCell>
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{c.email ?? "—"}</TableCell>
-                    <TableCell>{c.pointsBalance.toLocaleString("en-IN")}</TableCell>
-                    <TableCell>{c.visitCount}</TableCell>
-                    <TableCell className="font-medium">{fmt(c.lifetimeValue)}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          c.loyaltyBand === "VIP"
-                            ? "primary"
-                            : c.loyaltyBand === "LOYAL"
-                              ? "success"
-                              : c.loyaltyBand === "GROWING"
-                                ? "accent"
-                                : c.loyaltyBand === "NEW"
-                                  ? "outline"
-                                  : "danger"
-                        }
-                        className="text-[0.65rem]"
-                      >
-                        {c.loyaltyBand}
-                      </Badge>
+                      <Badge variant="outline" className="text-[0.65rem]">{c.status ?? "ACTIVE"}</Badge>
                     </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={CHURN_RISK_COLORS[c.churnRisk] ?? "outline"}
-                        className="text-[0.65rem]"
-                      >
-                        {c.churnRisk}
-                      </Badge>
+                    <TableCell>{c.pointsBalance.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {relativeTime(c.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {c.lastLoginAt ? relativeTime(c.lastLoginAt) : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {c.lastActivityAt ? relativeTime(c.lastActivityAt) : "—"}
                     </TableCell>
                     <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
                       {c.lastVisitAt ? relativeTime(c.lastVisitAt) : "—"}

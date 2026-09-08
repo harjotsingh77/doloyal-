@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
+import { resolveOverviewRange, type BusinessHealthInsight, type BusinessHealthStatus, currencySymbol, formatMoney, DEFAULT_CURRENCY } from '@doloyal/shared';
 import {
   AgentServices,
   AgentToolContext,
@@ -40,9 +41,21 @@ type StreamHandlers = {
   signal?: AbortSignal;
 };
 
+type HealthSnapshot = Record<string, number>;
+
+type MoneyCtx = {
+  code: string;
+  symbol: string;
+  money: (amount: number) => string;
+};
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+  private readonly healthCache = new Map<
+    string,
+    { fingerprint: string; result: BusinessHealthInsight; expiresAt: number }
+  >();
 
   constructor(
     private readonly config: ConfigService,
@@ -186,6 +199,7 @@ export class AiService {
     message: string,
     conversationId?: string,
     attachments: ChatAttachmentInput[] = [],
+    currency?: string,
   ) {
     const started = Date.now();
     const conv = await this.ensureConversation(tenantId, userId, conversationId, message);
@@ -198,6 +212,8 @@ export class AiService {
       conv.id,
       message,
       attachments,
+      undefined,
+      currency,
     );
 
     const assistant = await this.prisma.aiMessage.create({
@@ -250,6 +266,7 @@ export class AiService {
     conversationId: string | undefined,
     attachments: ChatAttachmentInput[],
     handlers: StreamHandlers,
+    currency?: string,
   ) {
     const started = Date.now();
     const conv = await this.ensureConversation(tenantId, userId, conversationId, message);
@@ -271,6 +288,7 @@ export class AiService {
         if (handlers.signal?.aborted) return;
         handlers.onToken(token);
       },
+      currency,
     );
 
     if (handlers.signal?.aborted) {
@@ -349,6 +367,7 @@ export class AiService {
     conversationId: string,
     messageId: string,
     handlers?: StreamHandlers,
+    currency?: string,
   ) {
     await this.assertConversation(tenantId, userId, conversationId);
     const target = await this.prisma.aiMessage.findFirst({
@@ -379,9 +398,9 @@ export class AiService {
     }));
 
     if (handlers) {
-      return this.streamChat(tenantId, userId, role, priorUser.content, conversationId, attachments, handlers);
+      return this.streamChat(tenantId, userId, role, priorUser.content, conversationId, attachments, handlers, currency);
     }
-    return this.chat(tenantId, userId, role, priorUser.content, conversationId, attachments);
+    return this.chat(tenantId, userId, role, priorUser.content, conversationId, attachments, currency);
   }
 
   // ─── Internals ─────────────────────────────────────────────────────────────
@@ -518,7 +537,9 @@ export class AiService {
     message: string,
     attachments: ChatAttachmentInput[],
     onToken?: (token: string) => void | Promise<void>,
+    currency?: string,
   ) {
+    const money = await this.resolveMoney(tenantId, currency);
     const { provider, apiKey, baseURL, model } = this.getProviderConfig();
     const history = await this.prisma.aiMessage.findMany({
       where: { conversationId, tenantId },
@@ -537,7 +558,7 @@ export class AiService {
     if (apiKey && provider !== 'fallback') {
       try {
         if (provider === 'anthropic') {
-          return await this.chatWithAnthropic({
+          const result = await this.chatWithAnthropic({
             apiKey,
             baseURL: baseURL!,
             model,
@@ -545,9 +566,11 @@ export class AiService {
             message,
             attachmentContext,
             onToken,
+            money,
           });
+          return { ...result, text: this.applyDisplayCurrency(result.text, money) };
         }
-        return await this.chatWithOpenAICompatible({
+        const result = await this.chatWithOpenAICompatible({
           tenantId,
           userId,
           role,
@@ -559,17 +582,20 @@ export class AiService {
           message,
           attachmentContext,
           onToken,
+          money,
         });
+        return { ...result, text: this.applyDisplayCurrency(result.text, money) };
       } catch (err: any) {
         this.logger.warn(`Provider ${provider} failed, using fallback: ${err?.message || err}`);
       }
     }
 
-    const fallback = await this.chatWithFallback(tenantId, message, attachmentContext);
+    const fallback = await this.chatWithFallback(tenantId, message, attachmentContext, money);
+    const text = this.applyDisplayCurrency(fallback.text, money);
     if (onToken) {
-      await this.streamText(fallback.text, onToken);
+      await this.streamText(text, onToken);
     }
-    return { ...fallback, provider: 'fallback', model: 'rules' };
+    return { ...fallback, text, provider: 'fallback', model: 'rules' };
   }
 
   private async streamText(text: string, onToken: (t: string) => void | Promise<void>) {
@@ -593,11 +619,12 @@ export class AiService {
     message: string;
     attachmentContext: string;
     onToken?: (token: string) => void | Promise<void>;
+    money: MoneyCtx;
   }) {
     const baseURL = (opts.baseURL || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
     const system = opts.attachmentContext
-      ? [`${this.systemPrompt()}\n\nAttached files:\n${opts.attachmentContext}`]
-      : this.systemPrompt();
+      ? [`${this.systemPrompt(opts.money)}\n\nAttached files:\n${opts.attachmentContext}`]
+      : this.systemPrompt(opts.money);
 
     const messages = opts.history
       .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -680,8 +707,16 @@ export class AiService {
     return { text, toolCalls: [], provider: 'anthropic', model: opts.model };
   }
 
-  private systemPrompt() {
+  private systemPrompt(money?: MoneyCtx) {
+    const code = money?.code || DEFAULT_CURRENCY;
+    const symbol = money?.symbol || currencySymbol(code);
     return `You are Doloyal AI — an agentic AI operator for local business owners using Doloyal. You don't just answer questions; you complete tasks using the business's tools.
+
+## Currency
+The workspace display currency is ${code} (symbol ${symbol}).
+- Write every money amount with ${symbol} and ${code} (example: ${symbol}1,465).
+- Never use $, USD, or the word "dollars" unless the workspace currency is USD.
+- Tool JSON money fields are already in ${code}. Do not convert them to another currency.
 
 ## How you work
 1. **Understand the goal.** If a request is ambiguous or missing required details (names, phones, dates, prices, message text), ask short clarifying questions BEFORE acting. Never guess IDs — resolve them with search/get tools first.
@@ -694,7 +729,20 @@ export class AiService {
 - Creating an invoice ALREADY updates the customer's visit/spend stats and may award loyalty points automatically per the program config. Do NOT call adjustLoyaltyPoints after an invoice unless the user explicitly asks for a separate manual adjustment.
 - If a tool errors, explain simply and suggest a fix (e.g. connect email provider).
 - You cannot manage platform billing, staff accounts, or settings — say so if asked.
-- Respond in clear Markdown. Be concise, professional, actionable. Never invent numbers — use tool results.`;
+- Respond in clear Markdown. Be concise, professional, actionable. Never invent numbers — use tool results.
+
+## Business Health signals
+When the user message starts with "Business Health signal" or "KPI detail:" or asks why a metric is down and how to fix it:
+1. Call getBusinessSnapshot first (use from/to dates in the message when present).
+2. Pull extra SaaS data as needed: getRevenueTrend, listInactiveCustomers, getChurnRisks, listRecentInvoices, listOrders, listReviews, listProducts, getLoyaltyOverview, listCampaigns, listAppointments, getReferralOverview.
+3. Always reply in this order:
+   - **What's happening** — live numbers tied to the clicked signal.
+   - **Why this problem is happening** — 3–5 root causes in plain language. Link each cause to a number.
+   - **How to fix it** — specific Doloyal actions.
+   - **How the fix will work** — what each action changes.
+   Then output the exact line:
+   <<<STRATEGIST>>>
+   Then a self-contained **Business Strategist** briefing (do not repeat the full metric table). Write as a senior local-business strategist: the one priority, the real risk if they do nothing, a 30/90-day sequence, and what not to waste time on. This briefing is shown in a separate panel, so it must read on its own.`;
   }
 
   private async chatWithOpenAICompatible(opts: {
@@ -709,13 +757,14 @@ export class AiService {
     message: string;
     attachmentContext: string;
     onToken?: (token: string) => void | Promise<void>;
+    money: MoneyCtx;
   }) {
     const OpenAI = (await import('openai')).default;
     const client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
     const tools = [...this.toolDefinitions(), ...agentToolDefinitions()];
 
     const messages: any[] = [
-      { role: 'system', content: this.systemPrompt() },
+      { role: 'system', content: this.systemPrompt(opts.money) },
       ...opts.history
         .filter((m) => m.role === 'user' || m.role === 'assistant')
         .slice(0, -1)
@@ -764,6 +813,7 @@ export class AiService {
           { tenantId: opts.tenantId, userId: opts.userId, role: opts.role },
           name,
           args,
+          opts.money,
         );
         const serialized = JSON.stringify(result ?? {}).slice(0, 12000);
         toolCalls.push({ name, args, result: serialized });
@@ -791,12 +841,13 @@ export class AiService {
       finalText = (wrapUp.choices[0]?.message as any)?.content || 'I could not process your request.';
     }
 
+    finalText = this.applyDisplayCurrency(finalText ?? 'I could not process your request.', opts.money);
+
     if (opts.onToken) {
-      const streamed = finalText ?? 'I could not process your request.';
-      await this.streamText(streamed, opts.onToken);
+      await this.streamText(finalText, opts.onToken);
     }
     return {
-      text: finalText ?? 'I could not process your request.',
+      text: finalText,
       toolCalls,
       provider: opts.provider,
       model: opts.model,
@@ -887,6 +938,54 @@ export class AiService {
           parameters: { type: 'object', properties: {} },
         },
       },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'getBusinessSnapshot',
+          description:
+            'Fetch a live cross-SaaS business snapshot: customers, revenue, orders, products, reviews, appointments, loyalty, campaigns, referrals, staff, branches. Use this before explaining Business Health signals.',
+          parameters: {
+            type: 'object',
+            properties: {
+              from: { type: 'string', description: 'YYYY-MM-DD period start' },
+              to: { type: 'string', description: 'YYYY-MM-DD period end' },
+              days: { type: 'string', description: 'Inclusive day count if from/to omitted' },
+            },
+          },
+        },
+      },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'listRecentInvoices',
+          description: 'List recent invoices (paid and unpaid) with totals and status',
+          parameters: { type: 'object', properties: { limit: { type: 'number' } } },
+        },
+      },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'listOrders',
+          description: 'List recent catalog orders',
+          parameters: { type: 'object', properties: { limit: { type: 'number' } } },
+        },
+      },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'listProducts',
+          description: 'List catalog products with price and stock',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'listReviews',
+          description: 'List recent customer reviews with rating and status',
+          parameters: { type: 'object', properties: { limit: { type: 'number' } } },
+        },
+      },
     ];
   }
 
@@ -894,6 +993,7 @@ export class AiService {
     ctx: Omit<AgentToolContext, 'services'>,
     name: string,
     args: Record<string, unknown>,
+    money?: MoneyCtx,
   ) {
     // Agent registry first — write tools + extended reads.
     const agentTool = getAgentTool(name);
@@ -928,12 +1028,70 @@ export class AiService {
         return this.getReferralOverview(tenantId);
       case 'listCampaigns':
         return this.listCampaignsData(tenantId);
+      case 'getBusinessSnapshot': {
+        const range = resolveOverviewRange({
+          from: args.from ? String(args.from) : undefined,
+          to: args.to ? String(args.to) : undefined,
+          days: args.days ? String(args.days) : undefined,
+        });
+        const snapshot = await this.gatherHealthSnapshot(
+          tenantId,
+          range.currentFrom,
+          range.currentTo,
+          range.prevFrom,
+          range.prevTo,
+        );
+        const ctxMoney = money || this.defaultMoney();
+        return {
+          ...snapshot,
+          displayCurrency: ctxMoney.code,
+          currencySymbol: ctxMoney.symbol,
+          revenueFormatted: ctxMoney.money(snapshot.revenue),
+          previousRevenueFormatted: ctxMoney.money(snapshot.previousRevenue),
+          orderRevenueFormatted: ctxMoney.money(snapshot.orderRevenue),
+        };
+      }
+      case 'listRecentInvoices':
+        return this.prisma.invoice.findMany({
+          where: { tenantId },
+          orderBy: { createdAt: 'desc' },
+          take: Math.min(Number(args.limit) || 15, 30),
+          select: { id: true, total: true, status: true, createdAt: true, customerId: true },
+        });
+      case 'listOrders':
+        return this.prisma.clientOrder.findMany({
+          where: { tenantId },
+          orderBy: { orderDate: 'desc' },
+          take: Math.min(Number(args.limit) || 15, 30),
+          select: {
+            orderNumber: true,
+            total: true,
+            status: true,
+            paymentStatus: true,
+            orderDate: true,
+            customerId: true,
+          },
+        }).catch(() => []);
+      case 'listProducts':
+        return this.prisma.product.findMany({
+          where: { tenantId },
+          orderBy: { updatedAt: 'desc' },
+          take: 25,
+          select: { name: true, sku: true, price: true, stockQuantity: true, status: true },
+        }).catch(() => []);
+      case 'listReviews':
+        return this.prisma.review.findMany({
+          where: { tenantId },
+          orderBy: { publishedAt: 'desc' },
+          take: Math.min(Number(args.limit) || 15, 30),
+          select: { rating: true, status: true, authorName: true, body: true, publishedAt: true },
+        }).catch(() => []);
       default:
         return { error: `Unknown tool: ${name}` };
     }
   }
 
-  private async chatWithFallback(tenantId: string, message: string, attachmentContext: string) {
+  private async chatWithFallback(tenantId: string, message: string, attachmentContext: string, money: MoneyCtx) {
     const lower = message.toLowerCase();
     let response = '';
     const toolCalls: { name: string; args: Record<string, unknown>; result: string }[] = [];
@@ -942,13 +1100,32 @@ export class AiService {
       response += `I reviewed your uploaded file(s).\n\n`;
     }
 
-    if (lower.includes('kpi') || lower.includes('dashboard') || lower.includes('how are things') || lower.includes("today's sales") || lower.includes('today sales')) {
+    if (
+      lower.includes('business health signal') ||
+      lower.includes('kpi detail:') ||
+      (lower.includes('how to fix') && (lower.includes('revenue') || lower.includes('inactive') || lower.includes('repeat')))
+    ) {
+      const fromMatch = message.match(/(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})/i);
+      const range = resolveOverviewRange(
+        fromMatch ? { from: fromMatch[1], to: fromMatch[2] } : { days: '30' },
+      );
+      const snapshot = await this.gatherHealthSnapshot(
+        tenantId,
+        range.currentFrom,
+        range.currentTo,
+        range.prevFrom,
+        range.prevTo,
+      );
+      const inactive = await this.getInactiveCustomers(tenantId);
+      response += this.formatHealthSignalReply(message, snapshot, inactive, money);
+      toolCalls.push({ name: 'getBusinessSnapshot', args: {}, result: JSON.stringify(snapshot) });
+    } else if (lower.includes('kpi') || lower.includes('dashboard') || lower.includes('how are things') || lower.includes("today's sales") || lower.includes('today sales')) {
       const kpis = await this.getKpisData(tenantId);
-      response += `### Today's business snapshot\n\n| Metric | Value |\n| --- | --- |\n| Today's revenue | ₹${kpis.todayRevenue.toLocaleString('en-IN')} |\n| New customers today | ${kpis.todayCustomers} |\n| Active rewards | ${kpis.activeRewards} |\n| Appointments today | ${kpis.appointmentsToday} |\n| Monthly growth | ${kpis.monthlyGrowthPct}% |\n`;
+      response += `### Today's business snapshot\n\n| Metric | Value |\n| --- | --- |\n| Today's revenue | ${money.money(kpis.todayRevenue)} |\n| New customers today | ${kpis.todayCustomers} |\n| Active rewards | ${kpis.activeRewards} |\n| Appointments today | ${kpis.appointmentsToday} |\n| Monthly growth | ${kpis.monthlyGrowthPct}% |\n`;
       toolCalls.push({ name: 'getKpis', args: {}, result: JSON.stringify(kpis) });
     } else if (lower.includes('vip') || lower.includes('top customer')) {
       const top = await this.getTopCustomersData(tenantId, 5);
-      response += `### Top customers by lifetime value\n\n${top.map((c: any, i: number) => `${i + 1}. **${c.name}** — ₹${c.totalSpent.toLocaleString('en-IN')} (${c.visitCount} visits)`).join('\n')}`;
+      response += `### Top customers by lifetime value\n\n${top.map((c: any, i: number) => `${i + 1}. **${c.name}** — ${money.money(c.totalSpent)} (${c.visitCount} visits)`).join('\n')}`;
       toolCalls.push({ name: 'getTopCustomers', args: { limit: 5 }, result: JSON.stringify(top) });
     } else if (lower.includes('churn') || lower.includes('at risk')) {
       const risks = await this.getChurnRiskData(tenantId, 'HIGH');
@@ -966,7 +1143,7 @@ export class AiService {
       const revenue = await this.getRevenueData(tenantId);
       const total = revenue.reduce((s: number, d: any) => s + d.revenue, 0);
       const avg = total / Math.max(revenue.length, 1);
-      response += `### Revenue report (30 days)\n\n- **Total:** ₹${total.toLocaleString('en-IN')}\n- **Daily average:** ₹${Math.round(avg).toLocaleString('en-IN')}\n- **Projected next month:** ₹${Math.round(avg * 30).toLocaleString('en-IN')}\n\nRecent days:\n${revenue.slice(-7).map((d: any) => `- ${d.date}: ₹${d.revenue.toLocaleString('en-IN')}`).join('\n')}`;
+      response += `### Revenue report (30 days)\n\n- **Total:** ${money.money(total)}\n- **Daily average:** ${money.money(Math.round(avg))}\n- **Projected next month:** ${money.money(Math.round(avg * 30))}\n\nRecent days:\n${revenue.slice(-7).map((d: any) => `- ${d.date}: ${money.money(d.revenue)}`).join('\n')}`;
       toolCalls.push({ name: 'getRevenueTrend', args: {}, result: JSON.stringify(revenue) });
     } else if (lower.includes('appointment')) {
       const appts = await this.getAppointmentsToday(tenantId);
@@ -974,7 +1151,7 @@ export class AiService {
       toolCalls.push({ name: 'getAppointmentsToday', args: {}, result: JSON.stringify(appts) });
     } else if (lower.includes('referral')) {
       const ref = await this.getReferralOverview(tenantId);
-      response += `### Referral program\n\n| Metric | Value |\n| --- | --- |\n| Links | ${ref.links} |\n| Clicks | ${ref.clicks} |\n| Conversions | ${ref.conversions} |\n| Revenue | ₹${ref.revenue.toLocaleString('en-IN')} |\n`;
+      response += `### Referral program\n\n| Metric | Value |\n| --- | --- |\n| Links | ${ref.links} |\n| Clicks | ${ref.clicks} |\n| Conversions | ${ref.conversions} |\n| Revenue | ${money.money(ref.revenue)} |\n`;
       toolCalls.push({ name: 'getReferralOverview', args: {}, result: JSON.stringify(ref) });
     } else if (lower.includes('campaign') || lower.includes('whatsapp')) {
       const camps = await this.listCampaignsData(tenantId);
@@ -1222,5 +1399,462 @@ export class AiService {
       ...referral.map((c) => ({ ...c, type: 'referral' })),
       ...marketing.map((c) => ({ ...c, type: 'marketing' })),
     ];
+  }
+
+  async getBusinessHealth(
+    tenantId: string,
+    query?: { days?: string; from?: string; to?: string },
+  ): Promise<BusinessHealthInsight> {
+    const range = resolveOverviewRange(query);
+    const snapshot = await this.gatherHealthSnapshot(
+      tenantId,
+      range.currentFrom,
+      range.currentTo,
+      range.prevFrom,
+      range.prevTo,
+    );
+    const fingerprint = JSON.stringify(snapshot);
+    const cacheKey = `${tenantId}:${range.currentFromYmd}:${range.currentToYmd}`;
+    const cached = this.healthCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && cached.fingerprint === fingerprint && cached.expiresAt > now) {
+      return cached.result;
+    }
+
+    let result = this.ruleBasedHealth(snapshot, range.currentFromYmd, range.currentToYmd);
+    try {
+      const ai = await this.analyzeHealthWithAi(snapshot, range.currentFromYmd, range.currentToYmd);
+      if (ai) result = ai;
+    } catch (err: any) {
+      this.logger.warn(`Business health AI failed, using rules: ${err?.message || err}`);
+    }
+
+    this.healthCache.set(cacheKey, {
+      fingerprint,
+      result,
+      expiresAt: now + 60_000,
+    });
+    return result;
+  }
+
+  private async gatherHealthSnapshot(
+    tenantId: string,
+    from: Date,
+    to: Date,
+    prevFrom: Date,
+    prevTo: Date,
+  ): Promise<HealthSnapshot> {
+    const period = { gte: from, lte: to };
+    const prev = { gte: prevFrom, lte: prevTo };
+    const paidOrders = {
+      status: { not: 'CANCELLED' as const },
+      OR: [{ paymentStatus: 'PAID' as const }, { status: 'COMPLETED' as const }],
+    };
+    const [
+      customersTotal,
+      customersNew,
+      customersPrevNew,
+      inactiveCustomers,
+      highChurnCustomers,
+      paidInvoiceAgg,
+      prevPaidInvoiceAgg,
+      repeatGroups,
+      prevRepeatGroups,
+      orderAgg,
+      prevOrderAgg,
+      productsActive,
+      reviewsApproved,
+      reviewRating,
+      reviewsPending,
+      appointments,
+      prevAppointments,
+      rewardsActive,
+      redemptions,
+      memberships,
+      campaignsSent,
+      referralConversions,
+      pointsIssued,
+      pointsRedeemed,
+      branches,
+      staff,
+      websites,
+      bookingLinks,
+    ] = await Promise.all([
+      this.prisma.customer.count({ where: { tenantId, createdAt: { lte: to } } }),
+      this.prisma.customer.count({ where: { tenantId, createdAt: period } }),
+      this.prisma.customer.count({ where: { tenantId, createdAt: prev } }),
+      this.prisma.customer.count({
+        where: { tenantId, lastVisitAt: { lt: from, not: null }, status: 'ACTIVE' },
+      }),
+      this.prisma.customer.count({ where: { tenantId, churnRiskScore: { gte: 70 } } }),
+      this.prisma.invoice.aggregate({
+        where: { tenantId, status: 'PAID', createdAt: period },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.invoice.aggregate({
+        where: { tenantId, status: 'PAID', createdAt: prev },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.invoice.groupBy({
+        by: ['customerId'],
+        where: { tenantId, status: 'PAID', createdAt: period },
+        _count: { id: true },
+        having: { id: { _count: { gte: 2 } } },
+      }),
+      this.prisma.invoice.groupBy({
+        by: ['customerId'],
+        where: { tenantId, status: 'PAID', createdAt: prev },
+        _count: { id: true },
+        having: { id: { _count: { gte: 2 } } },
+      }),
+      this.prisma.clientOrder.aggregate({
+        where: { tenantId, orderDate: period, ...paidOrders },
+        _sum: { total: true },
+        _count: true,
+      }).catch(() => ({ _sum: { total: 0 }, _count: 0 })),
+      this.prisma.clientOrder.aggregate({
+        where: { tenantId, orderDate: prev, ...paidOrders },
+        _sum: { total: true },
+        _count: true,
+      }).catch(() => ({ _sum: { total: 0 }, _count: 0 })),
+      this.prisma.product.count({ where: { tenantId, status: 'ACTIVE' } }).catch(() => 0),
+      this.prisma.review.count({
+        where: { tenantId, status: 'APPROVED', publishedAt: period },
+      }).catch(() => 0),
+      this.prisma.review.aggregate({
+        where: { tenantId, status: 'APPROVED', publishedAt: period },
+        _avg: { rating: true },
+      }).catch(() => ({ _avg: { rating: 0 } })),
+      this.prisma.review.count({ where: { tenantId, status: 'PENDING' } }).catch(() => 0),
+      this.prisma.appointment.count({
+        where: { tenantId, startTime: period, status: { not: 'CANCELLED' } },
+      }),
+      this.prisma.appointment.count({
+        where: { tenantId, startTime: prev, status: { not: 'CANCELLED' } },
+      }),
+      this.prisma.reward.count({ where: { tenantId, status: 'ACTIVE' as any } }),
+      this.prisma.rewardRedemption.count({ where: { tenantId, createdAt: period } }).catch(() => 0),
+      this.prisma.customerMembership.count({
+        where: { assignedAt: period, customer: { tenantId } },
+      }).catch(() => 0),
+      this.prisma.campaign.count({ where: { tenantId, sentAt: period } }).catch(() => 0),
+      this.prisma.referralConversion.count({
+        where: { tenantId, createdAt: period, status: { in: ['CONVERTED', 'REWARD_SENT'] } },
+      }).catch(() => 0),
+      this.prisma.pointsLedger.aggregate({
+        where: { tenantId, createdAt: period, amount: { gt: 0 } },
+        _sum: { amount: true },
+      }).catch(() => ({ _sum: { amount: 0 } })),
+      this.prisma.pointsLedger.aggregate({
+        where: { tenantId, createdAt: period, amount: { lt: 0 } },
+        _sum: { amount: true },
+      }).catch(() => ({ _sum: { amount: 0 } })),
+      this.prisma.branch.count({ where: { tenantId } }).catch(() => 0),
+      this.prisma.staff.count({ where: { tenantId } }).catch(() => 0),
+      this.prisma.website.count({ where: { tenantId } }).catch(() => 0),
+      this.prisma.bookingLink.count({ where: { tenantId } }).catch(() => 0),
+    ]);
+
+    const revenue = paidInvoiceAgg._sum.total || 0;
+    const prevRevenue = prevPaidInvoiceAgg._sum.total || 0;
+    const repeatCustomers = repeatGroups.length;
+    const prevRepeat = prevRepeatGroups.length;
+    const repeatDenom = repeatCustomers + customersNew;
+    const prevRepeatDenom = prevRepeat + customersPrevNew;
+    const repeatRate = repeatDenom > 0 ? (repeatCustomers / repeatDenom) * 100 : 0;
+    const prevRepeatRate = prevRepeatDenom > 0 ? (prevRepeat / prevRepeatDenom) * 100 : 0;
+    const revenueChangePct =
+      prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue > 0 ? 100 : 0;
+
+    return {
+      customersTotal,
+      customersNew,
+      inactiveCustomers,
+      highChurnCustomers,
+      revenue: Math.round(revenue * 100) / 100,
+      previousRevenue: Math.round(prevRevenue * 100) / 100,
+      revenueChangePct: Math.round(revenueChangePct * 10) / 10,
+      paidInvoices: paidInvoiceAgg._count || 0,
+      repeatCustomers,
+      repeatRate: Math.round(repeatRate * 10) / 10,
+      previousRepeatRate: Math.round(prevRepeatRate * 10) / 10,
+      orders: orderAgg._count || 0,
+      orderRevenue: Math.round((orderAgg._sum.total || 0) * 100) / 100,
+      previousOrders: prevOrderAgg._count || 0,
+      productsActive: Number(productsActive) || 0,
+      reviewsApproved: Number(reviewsApproved) || 0,
+      averageRating: Math.round(((reviewRating._avg?.rating as number) || 0) * 10) / 10,
+      reviewsPending: Number(reviewsPending) || 0,
+      appointments: Number(appointments) || 0,
+      previousAppointments: Number(prevAppointments) || 0,
+      rewardsActive: Number(rewardsActive) || 0,
+      redemptions: Number(redemptions) || 0,
+      memberships: Number(memberships) || 0,
+      campaignsSent: Number(campaignsSent) || 0,
+      referralConversions: Number(referralConversions) || 0,
+      pointsIssued: Math.abs(pointsIssued._sum.amount || 0),
+      pointsRedeemed: Math.abs(pointsRedeemed._sum.amount || 0),
+      branches: Number(branches) || 0,
+      staff: Number(staff) || 0,
+      websites: Number(websites) || 0,
+      bookingLinks: Number(bookingLinks) || 0,
+    };
+  }
+
+  private formatHealthSignalReply(
+    message: string,
+    snapshot: HealthSnapshot,
+    inactive: { name: string; lastVisit: string }[],
+    money: MoneyCtx,
+  ) {
+    const signal = (message.match(/Business Health signal:\s*"([^"]+)"/i) || [])[1] || 'this metric';
+    const inactivePct =
+      snapshot.customersTotal > 0
+        ? Math.round((snapshot.inactiveCustomers / snapshot.customersTotal) * 100)
+        : 0;
+    const why: string[] = [];
+    if (snapshot.revenueChangePct < 0) {
+      why.push(
+        `Revenue fell ${Math.abs(snapshot.revenueChangePct)}% versus the previous period (${money.money(snapshot.revenue)} vs ${money.money(snapshot.previousRevenue)}), so cash coming in is weaker even if appointments look busy.`,
+      );
+    }
+    if (snapshot.inactiveCustomers > 0) {
+      why.push(
+        `${snapshot.inactiveCustomers} customers (${inactivePct}% of ${snapshot.customersTotal}) have not visited in this window, so a large share of the base is not spending.`,
+      );
+    }
+    if (snapshot.repeatRate < snapshot.previousRepeatRate) {
+      why.push(
+        `Repeat rate dropped from ${snapshot.previousRepeatRate}% to ${snapshot.repeatRate}% (${snapshot.repeatCustomers} returning buyers), so growth depends on new people instead of loyal ones.`,
+      );
+    }
+    if (snapshot.orders === 0) {
+      why.push(`Catalog orders are 0 this period, so product sales are not covering the invoice drop.`);
+    }
+    if (snapshot.campaignsSent <= 1) {
+      why.push(`Only ${snapshot.campaignsSent} campaign(s) went out, so inactive customers were barely re-engaged.`);
+    }
+    if (snapshot.referralConversions === 0) {
+      why.push(`Referral conversions are 0, so the pipeline is not replacing lost repeat spend.`);
+    }
+    if (!why.length) {
+      why.push(`The signal is mixed: some activity exists, but spend and retention are not moving together.`);
+    }
+
+    return `### What's happening
+
+**${signal}** — based on live Doloyal data:
+
+| Metric | Value |
+| --- | --- |
+| Revenue this period | ${money.money(snapshot.revenue)} |
+| vs previous period | ${snapshot.revenueChangePct}% |
+| Repeat rate | ${snapshot.repeatRate}% (was ${snapshot.previousRepeatRate}%) |
+| Repeat customers | ${snapshot.repeatCustomers} |
+| Inactive customers | ${snapshot.inactiveCustomers} |
+| High churn risk | ${snapshot.highChurnCustomers} |
+| Orders | ${snapshot.orders} |
+| Appointments | ${snapshot.appointments} |
+| Campaigns sent | ${snapshot.campaignsSent} |
+| Active rewards | ${snapshot.rewardsActive} |
+
+${inactive.length ? `Inactive sample:\n${inactive.slice(0, 6).map((c) => `- **${c.name}** — last visit ${c.lastVisit}`).join('\n')}` : ''}
+
+### Why this problem is happening
+
+${why.map((line, i) => `${i + 1}. ${line}`).join('\n')}
+
+### How to fix it
+
+1. **Win-back campaign** — target inactive / high-churn customers with a time-boxed offer.
+2. **Loyalty rewards** — keep ${snapshot.rewardsActive} rewards live and add a repeat-visit reward if the catalog is thin.
+3. **Booking link** — send a personal booking link so returning visits are one tap.
+4. **Follow-up invoices / orders** — close unpaid work so revenue is recognized in this period.
+
+### How the fix will work
+
+1. A win-back message brings inactive customers back into a visit or order, which raises period revenue and cuts the inactive count.
+2. A repeat-visit reward makes the next purchase cheaper or more valuable, so repeat rate should climb from ${snapshot.repeatRate}% toward the previous ${snapshot.previousRepeatRate}%.
+3. Booking links turn “I’ll come later” into a booked slot, converting the ${snapshot.appointments} appointments into paid work instead of empty interest.
+4. Closing invoices/orders records the money you already earned so the revenue number matches real activity.
+
+Tell me which of these to create and I’ll draft it in Doloyal (I’ll confirm before sending anything to customers).
+
+<<<STRATEGIST>>>
+
+### Business Strategist view
+
+The numbers say this is a **retention leak**, not a traffic problem. Appointments and customers can look fine while cash falls because ${inactivePct}% of the book is idle and repeat rate slid from ${snapshot.previousRepeatRate}% to ${snapshot.repeatRate}%.
+
+**Priority:** Win back the ${snapshot.inactiveCustomers} inactive customers before spending on new acquisition. One returning buyer is cheaper than replacing them.
+
+**If you do nothing:** Revenue stays compressed (${snapshot.revenueChangePct}% vs last period), points sit unused, and campaigns at ${snapshot.campaignsSent} send(s) will not refill the pipeline.
+
+**30 days:** Send one win-back offer to inactive / high-churn customers, then a repeat-visit reward for people who book.
+
+**90 days:** Rebuild referrals (currently ${snapshot.referralConversions} conversions) and put catalog orders back above zero so income is not invoice-only.
+
+**Ignore for now:** Broad brand campaigns and extra products until the idle ${inactivePct}% of customers get a reason to return.`;
+  }
+
+  private defaultMoney(): MoneyCtx {
+    const code = DEFAULT_CURRENCY;
+    return { code, symbol: currencySymbol(code), money: (amount) => formatMoney(amount, code) };
+  }
+
+  private async resolveMoney(tenantId: string, requested?: string): Promise<MoneyCtx> {
+    const fromClient = (requested || '').trim().toUpperCase();
+    let code = /^[A-Z]{3}$/.test(fromClient) ? fromClient : '';
+    if (!code) {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { id: tenantId },
+        select: { currency: true },
+      });
+      code = (tenant?.currency || DEFAULT_CURRENCY).toUpperCase();
+    }
+    if (!/^[A-Z]{3}$/.test(code)) code = DEFAULT_CURRENCY;
+    return {
+      code,
+      symbol: currencySymbol(code),
+      money: (amount) => formatMoney(amount, code),
+    };
+  }
+
+  private applyDisplayCurrency(text: string, money: MoneyCtx) {
+    if (!text || money.code === 'USD') return text;
+    return text.replace(/\$\s?([\d,]+(?:\.\d+)?)/g, (_match, raw) => {
+      const value = Number(String(raw).replace(/,/g, ''));
+      return Number.isFinite(value) ? money.money(value) : `${money.symbol}${raw}`;
+    });
+  }
+
+  private statusFromScore(score: number): BusinessHealthStatus {
+    if (score >= 70) return 'healthy';
+    if (score >= 40) return 'fair';
+    return 'at_risk';
+  }
+
+  private ruleBasedHealth(snapshot: HealthSnapshot, from: string, to: string): BusinessHealthInsight {
+    const score = Math.min(
+      100,
+      Math.max(
+        0,
+        Math.round(
+          (Math.min(snapshot.repeatRate, 100) / 100) * 30 +
+            (snapshot.revenueChangePct > 0 ? Math.min(snapshot.revenueChangePct / 2, 20) : 8) +
+            Math.min(snapshot.rewardsActive * 4, 16) +
+            (snapshot.inactiveCustomers === 0 ? 16 : Math.max(16 - snapshot.inactiveCustomers, 4)) +
+            Math.min(snapshot.averageRating * 3, 10) +
+            (snapshot.campaignsSent > 0 ? 8 : 4),
+        ),
+      ),
+    );
+
+    const factors = [
+      {
+        label: snapshot.repeatRate >= 50 ? 'Repeat rate is strong' : 'Repeat rate needs improvement',
+        positive: snapshot.repeatRate >= 50,
+      },
+      {
+        label: snapshot.revenueChangePct > 0 ? 'Revenue is growing' : 'Revenue is declining',
+        positive: snapshot.revenueChangePct > 0,
+      },
+      {
+        label: snapshot.rewardsActive >= 5 ? 'Active rewards program' : 'Few active rewards',
+        positive: snapshot.rewardsActive >= 5,
+      },
+      {
+        label:
+          snapshot.inactiveCustomers <= 5
+            ? 'Low customer inactivity'
+            : `${snapshot.inactiveCustomers} inactive customers`,
+        positive: snapshot.inactiveCustomers <= 5,
+      },
+    ];
+
+    if (snapshot.reviewsApproved > 0) {
+      factors.push({
+        label:
+          snapshot.averageRating >= 4
+            ? `${snapshot.averageRating} star reviews`
+            : 'Review rating needs attention',
+        positive: snapshot.averageRating >= 4,
+      });
+    }
+
+    return {
+      score,
+      status: this.statusFromScore(score),
+      summary: `Business health is ${score}% for ${from} to ${to}, based on revenue, retention, loyalty, and activity across Doloyal.`,
+      factors: factors.slice(0, 6),
+      source: 'rules',
+      generatedAt: new Date().toISOString(),
+      period: { from, to },
+    };
+  }
+
+  private async analyzeHealthWithAi(
+    snapshot: HealthSnapshot,
+    from: string,
+    to: string,
+  ): Promise<BusinessHealthInsight | null> {
+    const { provider, apiKey, baseURL, model } = this.getProviderConfig();
+    if (!apiKey || provider === 'fallback' || provider === 'anthropic') return null;
+
+    const OpenAI = (await import('openai')).default;
+    const client = new OpenAI({ apiKey, baseURL });
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are Doloyal AI. Score local-business health from live SaaS metrics. Return JSON only: {"score":0-100 integer,"status":"healthy"|"fair"|"at_risk","summary":"one sentence for the owner","factors":[{"label":"short owner-facing sentence","positive":true|false}]}. Use exactly 4 factors. Never invent numbers. Never use raw field names (no revenueChangePct). Prefer phrasing like "Revenue is declining" or "47 inactive customers". If you mention money, use the workspace currency symbol from the snapshot (never assume USD). status must match score (healthy>=70, fair>=40, else at_risk).',
+        },
+        {
+          role: 'user',
+          content: `Period ${from} to ${to}. Live Doloyal snapshot:\n${JSON.stringify(snapshot)}`,
+        },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content || '';
+    const parsed = this.parseHealthJson(text);
+    if (!parsed) return null;
+
+    const score = Math.min(100, Math.max(0, Math.round(Number(parsed.score) || 0)));
+    const factors = (parsed.factors || [])
+      .filter((f) => f && typeof f.label === 'string' && f.label.trim())
+      .slice(0, 6)
+      .map((f) => ({ label: f.label.trim().slice(0, 80), positive: !!f.positive }));
+    if (!factors.length) return null;
+
+    return {
+      score,
+      status: this.statusFromScore(score),
+      summary: (parsed.summary || '').trim().slice(0, 280) || `Doloyal AI scored this business at ${score}%.`,
+      factors,
+      source: 'ai',
+      generatedAt: new Date().toISOString(),
+      period: { from, to },
+    };
+  }
+
+  private parseHealthJson(text: string): {
+    score?: number;
+    summary?: string;
+    factors?: { label: string; positive: boolean }[];
+  } | null {
+    try {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) return null;
+      return JSON.parse(match[0]);
+    } catch {
+      return null;
+    }
   }
 }

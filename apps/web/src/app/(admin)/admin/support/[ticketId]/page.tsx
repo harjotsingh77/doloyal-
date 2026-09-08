@@ -125,7 +125,6 @@ export default function AdminSupportTicketPage() {
       <Card>
         <CardContent className="p-12">
           <EmptyState
-            icon={<LifeBuoy className="h-10 w-10" />}
             title="Ticket not found"
             description="This support ticket doesn't exist."
             action={
@@ -411,7 +410,6 @@ function FilesPanel({ attachments }: { attachments: TicketDetail["attachments"] 
                     <p className="text-[0.6rem] text-[rgb(var(--color-muted-foreground))]">{formatTime(file.createdAt)}</p>
                   </div>
                   <a href={file.fileUrl} download={file.fileName || undefined} className="p-1 text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]">
-                    <Download className="h-3.5 w-3.5" />
                   </a>
                 </li>
               );
@@ -515,7 +513,6 @@ function AdminChat({ ticketId }: { ticketId: string }) {
           ) : messages.length === 0 ? (
             <div className="py-8">
               <EmptyState
-                icon={<MessageSquare className="h-8 w-8" />}
                 title="No messages yet"
                 description="Say hello to the customer and confirm you've received their ticket."
               />
@@ -634,7 +631,6 @@ href={message.attachmentUrl ?? "#"}
     >
       <FileText className="h-3.5 w-3.5" />
       {message.attachmentName || "Attachment"}
-      <Download className="h-3 w-3" />
     </a>
   );
 }
@@ -700,7 +696,6 @@ function NotesPanel({ ticketId }: { ticketId: string }) {
           </div>
         ) : notes.length === 0 ? (
           <EmptyState
-            icon={<StickyNote className="h-8 w-8" />}
             title="No notes yet"
             description="Internal notes stay visible to admins only."
           />

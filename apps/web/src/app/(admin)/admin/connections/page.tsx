@@ -110,7 +110,6 @@ export default function AdminConnectionsPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<Webhook className="h-10 w-10" />}
                 title="No connections found"
                 description={search || status ? "Try adjusting your filters." : "Website connections appear here when businesses embed them."}
               />

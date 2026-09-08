@@ -15,6 +15,7 @@ import { useLoyaltyFeatures } from "@/lib/loyalty-features-context";
 import { FeatureConfigureDrawer } from "@/components/loyalty/configure-drawer";
 import { getLoyaltyModule } from "@/components/loyalty/modules/registry";
 import { api } from "@/lib/api";
+import { useAppSync } from "@/lib/data-sync";
 
 export default function LoyaltyPage() {
   const { features, enabledKeys, loading, isEnabled, updateConfig, refresh } =
@@ -39,6 +40,13 @@ export default function LoyaltyPage() {
       .then(setOverview)
       .catch(() => setOverview(null));
   }, [enabledKeys]);
+
+  useAppSync(["loyalty", "rewards", "customers", "orders"], () => {
+    api
+      .getLoyaltyOverview()
+      .then(setOverview)
+      .catch(() => setOverview(null));
+  });
 
   const navItems = ordered.map((f) => ({
     id: f.sectionId || f.key,

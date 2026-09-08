@@ -124,7 +124,7 @@ export default function AdminLogsPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<ScrollText className="h-10 w-10" />} title="No logs found" description="No logs match these filters." />
+              <EmptyState title="No logs found" description="No logs match these filters." />
             </div>
           ) : (
             <Table>

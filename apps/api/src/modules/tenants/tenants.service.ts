@@ -188,7 +188,9 @@ export class TenantsService {
       'country', 'currency', 'timezone', 'language', 'dateFormat', 'timeFormat',
       'brandColor', 'secondaryColor', 'accentColor', 'fontFamily', 'taxRate',
       'brandName', 'brandShortName', 'backgroundColor', 'textColor',
+      'clientSignInBranding',
       'gst', 'registrationNumber', 'tagline', 'description', 'whatsapp', 'mapsUrl',
+      'googleReviewUrl', 'googlePlaceId',
       'logoUrl', 'coverBannerUrl', 'faviconUrl', 'businessHours', 'socialLinks',
       'legalPolicies', 'businessStatus', 'notificationPrefs',
     ] as const;
@@ -202,6 +204,12 @@ export class TenantsService {
 
     if (typeof updateData.website === 'string' && updateData.website === '') {
       updateData.website = null;
+    }
+    if (typeof updateData.googleReviewUrl === 'string' && !String(updateData.googleReviewUrl).trim()) {
+      updateData.googleReviewUrl = null;
+    }
+    if (typeof updateData.googlePlaceId === 'string' && !String(updateData.googlePlaceId).trim()) {
+      updateData.googlePlaceId = null;
     }
 
     // Brand names are display-only: blank strings must fall back to the
@@ -316,6 +324,8 @@ export class TenantsService {
       description: tenant.description ?? null,
       whatsapp: tenant.whatsapp ?? null,
       mapsUrl: tenant.mapsUrl ?? null,
+      googleReviewUrl: tenant.googleReviewUrl ?? null,
+      googlePlaceId: tenant.googlePlaceId ?? null,
       currency: tenant.currency,
       timezone: tenant.timezone,
       language: tenant.language ?? 'en',
@@ -329,6 +339,7 @@ export class TenantsService {
       brandShortName: tenant.brandShortName ?? null,
       backgroundColor: tenant.backgroundColor ?? null,
       textColor: tenant.textColor ?? null,
+      clientSignInBranding: (tenant.clientSignInBranding as Record<string, unknown> | null) ?? null,
       taxRate: tenant.taxRate ?? 0,
       businessHours: this.mergeJsonDefaults(tenant.businessHours, businessHoursDefaults),
       socialLinks: this.mergeJsonDefaults(tenant.socialLinks, socialDefaults),

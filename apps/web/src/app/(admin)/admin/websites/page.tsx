@@ -46,7 +46,7 @@ export default function AdminWebsitesPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Globe className="h-10 w-10" />} title="Website builder data unavailable" />
+          <EmptyState title="Website builder data unavailable" />
         </CardContent>
       </Card>
     );
@@ -60,11 +60,11 @@ export default function AdminWebsitesPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Website Builder" }]}
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <AdminStatCard label="Total projects" value={data.totalProjects} icon={<Globe className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Generated" value={data.generated} icon={<Sparkles className="h-4 w-4" />} tone="success" />
-        <AdminStatCard label="Draft" value={data.draft} icon={<FileText className="h-4 w-4" />} tone="warning" />
-        <AdminStatCard label="Published" value={data.published} icon={<Globe className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Failed" value={data.failed} icon={<Info className="h-4 w-4" />} tone={data.failed > 0 ? "danger" : "success"} />
+        <AdminStatCard label="Total projects" value={data.totalProjects} tone="primary" />
+        <AdminStatCard label="Generated" value={data.generated} tone="success" />
+        <AdminStatCard label="Draft" value={data.draft} tone="warning" />
+        <AdminStatCard label="Published" value={data.published} tone="accent" />
+        <AdminStatCard label="Failed" value={data.failed} tone={data.failed > 0 ? "danger" : "success"} />
       </div>
 
       <Card>

@@ -426,7 +426,7 @@ export function InviteMemberDialog({ open, onOpenChange, onCreated }: {
                 <Button variant="secondary">Done</Button>
               </DialogClose>
               <Button onClick={reset}>
-                <Plus className="h-4 w-4" /> Invite another
+                Invite another
               </Button>
             </DialogFooter>
           </div>
@@ -682,7 +682,7 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
             <Skeleton className="h-48 w-full" />
           </div>
         ) : !detail ? (
-          <EmptyState icon={<Users className="h-6 w-6" />} title="Member not found" description="This member could not be loaded." />
+          <EmptyState title="Member not found" description="This member could not be loaded." />
         ) : (
           <div className="space-y-4">
             {/* Header */}
@@ -796,7 +796,7 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
                 </div>
                 <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
                   {detail.employeeNotes.length === 0 ? (
-                    <EmptyState icon={<StickyNote className="h-6 w-6" />} title="No notes yet" description="Add a private note about this team member." />
+                    <EmptyState title="No notes yet" description="Add a private note about this team member." />
                   ) : (
                     detail.employeeNotes.map((n) => <NoteRow key={n.id} note={n} onDelete={() => delNote(n.id)} />)
                   )}
@@ -805,7 +805,7 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
 
               <TabsContent value="activity" className="mt-4 max-h-[55vh] space-y-2 overflow-y-auto pr-1">
                 {detail.activity.length === 0 ? (
-                  <EmptyState icon={<Activity className="h-6 w-6" />} title="No activity yet" description="Actions by and about this member appear here." />
+                  <EmptyState title="No activity yet" description="Actions by and about this member appear here." />
                 ) : (
                   detail.activity.map((a: StaffActivityItem) => (
                     <div key={a.id} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-3">
@@ -823,7 +823,7 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
 
               <TabsContent value="logins" className="mt-4 max-h-[55vh] space-y-2 overflow-y-auto pr-1">
                 {detail.loginHistory.length === 0 ? (
-                  <EmptyState icon={<History className="h-6 w-6" />} title="No login history" description="Sign-in events will appear here." />
+                  <EmptyState title="No login history" description="Sign-in events will appear here." />
                 ) : (
                   detail.loginHistory.map((h: LoginHistoryEntry) => (
                     <div key={h.id} className="flex items-center justify-between gap-2 rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-3">
@@ -846,7 +846,7 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
 
               <TabsContent value="audit" className="mt-4 max-h-[55vh] space-y-2 overflow-y-auto pr-1">
                 {detail.auditLogs.length === 0 ? (
-                  <EmptyState icon={<ScrollText className="h-6 w-6" />} title="No audit activity" description="Security-sensitive changes are logged here." />
+                  <EmptyState title="No audit activity" description="Security-sensitive changes are logged here." />
                 ) : (
                   detail.auditLogs.map((a: StaffAuditLogEntry) => (
                     <div key={a.id} className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-3">
@@ -1062,7 +1062,7 @@ export function InvitationDetailDrawer({ invitationId, open, onOpenChange, onCha
           </div>
         ) : !detail ? (
           <div className="p-6">
-            <EmptyState icon={<Mail className="h-6 w-6" />} title="Invitation not found" description="This invitation could not be loaded." />
+            <EmptyState title="Invitation not found" description="This invitation could not be loaded." />
           </div>
         ) : (
           <div className="flex h-full flex-col">
@@ -1314,7 +1314,7 @@ export function InvitationsPanel({ onChanged, onViewMember }: {
           </CardDescription>
         </div>
         <Button onClick={() => setInviteOpen(true)}>
-          <Plus className="h-4 w-4" /> Invite member
+          Invite member
         </Button>
       </CardHeader>
       <CardContent className="p-0">
@@ -1353,10 +1353,9 @@ export function InvitationsPanel({ onChanged, onViewMember }: {
             </div>
           ) : items.length === 0 ? (
             <EmptyState
-              icon={<Mail className="h-6 w-6" />}
               title={`No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}invitations`}
               description={tab === "PENDING" ? "Invite team members to your workspace to get started." : "Nothing here yet. Invitations in this state will appear here."}
-              action={tab === "PENDING" || tab === "ALL" ? <Button onClick={() => setInviteOpen(true)}><Plus className="h-4 w-4" /> Invite member</Button> : undefined}
+              action={tab === "PENDING" || tab === "ALL" ? <Button onClick={() => setInviteOpen(true)}>Invite member</Button> : undefined}
             />
           ) : (
             <Table>

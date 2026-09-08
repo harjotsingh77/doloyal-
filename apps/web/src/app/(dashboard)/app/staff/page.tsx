@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search, Download, Users, MoreVertical, Filter, FileSpreadsheet, FileText } from "lucide-react";
+import { Search, MoreVertical, FileSpreadsheet, FileText } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button, Input, Card, CardHeader, CardTitle, CardContent, CardDescription, PageHeader,
@@ -190,7 +190,6 @@ export default function StaffPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="secondary" loading={!!exporting}>
-                  {exporting ? <FileSpreadsheet className="h-4 w-4" /> : <Download className="h-4 w-4" />}
                   Export
                 </Button>
               </DropdownMenuTrigger>
@@ -205,7 +204,7 @@ export default function StaffPage() {
               </DropdownMenuContent>
             </DropdownMenu>
             <Button onClick={() => setInviteOpen(true)}>
-              <Plus className="h-4 w-4" /> Invite Member
+              Invite Member
             </Button>
             <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} onCreated={refresh} />
           </div>
@@ -286,10 +285,9 @@ export default function StaffPage() {
               ) : members.length === 0 ? (
                 <div className="p-6">
                   <EmptyState
-                    icon={<Users className="h-6 w-6" />}
                     title="No members found"
                     description="Invite your first team member or adjust your filters."
-                    action={<Button onClick={() => setInviteOpen(true)}><Plus className="h-4 w-4" /> Invite member</Button>}
+                    action={<Button onClick={() => setInviteOpen(true)}>Invite member</Button>}
                   />
                 </div>
               ) : (

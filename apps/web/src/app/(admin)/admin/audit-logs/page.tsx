@@ -129,7 +129,7 @@ export default function AdminAuditLogsPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-12">
-              <EmptyState icon={<ScrollText className="h-10 w-10" />} title="No audit logs found" description="Admin actions will be recorded here." />
+              <EmptyState title="No audit logs found" description="Admin actions will be recorded here." />
             </div>
           ) : (
             <Table>

@@ -903,7 +903,6 @@ export default function WorkflowsPage() {
             Templates
           </Button>
           <Button size="sm" className="h-9 gap-1.5" onClick={newWorkflow}>
-            <Plus className="h-3.5 w-3.5" />
             New Workflow
           </Button>
         </div>

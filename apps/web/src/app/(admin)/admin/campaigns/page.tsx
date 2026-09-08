@@ -37,7 +37,7 @@ export default function AdminCampaignsPage() {
     return (
       <Card>
         <CardContent className="p-12">
-          <EmptyState icon={<Megaphone className="h-10 w-10" />} title="Campaign data unavailable" />
+          <EmptyState title="Campaign data unavailable" />
         </CardContent>
       </Card>
     );
@@ -51,11 +51,11 @@ export default function AdminCampaignsPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Campaigns" }]}
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <AdminStatCard label="Sent (30d)" value={data.totalSent30d} icon={<Megaphone className="h-4 w-4" />} tone="primary" />
-        <AdminStatCard label="Email" value={data.emailSent} icon={<Mail className="h-4 w-4" />} />
-        <AdminStatCard label="SMS" value={data.smsSent} icon={<Smartphone className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="WhatsApp" value={data.whatsappSent} icon={<MessageCircle className="h-4 w-4" />} tone="accent" />
-        <AdminStatCard label="Delivery rate" value={`${data.deliveryRate}%`} icon={<Percent className="h-4 w-4" />} tone="success" />
+        <AdminStatCard label="Sent (30d)" value={data.totalSent30d} tone="primary" />
+        <AdminStatCard label="Email" value={data.emailSent} />
+        <AdminStatCard label="SMS" value={data.smsSent} tone="accent" />
+        <AdminStatCard label="WhatsApp" value={data.whatsappSent} tone="accent" />
+        <AdminStatCard label="Delivery rate" value={`${data.deliveryRate}%`} tone="success" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

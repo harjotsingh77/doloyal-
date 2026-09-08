@@ -40,3 +40,6 @@ pnpm-debug.log*
 
 # local pnpm store
 .pnpm-store/
+
+# review video / thumbnail uploads
+uploads/

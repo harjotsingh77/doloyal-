@@ -61,38 +61,18 @@ type Stats = Awaited<ReturnType<typeof api.adminGetSupportStats>>;
 function StatCard({
   label,
   value,
-  icon,
-  tone,
 }: {
   label: string;
   value: number | string;
-  icon: React.ReactNode;
-  tone: string;
+  tone?: string;
 }) {
   return (
     <Card>
-      <CardContent className="flex items-center gap-4 p-5">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-            tone === "warning"
-              ? "bg-[rgb(var(--color-warning)/0.12)] text-[rgb(var(--color-warning))]"
-              : tone === "primary"
-                ? "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
-                : tone === "accent"
-                  ? "bg-[rgb(var(--color-accent)/0.1)] text-[rgb(var(--color-accent))]"
-                  : tone === "success"
-                    ? "bg-[rgb(var(--color-success)/0.12)] text-[rgb(var(--color-success))]"
-                    : "bg-[rgb(var(--color-muted))] text-[rgb(var(--color-muted-foreground))]"
-          }`}
-        >
-          {icon}
-        </div>
-        <div>
-          <p className="text-2xl font-semibold leading-none text-[rgb(var(--color-foreground))]">
-            {value}
-          </p>
-          <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">{label}</p>
-        </div>
+      <CardContent className="p-5">
+        <p className="text-2xl font-semibold leading-none text-[rgb(var(--color-foreground))]">
+          {value}
+        </p>
+        <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">{label}</p>
       </CardContent>
     </Card>
   );
@@ -176,11 +156,11 @@ export default function AdminSupportPage() {
 
       {stats ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <StatCard label="Open" value={stats.open} tone="warning" icon={<Clock className="h-5 w-5" />} />
-          <StatCard label="In progress" value={stats.inProgress} tone="primary" icon={<LifeBuoy className="h-5 w-5" />} />
-          <StatCard label="Waiting on customer" value={stats.waiting} tone="accent" icon={<TimerReset className="h-5 w-5" />} />
-          <StatCard label="Resolved" value={stats.resolved} tone="success" icon={<SquareCheck className="h-5 w-5" />} />
-          <StatCard label="All tickets" value={stats.total} tone="default" icon={<Ticket className="h-5 w-5" />} />
+          <StatCard label="Open" value={stats.open} tone="warning" />
+          <StatCard label="In progress" value={stats.inProgress} tone="primary" />
+          <StatCard label="Waiting on customer" value={stats.waiting} tone="accent" />
+          <StatCard label="Resolved" value={stats.resolved} tone="success" />
+          <StatCard label="All tickets" value={stats.total} tone="default" />
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -254,7 +234,6 @@ export default function AdminSupportPage() {
           ) : items.length === 0 ? (
             <div className="p-12">
               <EmptyState
-                icon={<Inbox className="h-10 w-10" />}
                 title="No support tickets"
                 description={search || status || priority || category ? "Try adjusting your filters." : "New tickets from customers will appear here."}
               />

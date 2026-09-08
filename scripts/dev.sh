@@ -20,6 +20,14 @@ node "$ROOT/scripts/ensure-postgres.mjs" || {
   exit 1
 }
 
+# A leftover Next.js on :3000 sharing .next with a new `next dev` produces
+# 404s for error.js / global-error.js ("missing required error components").
+if lsof -nP -tiTCP:3000 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "[doloyal] stopping leftover process on port 3000"
+  lsof -nP -tiTCP:3000 -sTCP:LISTEN | xargs kill 2>/dev/null || true
+  sleep 1
+fi
+
 # Always purge stale Next.js server chunks to prevent MODULE_NOT_FOUND errors.
 # Webpack chunk IDs (e.g. 3867.js) can drift between restarts; removing the
 # server cache forces a clean recompile and costs only ~1-2s on startup.

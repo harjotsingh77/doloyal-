@@ -19,6 +19,13 @@ export const BRAND_COLOR_DEFAULTS = {
   accent: "#F59E0B",
 } as const;
 
+/** Customer-page surfaces when the business has not set colors. */
+export const PAGE_SURFACE_DEFAULTS = {
+  background: "#FFFFFF",
+  text: "#111111",
+  accent: "#111111",
+} as const;
+
 const FALLBACK_NAME = "Doloyal";
 
 /* ── Color math ──────────────────────────────────────────────────────────── */
@@ -97,6 +104,9 @@ type BrandSource = {
   brandName?: string | null;
   brandShortName?: string | null;
   logoUrl?: string | null;
+  tagline?: string | null;
+  description?: string | null;
+  about?: string | null;
 } | null | undefined;
 
 function firstNonEmpty(...values: Array<string | null | undefined>): string {
@@ -133,4 +143,34 @@ export function getBrandInitials(name: string): string {
   const words = clean.split(/\s+/);
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
   return clean.slice(0, 2).toUpperCase() || "D";
+}
+
+export function resolveHexColor(value: string | null | undefined, fallback: string): string {
+  return isHexColor(value) ? value : fallback;
+}
+
+/** Page background: brand value, otherwise white. */
+export function resolvePageBackground(value?: string | null): string {
+  return resolveHexColor(value, PAGE_SURFACE_DEFAULTS.background);
+}
+
+/** Body text: brand value, otherwise near-black. */
+export function resolvePageText(value?: string | null): string {
+  return resolveHexColor(value, PAGE_SURFACE_DEFAULTS.text);
+}
+
+/**
+ * Buttons and highlights. Unset / invalid colors fall back to ink on white,
+ * not a canned template palette.
+ */
+export function resolvePageAccent(value?: string | null): string {
+  return resolveHexColor(value, PAGE_SURFACE_DEFAULTS.accent);
+}
+
+export function getBusinessTagline(source: BrandSource): string {
+  return firstNonEmpty(source?.tagline);
+}
+
+export function getBusinessDescription(source: BrandSource): string {
+  return firstNonEmpty(source?.about, source?.description, source?.tagline);
 }
