@@ -13,3 +13,4 @@ export * from "./constants";
 export * from "./api";
 export * from "./loyalty-features";
 export * from "./admin";
+export * from "./website-knowledge-wall";

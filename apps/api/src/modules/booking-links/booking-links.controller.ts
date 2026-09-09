@@ -9,6 +9,8 @@ import {
   Body,
   Query,
   Headers,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
 import { IsString, IsOptional, IsNotEmpty, IsBoolean, IsNumber, IsArray, IsObject } from 'class-validator';
 import { BookingLinksService } from './booking-links.service';
@@ -18,6 +20,7 @@ import { BookingOrchestratorService } from './booking-orchestrator.service';
 import { AiSchedulingService } from './ai-scheduling.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from '../auth/public.decorator';
+import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
 import * as crypto from 'crypto';
 
 class CreateBookingLinkDto {
@@ -206,6 +209,7 @@ export class BookingLinksController {
     private readonly analyticsService: BookingAnalyticsService,
     private readonly aiSchedulingService: AiSchedulingService,
     private readonly orchestrator: BookingOrchestratorService,
+    private readonly realtime: CommerceRealtimeService,
   ) {}
 
   @Get('booking-links')
@@ -287,6 +291,13 @@ export class BookingLinksController {
   @Get('public/book/:slug/services')
   getPublicServices(@Param('slug') slug: string) {
     return this.bookingLinksService.getPublicServices(slug);
+  }
+
+  @Public()
+  @Sse('public/book/:slug/events')
+  async publicCatalogEvents(@Param('slug') slug: string) {
+    const { tenant } = await this.bookingLinksService.findBySlug(slug);
+    return this.realtime.stream(tenant.id);
   }
 
   @Public()

@@ -45,7 +45,8 @@ import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 import { ProductFormDialog } from "./product-form-dialog";
-import { useAppSync } from "@/lib/data-sync";
+import { productImageSrc } from "./product-editor";
+import { useCommerceLive } from "@/lib/data-sync";
 
 const ALL = "__all__";
 
@@ -74,11 +75,12 @@ function StatusBadges({ product }: { product: CatalogProduct }) {
 }
 
 function ProductThumb({ product }: { product: CatalogProduct }) {
-  if (product.imageUrl) {
+  const src = productImageSrc(product.imageUrl);
+  if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={product.imageUrl}
+        src={src}
         alt=""
         className="h-10 w-10 rounded-lg object-cover border border-[rgb(var(--color-border))]"
       />
@@ -121,9 +123,9 @@ export default function ProductsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
       setError(null);
       const query: ProductQuery = {
         search: debouncedSearch || undefined,
@@ -159,7 +161,7 @@ export default function ProductsPage() {
     void load();
   }, [load]);
 
-  useAppSync(["products", "orders"], () => void load());
+  useCommerceLive(["products", "orders"], () => void load({ silent: true }));
 
   const toggleSort = (key: NonNullable<ProductQuery["sort"]>) => {
     if (sort === key) setOrder((o) => (o === "asc" ? "desc" : "asc"));

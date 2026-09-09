@@ -1,15 +1,50 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { WebsitePage } from "@prisma/client";
+import { composeKnowledgeWallPrompt, resolveKnowledgeWall } from "@doloyal/shared";
 import { PrismaService } from "../../common/prisma.service";
+import {
+  clientPageDesignerSystemPrompt,
+  clientPageSnapshot,
+  designClientPageLocally,
+  parseLooseJsonObject,
+  patchesAreEmpty,
+} from "./client-page-ai";
+
+const WEBSITE_COMPONENTS = new Set([
+  "HERO",
+  "FEATURES",
+  "SERVICES",
+  "GALLERY",
+  "TEAM",
+  "PRICING",
+  "TESTIMONIALS",
+  "FAQ",
+  "ABOUT",
+  "CONTACT",
+  "FOOTER",
+  "HEADER",
+  "CTA",
+  "BLOG",
+  "NEWSLETTER",
+  "STATS",
+  "VIDEO",
+  "MAP",
+  "TIMELINE",
+  "CUSTOM",
+]);
 
 @Injectable()
 export class WebsiteAIService {
   private readonly logger = new Logger(WebsiteAIService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async collectBusinessData(tenantId: string) {
-    const [tenant, services, staff, branches, loyaltyConfig, rewards, tiers, customers] = await Promise.all([
+    const [tenant, services, staff, branches, loyaltyConfig, rewards, tiers] = await Promise.all([
       this.prisma.tenant.findUnique({ where: { id: tenantId } }),
       this.prisma.service.findMany({ where: { tenantId, isActive: true } }),
       this.prisma.staff.findMany({ where: { tenantId, isAvailable: true } }),
@@ -17,9 +52,8 @@ export class WebsiteAIService {
       this.prisma.loyaltyConfig.findUnique({ where: { tenantId } }),
       this.prisma.reward.findMany({ where: { tenantId, status: 'ACTIVE' as any } }),
       this.prisma.membershipTier.findMany({ where: { tenantId } }),
-      this.prisma.customer.findMany({ where: { tenantId }, take: 5, orderBy: { totalSpent: "desc" } }),
     ]);
-    return { tenant, services, staff, branches, loyaltyConfig, rewards, tiers, topCustomers: customers };
+    return { tenant, services, staff, branches, loyaltyConfig, rewards, tiers };
   }
 
   async generate(request: {
@@ -38,7 +72,14 @@ export class WebsiteAIService {
       },
     });
     try {
-      const result = this.buildGeneratedSite(request.prompt, request.industry, request.businessData);
+      const fallback = this.buildGeneratedSite(request.prompt, request.industry, request.businessData);
+      const aiSite = await this.generateSiteWithWebsiteAi({
+        prompt: request.prompt,
+        industry: request.industry ?? request.businessData?.tenant?.category,
+        businessData: request.businessData,
+        fallback,
+      });
+      const result = this.mergeGeneratedSite(fallback, aiSite);
       await this.prisma.aIWebsiteGeneration.update({
         where: { id: generation.id },
         data: { status: "COMPLETED", result: result as any, completedAt: new Date() },
@@ -177,35 +218,125 @@ export class WebsiteAIService {
   }
 
   private async applyGeneration(tenantId: string, websiteId: string, result: { theme: any; pages: any[] }) {
-    await this.prisma.website.update({
-      where: { id: websiteId },
-      data: { theme: result.theme as any, status: "DRAFT", draftVersion: { increment: 1 } },
-    });
-    const existingPages = await this.prisma.websitePage.findMany({ where: { websiteId } });
-    const existingSlugs = new Set(existingPages.map((p: WebsitePage) => p.slug));
-    for (const pageData of result.pages) {
-      if (existingSlugs.has(pageData.slug)) continue;
-      const page = await this.prisma.websitePage.create({
-        data: {
-          websiteId,
-          title: pageData.title,
-          slug: pageData.slug,
-          isHome: pageData.isHome,
-          seo: pageData.seo as any,
-        },
+    const site = await this.prisma.website.findFirst({ where: { id: websiteId, tenantId } });
+    if (!site) throw new BadRequestException("Website not found");
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.website.update({
+        where: { id: websiteId },
+        data: { theme: result.theme as any, status: "DRAFT", draftVersion: { increment: 1 } },
       });
-      for (const section of pageData.sections) {
-        await this.prisma.websiteSection.create({
-          data: {
-            pageId: page.id,
-            component: section.component as any,
-            sortOrder: section.sortOrder,
-            content: section.content as any,
-            styles: section.styles as any,
-          },
-        });
+      const existingPages = await tx.websitePage.findMany({ where: { websiteId } });
+      const bySlug = new Map(existingPages.map((p: WebsitePage) => [p.slug, p]));
+
+      for (const pageData of result.pages) {
+        const existing = bySlug.get(pageData.slug);
+        const page = existing
+          ? await tx.websitePage.update({
+              where: { id: existing.id },
+              data: {
+                title: pageData.title,
+                isHome: Boolean(pageData.isHome),
+                seo: pageData.seo as any,
+              },
+            })
+          : await tx.websitePage.create({
+              data: {
+                websiteId,
+                title: pageData.title,
+                slug: pageData.slug,
+                isHome: Boolean(pageData.isHome),
+                seo: pageData.seo as any,
+              },
+            });
+
+        if (existing) {
+          await tx.websiteSection.deleteMany({ where: { pageId: page.id } });
+        }
+
+        for (const [index, section] of (pageData.sections ?? []).entries()) {
+          await tx.websiteSection.create({
+            data: {
+              pageId: page.id,
+              component: section.component as any,
+              sortOrder: Number.isFinite(section.sortOrder) ? section.sortOrder : index,
+              content: section.content as any,
+              styles: section.styles as any,
+            },
+          });
+        }
       }
+    });
+  }
+
+  async chatClientPage(input: {
+    tenantId: string;
+    message: string;
+    history?: Array<{ role?: string; content?: string }>;
+    selectedSection?: string;
+    config?: Record<string, unknown>;
+  }) {
+    const businessData = await this.collectBusinessData(input.tenantId);
+    const brief = this.businessBrief(businessData);
+    const history = (input.history ?? [])
+      .filter((item) => (item.role === "user" || item.role === "assistant") && String(item.content || "").trim())
+      .slice(-8)
+      .map((item) => ({
+        role: item.role as "user" | "assistant",
+        content: String(item.content).slice(0, 2000),
+      }));
+
+    const snapshot = clientPageSnapshot(input.config ?? {}, input.selectedSection);
+    const local = designClientPageLocally({
+      message: input.message,
+      selectedSection: input.selectedSection,
+      business: brief,
+      snapshot,
+    });
+
+    const messages = this.withKnowledgeWall(
+      [
+        { role: "system", content: clientPageDesignerSystemPrompt() },
+        ...history,
+        {
+          role: "user",
+          content: JSON.stringify({
+            instruction: input.message,
+            selectedSection: input.selectedSection || "hero",
+            business: brief,
+            page: snapshot,
+            output: "JSON only with reply, configPatch, brandPatch, selectSection",
+          }),
+        },
+      ],
+      3500,
+    );
+
+    let parsed: any = null;
+    try {
+      const text = await this.chatWebsiteRaw(messages, 0.25, true);
+      parsed = this.parseJsonObject(text);
+    } catch (err: any) {
+      this.logger.warn(`Client Page AI fell back to local designer: ${err?.message || err}`);
     }
+
+    const configPatch = this.sanitizeClientPageConfigPatch(parsed?.configPatch ?? parsed?.config ?? {});
+    const brandPatch = this.sanitizeClientPageBrandPatch(parsed?.brandPatch ?? {});
+    const usedLocal = !parsed || patchesAreEmpty(configPatch, brandPatch);
+    const reply = String(
+      (usedLocal ? local.reply : parsed?.reply || parsed?.message || local.reply) || "Updated the page.",
+    ).trim();
+
+    return {
+      reply: reply.slice(0, 800),
+      configPatch: usedLocal ? this.sanitizeClientPageConfigPatch(local.configPatch) : configPatch,
+      brandPatch: usedLocal ? this.sanitizeClientPageBrandPatch(local.brandPatch) : brandPatch,
+      selectSection: typeof parsed?.selectSection === "string"
+        ? parsed.selectSection
+        : local.selectSection,
+      provider: usedLocal && !parsed ? "local" : this.getWebsiteAiConfig().provider,
+      model: usedLocal && !parsed ? "page-designer" : this.getWebsiteAiConfig().model,
+    };
   }
 
   async regenerateSection(tenantId: string, websiteId: string, pageSlug: string, sectionId: string, prompt: string) {
@@ -213,25 +344,314 @@ export class WebsiteAIService {
       where: { id: sectionId, page: { slug: pageSlug, websiteId, website: { tenantId } } },
     });
     if (!section) throw new Error("Section not found");
-    const updatedContent = this.enhanceSectionContent(section.component as string, section.content as any, prompt);
+    const updatedContent = await this.reviseSectionWithWebsiteAi(
+      section.component as string,
+      section.content as any,
+      prompt,
+      tenantId,
+    );
     return this.prisma.websiteSection.update({
       where: { id: sectionId },
       data: { content: updatedContent as any },
     });
   }
 
-  private enhanceSectionContent(component: string, content: any, prompt: string) {
-    const data = { ...content?.data ?? {} };
-    if (component === "HERO") {
-      if (prompt.includes("premium") || prompt.includes("luxury")) {
-        data.headline = `${data.headline} — Premium Experience`;
-        data.subheadline = "Where excellence meets elegance";
+  /** Website builder only — never reads the platform assistant keys. */
+  private getWebsiteAiConfig() {
+    const apiKey = this.config.get<string>("WEBSITE_AI_API_KEY")?.trim() || "";
+    const baseURL = (this.config.get<string>("WEBSITE_AI_BASE_URL")?.trim() || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "");
+    const model = this.config.get<string>("WEBSITE_AI_MODEL")?.trim() || "meta/llama-3.2-11b-vision-instruct";
+    const provider = this.config.get<string>("WEBSITE_AI_PROVIDER")?.trim() || "nvidia";
+    return { apiKey, baseURL, model, provider };
+  }
+
+  private requireWebsiteAi() {
+    const cfg = this.getWebsiteAiConfig();
+    if (!cfg.apiKey) {
+      throw new BadRequestException("Website AI is not configured. Add WEBSITE_AI_API_KEY.");
+    }
+    return cfg;
+  }
+
+  private businessBrief(data: any) {
+    const tenant = data?.tenant ?? {};
+    return {
+      name: tenant.name ?? "Your Business",
+      category: tenant.category ?? null,
+      description: tenant.description ?? null,
+      tagline: tenant.tagline ?? null,
+      phone: tenant.phone ?? null,
+      email: tenant.email ?? null,
+      address: tenant.address ?? null,
+      city: tenant.city ?? null,
+      brandColor: tenant.brandColor ?? null,
+      services: (data?.services ?? []).slice(0, 20).map((s: any) => ({
+        name: s.name,
+        description: s.description,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+      })),
+      staff: (data?.staff ?? []).slice(0, 12).map((s: any) => ({
+        name: s.name,
+        role: s.roleTitle,
+      })),
+    };
+  }
+
+  private async generateSiteWithWebsiteAi(opts: {
+    prompt: string;
+    industry?: string;
+    businessData: any;
+    fallback: { theme: any; pages: any[] };
+  }) {
+    const brief = this.businessBrief(opts.businessData);
+    const parsed = await this.chatWebsiteJson(
+      this.withKnowledgeWall([
+        {
+          role: "system",
+          content:
+            "You generate local-business websites. Follow the Website Knowledge Wall first. Return JSON only with keys theme and pages. theme: {preset, primaryColor, headingFont, bodyFont, borderRadius}. pages: array of {title, slug, isHome, seo:{metaTitle,metaDescription}, sections:[{component, sortOrder, content:{type, data}}]}. component must be one of HERO, FEATURES, SERVICES, GALLERY, TEAM, PRICING, TESTIMONIALS, FAQ, ABOUT, CONTACT, FOOTER, HEADER, CTA, BLOG, NEWSLETTER, STATS, VIDEO, MAP, TIMELINE, CUSTOM. Use the real business name, services, and contact details. No markdown.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            prompt: opts.prompt,
+            industry: opts.industry ?? null,
+            business: brief,
+            exampleShape: {
+              theme: opts.fallback.theme,
+              pageSlugs: opts.fallback.pages.map((p: any) => p.slug),
+            },
+          }),
+        },
+      ]),
+      0.4,
+    );
+    return parsed;
+  }
+
+  private mergeGeneratedSite(fallback: { theme: any; pages: any[] }, ai: any) {
+    const theme = {
+      ...fallback.theme,
+      ...(ai?.theme && typeof ai.theme === "object" ? ai.theme : {}),
+    };
+    const aiPages = Array.isArray(ai?.pages) ? ai.pages : [];
+    if (!aiPages.length) {
+      throw new BadRequestException("Website AI did not return any pages.");
+    }
+    const pages = aiPages
+      .map((page: any, pageIndex: number) => this.normalizePage(page, pageIndex))
+      .filter(Boolean);
+    if (!pages.length) {
+      throw new BadRequestException("Website AI returned invalid page data.");
+    }
+    if (!pages.some((p: any) => p.isHome)) pages[0].isHome = true;
+    return { theme, pages, provider: this.getWebsiteAiConfig().provider, model: this.getWebsiteAiConfig().model };
+  }
+
+  private normalizePage(page: any, pageIndex: number) {
+    if (!page || typeof page !== "object") return null;
+    const title = String(page.title || "Page").slice(0, 80);
+    const slug = String(page.slug || title)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || `page-${pageIndex + 1}`;
+    const sections = Array.isArray(page.sections)
+      ? page.sections
+          .map((section: any, index: number) => this.normalizeSection(section, index))
+          .filter(Boolean)
+      : [];
+    return {
+      title,
+      slug,
+      isHome: Boolean(page.isHome) || slug === "home",
+      seo: {
+        metaTitle: String(page.seo?.metaTitle || title).slice(0, 120),
+        metaDescription: String(page.seo?.metaDescription || title).slice(0, 300),
+      },
+      sections,
+    };
+  }
+
+  private normalizeSection(section: any, index: number) {
+    if (!section || typeof section !== "object") return null;
+    const component = String(section.component || "CUSTOM").toUpperCase();
+    if (!WEBSITE_COMPONENTS.has(component)) return null;
+    return {
+      component,
+      sortOrder: Number.isFinite(section.sortOrder) ? section.sortOrder : index,
+      content: section.content && typeof section.content === "object"
+        ? section.content
+        : { type: component.toLowerCase(), data: {} },
+      styles: section.styles && typeof section.styles === "object" ? section.styles : undefined,
+    };
+  }
+
+  private async reviseSectionWithWebsiteAi(component: string, content: any, prompt: string, tenantId?: string) {
+    const parsed = await this.chatWebsiteJson(
+      this.withKnowledgeWall([
+        {
+          role: "system",
+          content:
+            "You edit one website section. Follow the Website Knowledge Wall first. Return JSON only: {\"content\":{\"type\":\"string\",\"data\":{...}}}. Keep the same structure, apply the user's change, and do not add markdown.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ component, currentContent: content, prompt }),
+        },
+      ]),
+      0.3,
+    );
+    const next = parsed?.content && typeof parsed.content === "object" ? parsed.content : parsed;
+    if (!next || typeof next !== "object") {
+      throw new BadRequestException("Website AI did not return updated section content.");
+    }
+    const payload = next as Record<string, unknown>;
+    return payload.type ? payload : { ...(content ?? {}), data: payload };
+  }
+
+  private knowledgeSystemContent(): string | null {
+    const composed = composeKnowledgeWallPrompt(resolveKnowledgeWall(undefined));
+    return composed ? composed.slice(0, 20000) : null;
+  }
+
+  private withKnowledgeWall(
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+    maxChars = 20000,
+  ) {
+    const wall = this.knowledgeSystemContent();
+    if (!wall) return messages;
+    const clipped = wall.slice(0, maxChars);
+    const first = messages[0];
+    if (first?.role === "system") {
+      return [{ ...first, content: `${clipped}\n\n${first.content}` }, ...messages.slice(1)];
+    }
+    return [{ role: "system" as const, content: clipped }, ...messages];
+  }
+
+  private sanitizeClientPageConfigPatch(raw: unknown) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const source = raw as Record<string, unknown>;
+    const allowed = new Set([
+      "heroHeading", "heroDescription", "heroBadge", "heroButtonLabel", "bookingButtonLabel",
+      "featuredTitle", "introHeading", "introBody", "ctaHeading", "ctaBody",
+      "offerTitle", "offerBody", "offerCta", "secondaryCta", "marqueeText", "videoUrl",
+      "heroVideoSrc", "businessType", "heroMode", "heroAlign", "heroHeight", "navStyle",
+      "heroOverlay", "showSearch", "pinChrome", "marqueeEnabled", "animations",
+      "hoverEffects", "autoSlide", "socialAnimations", "slideMs", "serviceColumns",
+      "faqs", "testimonials", "galleryUrls", "sectionUi", "sections",
+    ]);
+    const patch: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (!allowed.has(key) || value === undefined) continue;
+      if (key === "sections" && Array.isArray(value)) {
+        patch.sections = value
+          .filter((item) => item && typeof item === "object" && typeof (item as any).id === "string")
+          .slice(0, 30)
+          .map((item: any) => ({
+            id: String(item.id).slice(0, 40),
+            enabled: item.enabled !== false,
+            hidden: Boolean(item.hidden),
+            ...(typeof item.title === "string" ? { title: item.title.slice(0, 80) } : {}),
+          }));
+        continue;
       }
-      if (prompt.includes("dark")) data.styles = { ...data.styles, darkOverlay: true };
+      if (key === "sectionUi" && value && typeof value === "object" && !Array.isArray(value)) {
+        patch.sectionUi = Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .slice(0, 30)
+            .map(([id, ui]) => [
+              String(id).slice(0, 40),
+              ui && typeof ui === "object" && !Array.isArray(ui) ? ui : {},
+            ]),
+        );
+        continue;
+      }
+      if (typeof value === "string") {
+        patch[key] = value.slice(0, 2000);
+        continue;
+      }
+      patch[key] = value;
     }
-    if (prompt.includes("seo") && data.metaTitle) {
-      // SEO improvements would call the AI model
+    return patch;
+  }
+
+  private sanitizeClientPageBrandPatch(raw: unknown) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const source = raw as Record<string, unknown>;
+    const allowed = new Set(["brandColor", "secondaryColor", "backgroundColor", "textColor", "tagline", "description", "brandName"]);
+    const patch: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (!allowed.has(key) || typeof value !== "string") continue;
+      patch[key] = value.slice(0, 240);
     }
-    return { ...content, data };
+    return patch;
+  }
+
+  private async chatWebsiteRaw(
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+    temperature: number,
+    jsonMode = false,
+  ): Promise<string> {
+    const { apiKey, baseURL, model, provider } = this.requireWebsiteAi();
+    this.logger.log(`Website AI request via ${provider} (${model})`);
+
+    const body: Record<string, unknown> = {
+      model,
+      messages,
+      temperature,
+      max_tokens: 4096,
+      stream: false,
+    };
+    if (jsonMode) body.response_format = { type: "json_object" };
+
+    const res = await fetch(`${baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const raw = await res.text();
+    if (!res.ok && jsonMode) {
+      this.logger.warn(`Website AI JSON mode HTTP ${res.status}, retrying without response_format`);
+      return this.chatWebsiteRaw(messages, temperature, false);
+    }
+    if (!res.ok) {
+      this.logger.warn(`Website AI HTTP ${res.status}: ${raw.slice(0, 300)}`);
+      throw new BadRequestException(`Website AI request failed (${res.status}).`);
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new BadRequestException("Website AI returned an unreadable response.");
+    }
+
+    const text = String(parsed?.choices?.[0]?.message?.content || "").trim();
+    if (!text) {
+      throw new BadRequestException("Website AI returned an empty response.");
+    }
+    return text;
+  }
+
+  private async chatWebsiteJson(
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+    temperature: number,
+  ) {
+    return this.parseJsonObject(await this.chatWebsiteRaw(messages, temperature));
+  }
+
+  private parseJsonObject(text: string) {
+    try {
+      return parseLooseJsonObject(text);
+    } catch {
+      throw new BadRequestException("Website AI returned invalid JSON.");
+    }
   }
 }

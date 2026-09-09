@@ -98,17 +98,17 @@ export const DEFAULT_AUTOMATIONS = {
 
 export const DEFAULT_PAGE_SECTIONS = [
   { id: 'hero', enabled: true },
-  { id: 'about', enabled: true },
+  { id: 'intro', enabled: true },
   { id: 'services', enabled: true },
-  { id: 'staff', enabled: true },
-  { id: 'gallery', enabled: false },
+  { id: 'featured', enabled: true },
+  { id: 'about', enabled: true },
+  { id: 'offers', enabled: true },
+  { id: 'gallery', enabled: true },
   { id: 'testimonials', enabled: true },
-  { id: 'membership', enabled: false },
-  { id: 'loyalty', enabled: false },
-  { id: 'booking', enabled: true },
   { id: 'faq', enabled: true },
   { id: 'contact', enabled: true },
   { id: 'map', enabled: true },
+  { id: 'cta', enabled: true },
   { id: 'footer', enabled: true },
 ] as const;
 

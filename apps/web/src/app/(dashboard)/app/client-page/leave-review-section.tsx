@@ -33,11 +33,19 @@ export function LeaveReviewSection({
   slug,
   brandColor,
   title,
+  body,
+  writeLabel,
+  videoLabel,
+  showRating = true,
   mode = "published",
 }: {
   slug: string;
   brandColor: string;
   title?: string;
+  body?: string;
+  writeLabel?: string;
+  videoLabel?: string;
+  showRating?: boolean;
   mode?: "published" | "preview";
 }) {
   const preview = mode === "preview";
@@ -66,22 +74,24 @@ export function LeaveReviewSection({
   const maxStar = Math.max(1, breakdown[1], breakdown[2], breakdown[3], breakdown[4], breakdown[5]);
 
   return (
-    <section id="portal-reviews" className="scroll-mt-8 space-y-4">
-      <div className="rounded-[28px] bg-white/80 p-6 ring-1 ring-[rgba(28,20,16,.08)] sm:p-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a5a32]">From you</p>
-        <h3 className="mt-2 font-[family-name:var(--font-lounge-display)] text-3xl tracking-[-0.04em] text-[#1c1410]">
+    <section id="portal-reviews" className="mx-auto max-w-[1280px] scroll-mt-8 space-y-4 px-5 py-10 sm:px-8 lg:px-10">
+      <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+        <p className="text-[13px] font-medium text-[color:var(--site-accent,#2563EB)]">From you</p>
+        <h3 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[color:var(--site-ink,#171717)]">
           {title || "How did we do?"}
         </h3>
-        <p className="mt-2 text-sm leading-6 text-[#1c1410]/55">
-          A short note or a video helps the next guest — we publish after a quick look.
+        <p className="mt-2 text-sm leading-6 text-black/55">
+          {body?.trim() || "A short note or a video helps the next guest — we publish after a quick look."}
         </p>
 
+        {showRating ? (
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <Stars value={page?.averageRating ? Math.round(page.averageRating) : 5} color={brandColor} size={22} />
           <span className="text-sm font-semibold">
             {total ? `${page?.averageRating?.toFixed(1) ?? "—"} · ${total} review${total === 1 ? "" : "s"}` : "Be the first to leave a note"}
           </span>
         </div>
+        ) : null}
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button
@@ -90,15 +100,15 @@ export function LeaveReviewSection({
             className="rounded-full px-5 py-3 text-sm font-semibold text-white"
             style={{ backgroundColor: brandColor }}
           >
-            Write a note
+            {writeLabel?.trim() || "Write a note"}
           </button>
           <button
             type="button"
             onClick={() => { setSuccess(null); setModal("video"); }}
-            className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold ring-1 ring-[rgba(28,20,16,.12)]"
+            className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold ring-1 ring-black/10"
           >
             <Video className="h-4 w-4 stroke-[1.5]" />
-            Send a video
+            {videoLabel?.trim() || "Send a video"}
           </button>
         </div>
 
@@ -121,8 +131,8 @@ export function LeaveReviewSection({
       </div>
 
       {videos.length ? (
-        <div className="rounded-[28px] bg-white/80 p-6 ring-1 ring-[rgba(28,20,16,.08)] sm:p-8">
-          <h4 className="font-[family-name:var(--font-lounge-display)] text-xl">On video</h4>
+        <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+          <h4 className="text-xl font-semibold tracking-[-0.03em]">On video</h4>
           <div className="mt-4 flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:overflow-visible">
             {videos.map((review) => (
               <PublicReviewCard key={review.id} review={review} brandColor={brandColor} video />
@@ -132,8 +142,8 @@ export function LeaveReviewSection({
       ) : null}
 
       {texts.length ? (
-        <div className="rounded-[28px] bg-white/80 p-6 ring-1 ring-[rgba(28,20,16,.08)] sm:p-8">
-          <h4 className="font-[family-name:var(--font-lounge-display)] text-xl">From other guests</h4>
+        <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+          <h4 className="text-xl font-semibold tracking-[-0.03em]">From other guests</h4>
           <div className="mt-4 grid gap-3">
             {texts.map((review) => (
               <PublicReviewCard key={review.id} review={review} brandColor={brandColor} />
@@ -184,7 +194,7 @@ function PublicReviewCard({
 }) {
   const seed = review.customerId || review.authorName;
   return (
-    <article className={`min-w-[16rem] rounded-[24px] bg-[#f6efe4] p-4 ${video ? "sm:min-w-0" : ""}`}>
+    <article className={`min-w-[16rem] rounded-[24px] bg-black/[0.04] p-4 ${video ? "sm:min-w-0" : ""}`}>
       {video && review.mediaUrl ? (
         <ReviewVideoPlayer src={review.mediaUrl} poster={review.thumbnailUrl} aspect="portrait" className="mb-3" />
       ) : null}

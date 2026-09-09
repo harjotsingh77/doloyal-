@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, CalendarDays, Copy, Eye, Gift, GripVertical, Image as ImageIcon, LayoutTemplate, MapPin, Monitor, Palette, Plus, Save, Smartphone, Sparkles, Star, Trash2, Users, Check, RotateCcw } from "lucide-react";
+import { ArrowLeft, CalendarDays, Copy, ExternalLink, Eye, Gift, GripVertical, Image as ImageIcon, LayoutTemplate, MapPin, Monitor, Palette, Plus, Save, Smartphone, Sparkles, Star, Trash2, Users, Check, RotateCcw, Video, Megaphone, CircleHelp, Share2, Map, MessageSquare } from "lucide-react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, Input, Label, Switch, cn } from "@doloyal/ui";
 import type { BookingLink, Tenant, PublicService } from "@doloyal/shared";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getApiBaseUrl } from "@/lib/api-base";
-import { getBusinessDisplayName, hasCustomLogo, PAGE_SURFACE_DEFAULTS } from "@/lib/branding";
+import { BRAND_COLOR_DEFAULTS, getBusinessDisplayName, hasCustomLogo, hexToRgba, PAGE_SURFACE_DEFAULTS, readableTextColor, resolveBrandPrimary, shadeHex } from "@/lib/branding";
 import { type MasterConfig } from "./master-template";
 import { ClientPageRenderer } from "./client-page-renderer";
 import { PreviewViewport, PREVIEW_VIEWPORTS, type PreviewDevice } from "./preview-viewport";
@@ -15,32 +15,41 @@ import { FRIENDLY_TITLES, PORTAL_TO_SECTION } from "./portal-shared";
 import { PublishShareDialog, customerPageUrl } from "./publish-share-dialog";
 import { ImageUploadField } from "../settings/settings-ui";
 import { brandingGaps, liveCopy } from "./client-page-brand";
+import { siteCopy } from "./website-copy";
+import { SectionInspector } from "./section-inspector";
 import { useLiveTenant } from "./use-live-tenant";
+import { useCommerceLive } from "@/lib/data-sync";
 
 type SectionId = string;
 type Section = { id: SectionId; enabled: boolean; hidden?: boolean; title?: string };
 type Config = { sections: Section[]; heroHeading?: string; heroDescription?: string; heroBadge?: string; showSearch?: boolean; featuredTitle?: string; draft?: boolean; clientPageCreated?: boolean; [key: string]: unknown };
 
 const LIBRARY: Array<[SectionId, string, React.ElementType, string]> = [
-  ["hero", "Home / Hero", LayoutTemplate, "Highlights your brand and helps customers get started."],
-  ["services", "Categories", Sparkles, "Service categories with counts."],
-  ["featured", "Featured treatments", Sparkles, "Grid of services pulled from your Services."],
-  ["booking", "Booking", CalendarDays, "Let customers discover availability and book."],
+  ["hero", "Hero", LayoutTemplate, "Full-width image, video, or slider."],
+  ["intro", "Welcome", Sparkles, "Photo and a short introduction."],
+  ["services", "Services / menu", Sparkles, "Live catalog from your products."],
+  ["featured", "Highlights", Sparkles, "Featured products or services."],
+  ["about", "Our story", ImageIcon, "Story, stats, and reputation."],
+  ["offers", "Offers", Megaphone, "A promotional card for this week."],
+  ["gallery", "Gallery", ImageIcon, "Photos of the space, work, or menu."],
+  ["video", "Video", Video, "YouTube, Vimeo, or a hosted clip."],
+  ["testimonials", "Testimonials", MessageSquare, "Guest quotes and ratings."],
+  ["social", "Social", Share2, "Follow links and social proof."],
+  ["faq", "FAQ", CircleHelp, "Answers to common questions."],
+  ["contact", "Contact", MapPin, "Call, email, maps, and booking."],
+  ["map", "Map", Map, "Directions and an embedded map."],
+  ["cta", "Final CTA", Sparkles, "Closing banner before the footer."],
+  ["booking", "Your visits", CalendarDays, "Upcoming appointments after sign-in."],
   ["loyalty", "Loyalty", Sparkles, "Points and progress."],
-  ["rewards", "Rewards", Gift, "Rewards customers can redeem."],
+  ["rewards", "Rewards", Gift, "Rewards guests can redeem."],
   ["membership", "Membership", Users, "Member perks and plans."],
-  ["referrals", "Referrals", Users, "Help customers share your business."],
-  ["reviews", "Reviews", Star, "Leave a Doloyal review or review on Google."],
-  ["about", "About business", ImageIcon, "Your story and highlights."],
-  ["contact", "Contact", MapPin, "Make it easy to reach you."],
-  ["footer", "Footer", LayoutTemplate, "Links and business details."],
-  ["gallery", "Gallery", ImageIcon, "Photos of your work or space."],
-  ["offers", "Featured offers", Gift, "Campaigns and special offers."],
-  ["faq", "FAQ", LayoutTemplate, "Answer common questions."],
+  ["referrals", "Referrals", Users, "Invite a friend."],
+  ["reviews", "Reviews", Star, "Notes and video reviews."],
+  ["hours", "Hours", CalendarDays, "When you are open."],
+  ["footer", "Footer", LayoutTemplate, "Links, contact, and social."],
 ];
 
 const SECTIONS_META: Record<string, { label: string; icon: React.ElementType }> = Object.fromEntries(LIBRARY.map(([id, label, icon]) => [id, { label, icon }]));
-const DEFAULT_SECTIONS: SectionId[] = ["hero", "services", "featured", "booking", "rewards", "membership", "referrals", "reviews"];
 
 const DEVICE_ICONS: Record<PreviewDevice, React.ElementType> = { desktop: Monitor, tablet: LayoutTemplate, mobile: Smartphone };
 
@@ -56,6 +65,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
   const [saving, setSaving] = React.useState(false);
   const [hasUnsaved, setHasUnsaved] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
+  const [customerPreview, setCustomerPreview] = React.useState(false);
   const [services, setServices] = React.useState<PublicService[]>([]);
   const [servicesLoading, setServicesLoading] = React.useState(true);
 
@@ -63,18 +73,28 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
 
   React.useEffect(() => { setHasUnsaved(JSON.stringify(config) !== JSON.stringify(initialConfig)); }, [config, initialConfig]);
 
-  React.useEffect(() => {
-    async function loadServices() {
-      if (!link?.slug) { setServices([]); setServicesLoading(false); return; }
-      try {
-        const res = await fetch(`${BASE_URL}/public/book/${link.slug}/services`);
-        const json = await res.json();
-        setServices((json.data ?? []) as PublicService[]);
-      } catch { setServices([]); }
-      finally { setServicesLoading(false); }
+  const loadServices = React.useCallback(async () => {
+    if (!link?.slug) {
+      setServices([]);
+      setServicesLoading(false);
+      return;
     }
-    loadServices();
+    try {
+      const res = await fetch(`${BASE_URL}/public/book/${link.slug}/services`);
+      const json = await res.json();
+      setServices((json.data ?? []) as PublicService[]);
+    } catch {
+      setServices([]);
+    } finally {
+      setServicesLoading(false);
+    }
   }, [link?.slug, BASE_URL]);
+
+  React.useEffect(() => {
+    void loadServices();
+  }, [loadServices]);
+
+  useCommerceLive(["products", "orders", "customers"], () => void loadServices(), { publicSlug: link?.slug });
 
   const sections = config.sections.filter((item) => item.enabled !== false && !item.hidden);
   const allSections = config.sections;
@@ -86,7 +106,22 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
   }, []);
   const mutate = (update: (items: Section[]) => Section[]) => setConfig((old) => ({ ...old, sections: update(old.sections) }));
   const updateSection = (id: string, patch: Partial<Section>) => mutate((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
-  const updateConfig = (patch: Partial<Config>) => setConfig((old) => ({ ...old, ...patch }));
+  const updateConfig = (patch: Partial<Config>) => setConfig((old) => {
+    const next = { ...old, ...patch };
+    if (patch.sectionUi && typeof patch.sectionUi === "object" && !Array.isArray(patch.sectionUi)) {
+      const previous = (old.sectionUi && typeof old.sectionUi === "object" ? old.sectionUi : {}) as Record<string, unknown>;
+      const incoming = patch.sectionUi as Record<string, unknown>;
+      const merged: Record<string, unknown> = { ...previous };
+      for (const [id, value] of Object.entries(incoming)) {
+        merged[id] = {
+          ...(typeof previous[id] === "object" && previous[id] ? previous[id] as object : {}),
+          ...(typeof value === "object" && value ? value as object : {}),
+        };
+      }
+      next.sectionUi = merged;
+    }
+    return next;
+  });
 
   const add = (id: SectionId) => {
     const exists = config.sections.find((item) => item.id === id);
@@ -102,7 +137,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
     setDragged(null);
   };
 
-  const persist = async (publish = false) => {
+  const persistWith = async (next: Config, publish = false) => {
     if (!link?.id) {
       toast.error("Your customer page isn’t ready yet. Refresh and try again.");
       return;
@@ -111,12 +146,13 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
     try {
       await flush();
       await onSave({
-        ...config,
+        ...next,
         clientPageCreated: true,
-        heroHeading: liveCopy(config.heroHeading as string) || undefined,
-        heroDescription: liveCopy(config.heroDescription as string) || undefined,
-        heroBadge: liveCopy(config.heroBadge as string) || undefined,
+        heroHeading: liveCopy(next.heroHeading as string) || undefined,
+        heroDescription: liveCopy(next.heroDescription as string) || undefined,
+        heroBadge: liveCopy(next.heroBadge as string) || undefined,
         draft: !publish,
+        websiteVersion: 2,
       }, publish);
       setHasUnsaved(false);
       if (publish) setShareOpen(true);
@@ -127,16 +163,29 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
     }
   };
 
+  const persist = async (publish = false) => persistWith(config, publish);
+
   const heroHeading = liveCopy(config.heroHeading as string);
   const heroDescription = liveCopy(config.heroDescription as string);
   const heroBadge = liveCopy(config.heroBadge as string);
   const featuredTitle = (config.featuredTitle as string) ?? FRIENDLY_TITLES.featured;
-  const showSearch = (config.showSearch as boolean) ?? true;
-  const pinChrome = (config.pinChrome as boolean) ?? false;
-  const heroButtonLabel = (config.heroButtonLabel as string) ?? "Book Now";
-  const bookingButtonLabel = (config.bookingButtonLabel as string) ?? "Book a time";
+  const showSearch = (config.showSearch as boolean) ?? false;
+  const pinChrome = (config.pinChrome as boolean) ?? true;
+  const copy = siteCopy((config.businessType as MasterConfig["businessType"]) || "custom");
+  const heroButtonLabel = (config.heroButtonLabel as string) ?? copy.book;
+  const bookingButtonLabel = (config.bookingButtonLabel as string) ?? copy.book;
   const displayName = getBusinessDisplayName(tenant);
   const gaps = brandingGaps(tenant);
+  const brandPrimary = resolveBrandPrimary(draft.brandColor);
+  const brandHover = shadeHex(brandPrimary, -0.14);
+  const brandSoft = hexToRgba(brandPrimary, 0.14);
+  const brandFg = readableTextColor(brandPrimary);
+  const chromeStyle = {
+    ["--cp-brand" as string]: brandPrimary,
+    ["--cp-brand-hover" as string]: brandHover,
+    ["--cp-brand-soft" as string]: brandSoft,
+    ["--cp-brand-fg" as string]: brandFg,
+  };
 
   React.useEffect(() => {
     if (selected !== "hero") return;
@@ -163,7 +212,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
     address: tenant?.address ?? null,
     phone: tenant?.phone ?? null,
     email: tenant?.email ?? null,
-    brandColor: tenant?.brandColor ?? null,
+    brandColor: resolveBrandPrimary(draft.brandColor ?? tenant?.brandColor),
     secondaryColor: tenant?.secondaryColor ?? null,
     backgroundColor: tenant?.backgroundColor ?? null,
     textColor: tenant?.textColor ?? null,
@@ -178,17 +227,25 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
         ? `https://search.google.com/local/writereview?placeid=${encodeURIComponent(tenant.googlePlaceId)}`
         : tenant?.socialLinks?.googleBusiness)
       || null,
+    instagram: tenant?.socialLinks?.instagram ?? null,
+    facebook: tenant?.socialLinks?.facebook ?? null,
+    whatsapp: tenant?.whatsapp ?? tenant?.socialLinks?.whatsapp ?? null,
+    website: tenant?.website ?? null,
+    mapsUrl: tenant?.mapsUrl ?? null,
     businessHours: tenant?.businessHours as any,
     pageConfig: null,
     seo: null,
     services: [],
     staff: [],
     bookingLink: { id: link?.id ?? "preview", slug: link?.slug ?? "preview", name: link?.name ?? null } as any,
-  } as any), [tenant, link]);
+  } as any), [tenant, link, draft.brandColor]);
 
   const masterConfig: MasterConfig = React.useMemo(() => {
     const sectionTitles: Record<string, string> = {};
     for (const item of config.sections) if (item.title?.trim()) sectionTitles[item.id] = item.title;
+    const galleryUrls = typeof config.galleryUrls === "string"
+      ? String(config.galleryUrls).split(/\n+/).map((url) => url.trim()).filter(Boolean)
+      : Array.isArray(config.galleryUrls) ? config.galleryUrls as string[] : undefined;
     return {
       heroHeading,
       heroDescription,
@@ -200,15 +257,71 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
       featuredTitle,
       sectionTitles,
       visibleSections: sections.map((s) => s.id),
-      brandColor: tenant?.brandColor ?? undefined,
+      brandColor: brandPrimary,
+      businessType: (config.businessType as MasterConfig["businessType"]) || "custom",
+      heroMode: (config.heroMode as MasterConfig["heroMode"]) || "image",
+      heroVideoSrc: (config.heroVideoSrc as string) || undefined,
+      heroOverlay: typeof config.heroOverlay === "number" ? config.heroOverlay : undefined,
+      heroAlign: config.heroAlign === "center" ? "center" : "left",
+      heroHeight: (config.heroHeight as MasterConfig["heroHeight"]) || "default",
+      secondaryCta: (config.secondaryCta as string) || undefined,
+      autoSlide: (config.autoSlide as boolean) ?? true,
+      slideMs: typeof config.slideMs === "number" ? config.slideMs : 5500,
+      marqueeEnabled: (config.marqueeEnabled as boolean) ?? false,
+      marqueeText: (config.marqueeText as string) || undefined,
+      animations: (config.animations as boolean) ?? true,
+      hoverEffects: (config.hoverEffects as boolean) ?? true,
+      navStyle: (config.navStyle as MasterConfig["navStyle"]) || "blur",
+      socialAnimations: (config.socialAnimations as boolean) ?? true,
+      serviceColumns: config.serviceColumns === 2 || config.serviceColumns === 4 ? config.serviceColumns : 3,
+      introHeading: (config.introHeading as string) || undefined,
+      introBody: (config.introBody as string) || undefined,
+      ctaHeading: (config.ctaHeading as string) || undefined,
+      ctaBody: (config.ctaBody as string) || undefined,
+      videoUrl: (config.videoUrl as string) || undefined,
+      galleryUrls,
+      offerTitle: (config.offerTitle as string) || undefined,
+      offerBody: (config.offerBody as string) || undefined,
+      offerCta: (config.offerCta as string) || undefined,
+      faqs: Array.isArray(config.faqs) ? config.faqs as MasterConfig["faqs"] : undefined,
+      testimonials: Array.isArray(config.testimonials) ? config.testimonials as MasterConfig["testimonials"] : undefined,
+      heroSlides: Array.isArray(config.heroSlides)
+        ? config.heroSlides as MasterConfig["heroSlides"]
+        : (config.heroSlide2
+          ? [
+              { id: "cover", kind: "image" as const, src: tenant?.coverBannerUrl || "" },
+              { id: "two", kind: /\.(mp4|webm|mov)/i.test(String(config.heroSlide2)) ? "video" as const : "image" as const, src: String(config.heroSlide2) },
+            ]
+          : undefined),
+      sectionUi: (config.sectionUi as MasterConfig["sectionUi"]) || undefined,
+      websiteVersion: 2,
     };
-  }, [config, heroHeading, heroDescription, heroBadge, heroButtonLabel, bookingButtonLabel, showSearch, pinChrome, featuredTitle, tenant?.brandColor, sections]);
+  }, [config, heroHeading, heroDescription, heroBadge, heroButtonLabel, bookingButtonLabel, showSearch, pinChrome, featuredTitle, brandPrimary, sections]);
 
   const slugUrl = link?.slug ? `${link.slug}.doloyal.com` : "your-business.doloyal.com";
   const displayUrl = link?.slug ? customerPageUrl(link.slug) : "/book/preview";
 
+  if (customerPreview) {
+    return (
+      <div className="fixed inset-0 z-[200] overflow-y-auto bg-white">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black/10 bg-white/90 px-4 py-3 backdrop-blur-md">
+          <p className="text-sm font-semibold">Website preview</p>
+          <Button size="sm" variant="secondary" onClick={() => setCustomerPreview(false)}>Exit preview</Button>
+        </div>
+        <ClientPageRenderer
+          business={businessInfo}
+          services={servicesLoading ? [] : services}
+          currency={businessInfo.currency}
+          config={masterConfig}
+          mode="published"
+          onBook={() => toast.message("Preview: customers will start the booking flow here.")}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] min-h-[680px] flex-col bg-[#f4f7f8] text-[#17322c] lg:-m-8">
+    <div className="-m-4 flex h-[calc(100vh-3.5rem)] min-h-[680px] flex-col bg-[#f4f7f8] text-[#17322c] lg:-m-8" style={chromeStyle}>
       <header className="flex shrink-0 items-center justify-between border-b border-[#dbe6e2] bg-white px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 items-center gap-2">
           <button onClick={() => history.back()} aria-label="Back" className="grid h-8 w-8 place-items-center rounded-lg text-[#5c756e] hover:bg-[#f1f5f3]"><ArrowLeft className="h-4 w-4" /></button>
@@ -229,23 +342,24 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
                   onClick={() => setScreen(item)}
                   aria-pressed={active}
                   title={`${PREVIEW_VIEWPORTS[item].label} preview — ${PREVIEW_VIEWPORTS[item].width} × ${PREVIEW_VIEWPORTS[item].height}`}
-                  className={cn("grid h-7 w-8 place-items-center rounded-md transition", active ? "bg-white text-[#176b5c] shadow-sm" : "text-[#5c756e] hover:text-[#17322c]")}
+                  className={cn("grid h-7 w-8 place-items-center rounded-md transition", active ? "bg-white text-[color:var(--cp-brand)] shadow-sm" : "text-[#5c756e] hover:text-[#17322c]")}
                 >
                   <Icon className="h-4 w-4" />
                 </button>
               );
             })}
           </div>
-          <Button variant="ghost" size="sm" onClick={() => window.open(displayUrl, "_blank")} className="hidden sm:flex"><Eye className="h-4 w-4" /> Preview</Button>
+          <button type="button" onClick={() => setCustomerPreview(true)} aria-label="Preview website" title="Preview website" className="hidden h-8 w-8 place-items-center rounded-lg text-[#5c756e] hover:bg-[#f1f5f3] sm:grid"><Eye className="h-4 w-4" /></button>
+          <button type="button" onClick={() => window.open(displayUrl, "_blank")} aria-label="Open page" title="Open page" className="hidden h-8 w-8 place-items-center rounded-lg text-[#5c756e] hover:bg-[#f1f5f3] lg:grid"><ExternalLink className="h-4 w-4" /></button>
           <Button variant="secondary" size="sm" loading={saving} onClick={() => persist(false)} className="hidden sm:flex"><Save className="h-4 w-4" /> Save</Button>
-          <Button size="sm" loading={saving} onClick={() => persist(true)} className="bg-[#176b5c] hover:bg-[#115548]">Publish</Button>
+          <Button size="sm" loading={saving} onClick={() => persist(true)} className="bg-[var(--cp-brand)] text-[color:var(--cp-brand-fg)] hover:bg-[var(--cp-brand-hover)]">Publish</Button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {/* LEFT */}
         <aside className="hidden w-64 shrink-0 overflow-y-auto border-r border-[#dbe6e2] bg-white p-4 lg:block">
-          <Button onClick={() => setLibrary(true)} className="w-full bg-[#176b5c] hover:bg-[#115548]">Add section</Button>
+          <Button onClick={() => setLibrary(true)} className="w-full bg-[var(--cp-brand)] text-[color:var(--cp-brand-fg)] hover:bg-[var(--cp-brand-hover)]">Add section</Button>
           <p className="mt-6 px-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[#788d86]">Your page</p>
           <div className="mt-2 space-y-1">
             {allSections.filter(s => s.enabled !== false).map((item) => {
@@ -259,7 +373,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => reorder(item.id)}
                   onClick={() => selectSection(item.id)}
-                  className={cn("flex w-full items-center gap-2 rounded-xl px-2 py-2.5 text-left text-sm", selected === item.id ? "bg-[#e2f1ec] text-[#176b5c]" : "hover:bg-[#f4f7f6]", hidden && "opacity-50")}
+                  className={cn("flex w-full items-center gap-2 rounded-xl px-2 py-2.5 text-left text-sm", selected === item.id ? "bg-[var(--cp-brand-soft)] text-[color:var(--cp-brand)]" : "hover:bg-[#f4f7f6]", hidden && "opacity-50")}
                 >
                   <GripVertical className="h-4 w-4 shrink-0 text-[#9badA7] cursor-grab" />
                   <Icon className="h-4 w-4 shrink-0" />
@@ -303,7 +417,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
           </PreviewViewport>
           {sections.length === 0 && (
             <div className="shrink-0 border-t border-[#dbe6e2] bg-white px-4 py-2.5 text-center text-xs text-black/55">
-              Every section is hidden — <button onClick={() => setLibrary(true)} className="font-semibold text-[#176b5c] underline-offset-2 hover:underline">add a section</button> to build your page.
+              Every section is hidden — <button onClick={() => setLibrary(true)} className="font-semibold text-[color:var(--cp-brand)] underline-offset-2 hover:underline">add a section</button> to build your page.
             </div>
           )}
         </main>
@@ -314,76 +428,24 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
           <h2 className="mt-1 flex items-center gap-2 text-lg font-semibold">{React.createElement(SECTIONS_META[selected]?.icon ?? LayoutTemplate, { className: "h-5 w-5 text-black/60" })} {SECTIONS_META[selected]?.label ?? selected}</h2>
 
           <div className="mt-6 space-y-5">
-            {selected === "hero" && (
-              <>
-                <p className="text-xs leading-5 text-black/50">These update the live preview as you type. Brand fields also save to Brand Identity.</p>
-                <ImageUploadField
-                  label="Logo"
-                  hint="Shown in the header. PNG or JPG, square works best."
-                  value={draft.logoUrl}
-                  onChange={(url) => patchBrand({ logoUrl: url })}
-                />
-                <ImageUploadField
-                  label="Cover photo"
-                  hint="Hero background. Leave empty for a white page."
-                  value={draft.coverBannerUrl}
-                  onChange={(url) => patchBrand({ coverBannerUrl: url })}
-                  aspect="banner"
-                />
-                <Field label="Brand name" value={draft.brandName} onChange={(v) => patchBrand({ brandName: v })} placeholder="Your brand name" />
-                <Field label="Tagline" value={draft.tagline} onChange={(v) => patchBrand({ tagline: v })} placeholder="Short line under your name" />
-                <Field label="Description" value={draft.description} onChange={(v) => patchBrand({ description: v })} multiline placeholder="Tell customers who you are" />
-                <Field label="Badge override (optional)" value={heroBadge} onChange={(v) => updateConfig({ heroBadge: v })} placeholder={tenant?.tagline || "Shown above the heading"} />
-                <Field label="Heading override (optional)" value={heroHeading} onChange={(v) => updateConfig({ heroHeading: v })} placeholder={displayName} />
-                <Field label="Description override (optional)" value={heroDescription} onChange={(v) => updateConfig({ heroDescription: v })} multiline placeholder="Leave empty to use your brand description" />
-                <Field label="Button label" value={heroButtonLabel} onChange={(v) => updateConfig({ heroButtonLabel: v })} />
-                <label className="flex items-center justify-between rounded-xl border border-black/10 bg-[#f8fafb] px-3 py-3 text-sm font-medium">Show search <Switch checked={showSearch} onCheckedChange={(c) => updateConfig({ showSearch: c })} /></label>
-                <label className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-[#f8fafb] px-3 py-3 text-sm font-medium">
-                  <span className="min-w-0">
-                    Keep header and menu fixed
-                    <span className="mt-0.5 block text-xs font-normal text-black/45">Stays on screen while customers scroll</span>
-                  </span>
-                  <Switch checked={pinChrome} onCheckedChange={(c) => updateConfig({ pinChrome: c })} />
-                </label>
-              </>
-            )}
-            {selected === "services" && (
-              <>
-                <Field label="Section heading" value={current.title ?? FRIENDLY_TITLES.services} onChange={(v) => updateSection("services", { title: v })} />
-                <Field label="Treatments heading" value={featuredTitle} onChange={(v) => updateConfig({ featuredTitle: v })} />
-                <p className="text-xs leading-5 text-black/50">Categories and treatment cards come from your Services. Add or edit them under Services to change what’s listed here.</p>
-                {services.length === 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">No services yet — add your first service to see cards here.</p>}
-              </>
-            )}
-            {selected === "featured" && (
-              <>
-                <Field label="Section heading" value={featuredTitle} onChange={(v) => updateConfig({ featuredTitle: v })} />
-                <p className="text-xs leading-5 text-black/50">This grid is your live service menu. Prices and duration update from Services automatically.</p>
-              </>
-            )}
-            {selected === "booking" && (
-              <>
-                <Field label="Section heading" value={current.title ?? FRIENDLY_TITLES.booking} onChange={(v) => updateSection("booking", { title: v })} />
-                <Field label="Button label" value={bookingButtonLabel} onChange={(v) => updateConfig({ bookingButtonLabel: v })} />
-                <p className="text-xs leading-5 text-black/50">Guests see their upcoming visits here. The button starts the booking flow.</p>
-              </>
-            )}
-            {selected !== "hero" && selected !== "featured" && selected !== "services" && selected !== "booking" && (
-              <>
-                <Field label="Section heading" value={current.title ?? FRIENDLY_TITLES[selected] ?? SECTIONS_META[selected]?.label ?? selected} onChange={(v) => updateSection(selected, { title: v })} />
-                <p className="text-xs leading-5 text-black/50">
-                  {selected === "about" && "Story text comes from your business profile description."}
-                  {selected === "contact" && "Phone, email, and address come from your business profile."}
-                  {selected === "loyalty" && "Points come from each signed-in guest’s wallet."}
-                  {selected === "rewards" && "Rewards come from your rewards catalog."}
-                  {selected === "membership" && "Membership comes from the guest’s current plan."}
-                  {selected === "referrals" && "Each guest gets their own invite code to share."}
-                  {selected === "reviews" && "Guests can leave a note or a video. You approve them in Reviews."}
-                  {selected === "footer" && "Uses your business name and contact details."}
-                  {!["about", "contact", "loyalty", "rewards", "membership", "referrals", "reviews", "footer"].includes(selected) && "This section stays connected to your Doloyal business data."}
-                </p>
-              </>
-            )}
+            <SectionInspector
+              selected={selected}
+              config={config}
+              current={current}
+              copy={copy}
+              displayName={displayName}
+              draft={draft}
+              heroHeading={heroHeading}
+              heroDescription={heroDescription}
+              heroButtonLabel={heroButtonLabel}
+              bookingButtonLabel={bookingButtonLabel}
+              featuredTitle={featuredTitle}
+              pinChrome={pinChrome}
+              servicesCount={services.length}
+              updateConfig={updateConfig}
+              updateSection={updateSection}
+              patchBrand={patchBrand}
+            />
 
             <div className="border-t border-[#e7efec] pt-5">
               <label className="flex items-center justify-between text-sm font-medium">Show section <Switch checked={!current.hidden} onCheckedChange={(checked) => updateSection(selected, { hidden: !checked })} /></label>
@@ -392,11 +454,11 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
 
             <div className="border-t border-[#e7efec] pt-5">
               <p className="mb-3 text-xs font-semibold uppercase tracking-[.12em] text-[#788d86]">Branding</p>
-              <ColorInput label="Primary color" value={draft.brandColor || PAGE_SURFACE_DEFAULTS.accent} setValue={(v) => patchBrand({ brandColor: v })} />
+              <ColorInput label="Primary color" value={draft.brandColor || brandPrimary} setValue={(v) => patchBrand({ brandColor: v })} />
               <div className="mt-3">
                 <ColorInput label="Page background" value={draft.backgroundColor || PAGE_SURFACE_DEFAULTS.background} setValue={(v) => patchBrand({ backgroundColor: v })} />
               </div>
-              <button onClick={() => setBrandOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-xl border border-black/10 px-3 py-3 text-sm hover:bg-black/[0.03]"><span className="flex items-center gap-2"><Palette className="h-4 w-4" /> More brand settings</span><span className="h-6 w-6 rounded-full border border-black/10" style={{ backgroundColor: draft.brandColor || PAGE_SURFACE_DEFAULTS.background }} /></button>
+              <button onClick={() => setBrandOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-xl border border-black/10 px-3 py-3 text-sm hover:bg-black/[0.03]"><span className="flex items-center gap-2"><Palette className="h-4 w-4" /> More brand settings</span><span className="h-6 w-6 rounded-full border border-black/10" style={{ backgroundColor: draft.brandColor || brandPrimary }} /></button>
               <p className="mt-2 text-xs text-black/45">Colors and text apply to the preview instantly.</p>
             </div>
 
@@ -415,14 +477,14 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
       <Dialog open={library} onOpenChange={setLibrary}>
         <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>Add a section</DialogTitle><DialogDescription>Add a real section to your live customer page. Content stays connected to Doloyal.</DialogDescription></DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid max-h-[70vh] gap-3 overflow-y-auto sm:grid-cols-2">
             {LIBRARY.map(([id, label, Icon, desc]) => {
               const added = allSections.some((s) => s.id === id && s.enabled);
               return (
                 <button key={id} onClick={() => add(id)} className="flex items-start gap-3 rounded-xl border border-[#dbe6e2] p-4 text-left hover:border-[#82b9a9] hover:bg-[#f7fbf9]">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#e5f2ed] text-[#176b5c]"><Icon className="h-4 w-4" /></span>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--cp-brand-soft)] text-[color:var(--cp-brand)]"><Icon className="h-4 w-4" /></span>
                   <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="mt-1 block text-xs leading-5 text-[#6f827c]">{desc}</span></span>
-                  {added ? <Check className="h-4 w-4 text-[#176b5c]" /> : <Plus className="h-4 w-4 text-[#58756c]" />}
+                  {added ? <Check className="h-4 w-4 text-[color:var(--cp-brand)]" /> : <Plus className="h-4 w-4 text-[#58756c]" />}
                 </button>
               );
             })}
@@ -447,7 +509,7 @@ function Field({ label, value, onChange, multiline, placeholder }: { label: stri
     <div>
       <Label className="text-xs">{label}</Label>
       {multiline ? (
-        <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1.5 min-h-20 w-full rounded-xl border border-[#dbe6e2] bg-white p-3 text-sm outline-none focus:border-[#176b5c]" />
+        <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1.5 min-h-20 w-full rounded-xl border border-[#dbe6e2] bg-white p-3 text-sm outline-none focus:border-[color:var(--cp-brand)]" />
       ) : (
         <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1.5" />
       )}
@@ -468,18 +530,18 @@ function BrandSettings({
   onPatch: (patch: Record<string, unknown>) => void;
   onFlush: () => void | Promise<void>;
 }) {
-  const primary = tenant?.brandColor || PAGE_SURFACE_DEFAULTS.accent;
+  const primary = resolveBrandPrimary(tenant?.brandColor);
   const secondary = tenant?.secondaryColor || PAGE_SURFACE_DEFAULTS.background;
   const background = tenant?.backgroundColor || PAGE_SURFACE_DEFAULTS.background;
   const reset = () => {
-    if (!confirm("Reset page colors to white? Your logo, name, and description stay as they are.")) return;
+    if (!confirm("Reset to Doloyal default colors? Your logo, name, and description stay as they are.")) return;
     onPatch({
-      brandColor: PAGE_SURFACE_DEFAULTS.accent,
-      secondaryColor: PAGE_SURFACE_DEFAULTS.background,
+      brandColor: BRAND_COLOR_DEFAULTS.primary,
+      secondaryColor: BRAND_COLOR_DEFAULTS.secondary,
       backgroundColor: PAGE_SURFACE_DEFAULTS.background,
       textColor: PAGE_SURFACE_DEFAULTS.text,
     });
-    toast.success("Reset to default white branding.");
+    toast.success("Reset to Doloyal default colors.");
   };
   const gaps = brandingGaps(tenant);
   return (
@@ -504,8 +566,8 @@ function BrandSettings({
           <ColorInput label="Secondary color" value={secondary} setValue={(v) => onPatch({ secondaryColor: v })} />
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={reset}><RotateCcw className="h-4 w-4" /> Reset to white</Button>
-          <Button onClick={() => { onFlush(); setOpen(false); toast.success("Brand updates are live on the preview."); }} className="bg-[#176b5c] hover:bg-[#115548]">Done</Button>
+          <Button variant="ghost" onClick={reset}><RotateCcw className="h-4 w-4" /> Reset to Doloyal default</Button>
+          <Button onClick={() => { onFlush(); setOpen(false); toast.success("Brand updates are live on the preview."); }} className="hover:opacity-90" style={{ backgroundColor: primary, color: readableTextColor(primary) }}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -516,7 +578,7 @@ function ColorInput({ label, value, setValue }: { label: string; value: string; 
     <div>
       <Label className="text-xs">{label}</Label>
       <div className="mt-1.5 flex gap-2">
-        <input aria-label={label} type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#111111"} onChange={(event) => setValue(event.target.value)} className="h-10 w-11 rounded border border-[#dbe6e2] bg-white p-1" />
+        <input aria-label={label} type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : BRAND_COLOR_DEFAULTS.primary} onChange={(event) => setValue(event.target.value)} className="h-10 w-11 rounded border border-[#dbe6e2] bg-white p-1" />
         <Input value={value} onChange={(event) => setValue(event.target.value)} />
       </div>
     </div>

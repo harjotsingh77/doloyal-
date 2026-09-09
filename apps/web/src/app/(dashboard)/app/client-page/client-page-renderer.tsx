@@ -3,12 +3,41 @@
 import * as React from "react";
 import type { ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
 import { MasterClientTemplate, type MasterConfig } from "./master-template";
-import { scrollAnchorIntoView } from "./portal-shared";
 import { clientPageBrand, liveCopy } from "./client-page-brand";
 import { readableTextColor } from "@/lib/branding";
-import { cn } from "@doloyal/ui";
+import type { HeroSlide } from "./portal-shared";
 
 type StoredSection = { id?: unknown; enabled?: unknown; hidden?: unknown; title?: unknown };
+
+function asBool(value: unknown, fallback?: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asNum(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function asText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && liveCopy(value)) return value;
+  }
+  return undefined;
+}
+
+const STRIPPED_APP_IDS = ["booking", "loyalty", "rewards", "membership", "referrals"];
+
+function restoreVisibleSectionIds(
+  stored: StoredSection[],
+  layout?: number,
+): string[] {
+  const ids = stored.filter((s) => s?.enabled !== false && !s?.hidden).map((s) => String(s.id));
+  if (layout !== 3) return ids;
+  const have = new Set(ids);
+  const extras = STRIPPED_APP_IDS.filter((id) => !have.has(id));
+  if (!extras.length) return ids;
+  const at = Math.max(0, ids.indexOf("services")) + 1;
+  return [...ids.slice(0, at || 1), ...extras, ...ids.slice(at || 1)];
+}
 
 export function masterConfigFromPageConfig(
   pageConfig: unknown,
@@ -17,14 +46,6 @@ export function masterConfigFromPageConfig(
   const raw = (pageConfig ?? {}) as Record<string, unknown>;
   const stored = Array.isArray(raw.sections) ? (raw.sections as StoredSection[]) : [];
 
-  const text = (...keys: string[]) => {
-    for (const key of keys) {
-      const value = raw[key];
-      if (typeof value === "string" && liveCopy(value)) return value;
-    }
-    return undefined;
-  };
-
   const sectionTitles: Record<string, string> = {};
   for (const section of stored) {
     if (typeof section?.title === "string" && section.title.trim()) {
@@ -32,17 +53,79 @@ export function masterConfigFromPageConfig(
     }
   }
 
+  const gallery = Array.isArray(raw.gallery)
+    ? (raw.gallery as Array<{ url?: string } | string>)
+        .map((item) => (typeof item === "string" ? item : item?.url))
+        .filter((url): url is string => !!url)
+    : Array.isArray(raw.galleryUrls)
+      ? (raw.galleryUrls as unknown[]).filter((url): url is string => typeof url === "string")
+      : undefined;
+
+  const faqs = Array.isArray(raw.faqs)
+    ? (raw.faqs as Array<{ question?: string; answer?: string }>)
+        .filter((item) => item?.question && item?.answer)
+        .map((item) => ({ question: String(item.question), answer: String(item.answer) }))
+    : undefined;
+
+  const testimonials = Array.isArray(raw.testimonials)
+    ? (raw.testimonials as Array<{ name?: string; text?: string; rating?: number }>)
+        .filter((item) => item?.name && item?.text)
+        .map((item) => ({ name: String(item.name), text: String(item.text), rating: item.rating }))
+    : undefined;
+
+  const slides = Array.isArray(raw.heroSlides)
+    ? (raw.heroSlides as HeroSlide[]).filter((slide) => slide?.src)
+    : undefined;
+
+  const serviceColumns = asNum(raw.serviceColumns);
+  const overlay = asNum(raw.heroOverlay);
+  const slideMs = asNum(raw.slideMs);
+
   return {
-    heroHeading: text("heroHeading", "heroTitle"),
-    heroDescription: text("heroDescription", "heroSubtitle"),
-    heroBadge: text("heroBadge"),
-    heroButtonLabel: text("heroButtonLabel"),
-    bookingButtonLabel: text("bookingButtonLabel"),
-    featuredTitle: text("featuredTitle"),
-    showSearch: typeof raw.showSearch === "boolean" ? raw.showSearch : undefined,
-    pinChrome: typeof raw.pinChrome === "boolean" ? raw.pinChrome : undefined,
+    heroHeading: asText(raw.heroHeading, raw.heroTitle),
+    heroDescription: asText(raw.heroDescription, raw.heroSubtitle),
+    heroBadge: asText(raw.heroBadge),
+    heroButtonLabel: asText(raw.heroButtonLabel, raw.heroCta),
+    bookingButtonLabel: asText(raw.bookingButtonLabel),
+    featuredTitle: asText(raw.featuredTitle),
+    showSearch: asBool(raw.showSearch),
+    pinChrome: asBool(raw.pinChrome, true),
+    businessType: (["salon", "gym", "cafe", "restaurant", "spa", "boutique", "custom"] as const).includes(raw.businessType as never)
+      ? (raw.businessType as MasterConfig["businessType"])
+      : "custom",
+    heroMode: raw.heroMode === "video" || raw.heroMode === "slider" || raw.heroMode === "image" ? raw.heroMode : undefined,
+    heroSlides: slides,
+    heroVideoSrc: asText(raw.heroVideoSrc),
+    heroOverlay: overlay,
+    heroAlign: raw.heroAlign === "center" || raw.heroAlign === "left" ? raw.heroAlign : undefined,
+    heroHeight: raw.heroHeight === "compact" || raw.heroHeight === "tall" || raw.heroHeight === "default" ? raw.heroHeight : undefined,
+    secondaryCta: asText(raw.secondaryCta),
+    autoSlide: asBool(raw.autoSlide, true),
+    slideMs,
+    marqueeEnabled: asBool(raw.marqueeEnabled, false),
+    marqueeText: asText(raw.marqueeText),
+    animations: asBool(raw.animations, true),
+    hoverEffects: asBool(raw.hoverEffects, true),
+    navStyle: raw.navStyle === "solid" || raw.navStyle === "transparent" || raw.navStyle === "blur" ? raw.navStyle : "blur",
+    socialAnimations: asBool(raw.socialAnimations, true),
+    serviceColumns: serviceColumns === 2 || serviceColumns === 4 || serviceColumns === 3 ? serviceColumns : 3,
+    introHeading: asText(raw.introHeading),
+    introBody: asText(raw.introBody),
+    ctaHeading: asText(raw.ctaHeading),
+    ctaBody: asText(raw.ctaBody),
+    videoUrl: asText(raw.videoUrl),
+    galleryUrls: gallery,
+    offerTitle: asText(raw.offerTitle),
+    offerBody: asText(raw.offerBody),
+    offerCta: asText(raw.offerCta),
+    faqs,
+    testimonials,
+    websiteVersion: asNum(raw.websiteVersion),
+    sectionUi: raw.sectionUi && typeof raw.sectionUi === "object" && !Array.isArray(raw.sectionUi)
+      ? raw.sectionUi as MasterConfig["sectionUi"]
+      : undefined,
     ...(stored.length
-      ? { visibleSections: stored.filter((s) => s?.enabled !== false && !s?.hidden).map((s) => String(s.id)) }
+      ? { visibleSections: restoreVisibleSectionIds(stored, asNum(raw.websiteLayout)) }
       : {}),
     ...(Object.keys(sectionTitles).length ? { sectionTitles } : {}),
     brandColor: brandColor ?? undefined,
@@ -81,104 +164,50 @@ export function ClientPageRenderer({
   const brand = clientPageBrand(business);
   const accent = config?.brandColor && /^#[0-9a-fA-F]{6}$/.test(config.brandColor) ? config.brandColor : brand.accent;
   const accentForeground = readableTextColor(accent);
-  const bookLabel = config?.heroButtonLabel?.trim() || "Book a visit";
   const selectable = mode === "preview" ? onSelect : undefined;
-  const builder = mode === "preview";
-  const subtitle = brand.tagline || brand.description;
-  const pinChrome = config?.pinChrome === true;
 
   React.useEffect(() => {
-    const id = "client-lounge-fonts";
+    const id = "client-site-fonts";
     if (document.getElementById(id)) return;
     const link = document.createElement("link");
     link.id = id;
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,520;9..144,600&family=Outfit:wght@400;500;600&display=swap";
+    link.href = "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap";
     document.head.appendChild(link);
   }, []);
 
   return (
     <div
-      className="client-lounge min-h-screen [&_[id^='portal-']]:scroll-mt-28"
+      className="client-site min-h-[100dvh] overflow-x-hidden [&_[id^='portal-']]:scroll-mt-24"
       data-client-page-mode={mode}
       style={{
         background: brand.background,
         color: brand.ink,
-        fontFamily: brand.fontFamily,
+        fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif",
+        ["--site-accent" as string]: accent,
+        ["--site-accent-fg" as string]: accentForeground,
+        ["--site-ink" as string]: brand.ink,
+        ["--site-bg" as string]: brand.background,
         ["--lounge-accent" as string]: accent,
         ["--lounge-accent-fg" as string]: accentForeground,
         ["--lounge-ink" as string]: brand.ink,
         ["--lounge-bg" as string]: brand.background,
-        ["--lounge-header-h" as string]: "5.25rem",
-        ["--font-lounge-display" as string]: "Fraunces, Iowan Old Style, Palatino, Georgia, serif",
-        ...(pinChrome ? { paddingTop: "var(--lounge-header-h)" } : {}),
       }}
     >
-      <header className={cn(
-        "z-40 px-3 pt-3 pb-2 sm:px-5",
-        pinChrome ? "fixed inset-x-0 top-0 bg-[color:var(--lounge-bg)]/95 backdrop-blur-xl" : "relative",
-      )}>
-        <div className="mx-auto flex max-w-[1520px] items-center justify-between rounded-full bg-white/90 px-3 py-2 ring-1 ring-black/[0.08] sm:px-4">
-          <div className="flex min-w-0 items-center gap-3">
-            {brand.logoUrl ? (
-              <img src={brand.logoUrl} alt={brand.displayName} className="h-9 w-9 rounded-full object-cover" />
-            ) : (
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-semibold"
-                style={{ backgroundColor: accent, color: accentForeground }}
-                title={builder ? "Add a logo in Brand settings" : undefined}
-              >
-                {brand.initials}
-              </div>
-            )}
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold leading-tight">{brand.displayName}</h1>
-              {subtitle ? (
-                <p className="truncate text-[11px] text-[color:var(--lounge-ink)]/45">{subtitle}</p>
-              ) : builder ? (
-                <p className="truncate text-[11px] text-amber-800/80">Add a tagline or description in Brand settings</p>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={(event) => {
-                if (onNavigate) onNavigate("portal-reviews");
-                else scrollAnchorIntoView("portal-reviews", event.currentTarget);
-              }}
-              className="hidden h-9 items-center rounded-full px-3.5 text-xs font-semibold text-[color:var(--lounge-ink)] ring-1 ring-black/10 sm:inline-flex"
-            >
-              Leave a note
-            </button>
-            <button
-              type="button"
-              onClick={() => onBook()}
-              className="hidden h-9 items-center rounded-full px-4 text-xs font-semibold sm:inline-flex"
-              style={{ backgroundColor: accent, color: accentForeground }}
-            >
-              {bookLabel}
-            </button>
-            {headerAccessory}
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1520px] px-4 pb-6 pt-2 md:px-6 md:pb-8">
-        <MasterClientTemplate
-          business={business}
-          services={services}
-          currency={currency}
-          config={config}
-          onBook={onBook}
-          onNavigate={onNavigate}
-          selectedId={selectedId}
-          onSelect={selectable}
-          focusKey={focusKey}
-          portal={portal}
-          onLogout={onLogout}
-        />
-      </main>
+      <MasterClientTemplate
+        business={business}
+        services={services}
+        currency={currency}
+        config={config}
+        onBook={onBook}
+        onNavigate={onNavigate}
+        selectedId={selectedId}
+        onSelect={selectable}
+        focusKey={focusKey}
+        portal={portal}
+        onLogout={onLogout}
+        headerAccessory={headerAccessory}
+      />
     </div>
   );
 }

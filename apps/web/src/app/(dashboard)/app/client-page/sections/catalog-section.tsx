@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Search, Sparkles } from "lucide-react";
 import type { PublicService } from "@doloyal/shared";
-import { SelectableBlock, SectionEyebrow, SectionTitle, artFor, type CatalogTab, type PortalChrome } from "../portal-shared";
+import { SelectableBlock, SectionEyebrow, SectionTitle, artFor, catalogImageSrc, type CatalogTab, type PortalChrome } from "../portal-shared";
 
 const TABS: { id: CatalogTab; label: string }[] = [
   { id: "browse", label: "Browse" },
@@ -81,7 +81,10 @@ export function CatalogSection({
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
             {categories.map((category, index) => {
               const active = selectedCategory === category.name || (category.name === "All" && selectedCategory === "All services");
-              const photo = category.name === "All" ? artFor("spa", 0) : artFor(category.name, index);
+              const fromCatalog = category.name === "All"
+                ? services.find((service) => service.imageUrl)?.imageUrl
+                : services.find((service) => (service.category || "Services") === category.name && service.imageUrl)?.imageUrl;
+              const photo = catalogImageSrc(fromCatalog, category.name === "All" ? artFor("spa", 0) : artFor(category.name, index));
               return (
                 <button
                   key={category.name}

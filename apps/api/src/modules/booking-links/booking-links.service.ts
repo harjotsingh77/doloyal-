@@ -7,6 +7,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { prismaAppointmentToShared } from '../../common/helpers';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
 import { resolveGoogleReviewUrl } from '../reviews/reviews.service';
+import { resolveProductImageUrl } from '../products/product-media';
 import {
   DEFAULT_AUTOMATIONS,
   DEFAULT_AUTH_MODE,
@@ -37,6 +38,13 @@ function slugify(text: string): string {
 
 function randomSuffix(): string {
   return Math.random().toString(36).substring(2, 6);
+}
+
+function durationFromProductUnit(unit: string | null | undefined) {
+  if (unit === 'Package') return 90;
+  if (unit === 'Session') return 45;
+  if (unit === 'Piece') return 30;
+  return 60;
 }
 
 function generateIcsUrl(appointment: any, tenant: any): string {
@@ -505,14 +513,24 @@ export class BookingLinksService {
       throw new BadRequestException('This booking link has expired');
     }
 
-    const serviceIds = asStringArray(bookingLink.serviceIds);
-    const services = await this.prisma.service.findMany({
-      where: {
-        tenantId: tenant.id,
-        isActive: true,
-        ...(serviceIds.length ? { id: { in: serviceIds } } : {}),
-      },
+    const products = await this.prisma.product.findMany({
+      where: { tenantId: tenant.id, status: 'ACTIVE' },
+      include: { category: { select: { name: true } } },
+      orderBy: { updatedAt: 'desc' },
     });
+
+    const catalog = products.length
+      ? products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          durationMinutes: durationFromProductUnit(product.unit),
+          price: product.price,
+          category: product.category?.name || 'General',
+          isActive: true,
+          imageUrl: resolveProductImageUrl(product),
+        }))
+      : await this.fallbackBookingServices(tenant.id, bookingLink.serviceIds);
 
     const staffIds = asStringArray(bookingLink.staffIds);
     if (bookingLink.staffId && !staffIds.includes(bookingLink.staffId)) staffIds.push(bookingLink.staffId);
@@ -599,15 +617,7 @@ export class BookingLinksService {
         metaTitle: bookingLink.metaTitle || `${tenant.name} — Book Online`,
         metaDescription: bookingLink.metaDescription || `Book an appointment with ${tenant.name}`,
       },
-      services: services.map((s) => ({
-        id: s.id,
-        name: s.name,
-        description: s.description,
-        durationMinutes: s.durationMinutes,
-        price: s.price,
-        category: s.category,
-        isActive: s.isActive,
-      })),
+      services: catalog,
       staff: staffMembers.map((s) => ({
         id: s.id,
         name: s.name,
@@ -632,10 +642,33 @@ export class BookingLinksService {
     const { tenant, bookingLink } = await this.findBySlug(slug);
     this.assertLinkBookable(bookingLink);
 
-    const service = await this.prisma.service.findFirst({
+    let service = await this.prisma.service.findFirst({
       where: { id: serviceId, tenantId: tenant.id },
     });
-    if (!service) throw new NotFoundException('Service not found');
+    if (!service) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: serviceId, tenantId: tenant.id, status: 'ACTIVE' },
+        include: { category: { select: { name: true } } },
+      });
+      if (!product) throw new NotFoundException('Service not found');
+      try {
+        service = await this.prisma.service.create({
+          data: {
+            id: product.id,
+            tenantId: tenant.id,
+            name: product.name,
+            description: product.description,
+            durationMinutes: durationFromProductUnit(product.unit),
+            price: product.price,
+            category: product.category?.name || 'General',
+            isActive: true,
+          },
+        });
+      } catch {
+        service = await this.prisma.service.findFirst({ where: { id: serviceId, tenantId: tenant.id } });
+      }
+      if (!service) throw new NotFoundException('Service not found');
+    }
 
     const rules = { ...DEFAULT_RULES, ...((bookingLink.rules as any) || {}) };
     const dateObj = new Date(date);
@@ -1164,5 +1197,26 @@ export class BookingLinksService {
       where: { id },
       data: { status: 'CANCELLED', cancelledAt: new Date() },
     });
+  }
+
+  private async fallbackBookingServices(tenantId: string, serviceIdsValue: unknown) {
+    const serviceIds = asStringArray(serviceIdsValue);
+    const services = await this.prisma.service.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        ...(serviceIds.length ? { id: { in: serviceIds } } : {}),
+      },
+    });
+    return services.map((service) => ({
+      id: service.id,
+      name: service.name,
+      description: service.description,
+      durationMinutes: service.durationMinutes,
+      price: service.price,
+      category: service.category,
+      isActive: service.isActive,
+      imageUrl: null as string | null,
+    }));
   }
 }

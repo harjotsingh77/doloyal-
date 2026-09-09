@@ -39,6 +39,7 @@ import type {
   WebsiteFramework,
   ConnectionLogLevel,
 } from "./enums";
+import type { WebsiteKnowledgeWall } from "./website-knowledge-wall";
 
 export type ClientSignInLayout = "centered" | "split";
 
@@ -1336,6 +1337,8 @@ export interface BookingPageConfig {
   testimonials?: BookingPageTestimonial[];
   membershipBlurb?: string;
   loyaltyBlurb?: string;
+  /** Per-website AI Knowledge Wall. Stored on this Client Page only. */
+  knowledgeWall?: WebsiteKnowledgeWall;
 }
 
 export interface BookingSeoConfig {
@@ -1513,6 +1516,7 @@ export interface PublicService {
   price: number;
   category: string;
   isActive: boolean;
+  imageUrl?: string | null;
 }
 
 export interface PublicStaff {

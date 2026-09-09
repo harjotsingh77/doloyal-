@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Clock3 } from "lucide-react";
 import type { PublicService } from "@doloyal/shared";
-import { LoungeButton, SelectableBlock, SectionEyebrow, SectionTitle, artFor, formatPrice, type PortalChrome } from "../portal-shared";
+import { LoungeButton, SelectableBlock, SectionEyebrow, SectionTitle, artFor, catalogImageSrc, formatPrice, type PortalChrome } from "../portal-shared";
 
 export function FeaturedTreatmentsSection({
   chrome,
@@ -38,7 +38,7 @@ export function FeaturedTreatmentsSection({
             {services.map((service, index) => (
               <article key={service.id} className="group overflow-hidden rounded-[28px] bg-white/80 ring-1 ring-[rgba(28,20,16,.08)] transition duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:shadow-[0_22px_40px_rgba(28,20,16,.08)]">
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  <img src={artFor(service.category || service.name, index)} alt="" className="h-full w-full object-cover transition duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-105" />
+                  <img src={catalogImageSrc(service.imageUrl, artFor(service.category || service.name, index))} alt="" className="h-full w-full object-cover transition duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-105" />
                   <span className="absolute left-4 top-4 rounded-full bg-[#f6efe4]/92 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#1c1410]">
                     {service.category}
                   </span>

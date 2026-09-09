@@ -16,12 +16,14 @@ import {
   type ParsedImportRow,
 } from './customer-excel';
 import { WorkflowEngineService } from '../workflows/workflow-engine.service';
+import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
 
 @Injectable()
 export class CustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly workflowEngine: WorkflowEngineService,
+    private readonly realtime: CommerceRealtimeService,
   ) {}
 
   async list(tenantId: string, query: {
@@ -281,6 +283,7 @@ export class CustomersService {
       // Workflows must never block customer creation
     }
 
+    this.realtime.publish(tenantId, 'customers');
     return prismaCustomerToShared(customer);
   }
 
@@ -301,7 +304,7 @@ export class CustomersService {
       where: { tenantId, userId: input.userId },
     });
     if (byUser) {
-      return this.prisma.customer.update({
+      const updated = await this.prisma.customer.update({
         where: { id: byUser.id },
         data: {
           phone: input.phone || byUser.phone,
@@ -312,6 +315,8 @@ export class CustomersService {
           status: byUser.status === 'INACTIVE' ? 'ACTIVE' : byUser.status,
         },
       });
+      this.realtime.publish(tenantId, 'customers');
+      return updated;
     }
 
     const orFilters: Array<{ email?: { equals: string; mode: 'insensitive' }; phone?: string }> = [];
@@ -328,7 +333,7 @@ export class CustomersService {
       if (existing.userId && existing.userId !== input.userId) {
         throw new ConflictException('This customer profile is already linked to another account for this business.');
       }
-      return this.prisma.customer.update({
+      const linked = await this.prisma.customer.update({
         where: { id: existing.id },
         data: {
           userId: input.userId,
@@ -340,6 +345,8 @@ export class CustomersService {
           signupSource: existing.signupSource || input.source || 'CLIENT_PAGE',
         },
       });
+      this.realtime.publish(tenantId, 'customers');
+      return linked;
     }
 
     const created = await this.create(tenantId, {
@@ -349,7 +356,7 @@ export class CustomersService {
       tags: ['client-page'],
     });
 
-    return this.prisma.customer.update({
+    const linked = await this.prisma.customer.update({
       where: { id: created.id },
       data: {
         userId: input.userId,
@@ -361,6 +368,8 @@ export class CustomersService {
         lastName: input.lastName || undefined,
       },
     });
+    this.realtime.publish(tenantId, 'customers');
+    return linked;
   }
 
   async touchClientLogin(tenantId: string, customerId: string) {
@@ -457,6 +466,7 @@ export class CustomersService {
       },
     });
 
+    this.realtime.publish(tenantId, 'customers');
     return prismaCustomerToShared(updated);
   }
 
@@ -471,6 +481,7 @@ export class CustomersService {
       data: { status: 'CHURNED' },
     });
 
+    this.realtime.publish(tenantId, 'customers');
     return { message: 'Customer deactivated successfully' };
   }
 

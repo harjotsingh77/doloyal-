@@ -52,7 +52,7 @@ import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 import { OrderFormDialog } from "../orders/order-form-dialog";
-import { useAppSync } from "@/lib/data-sync";
+import { useCommerceLive } from "@/lib/data-sync";
 
 export default function CustomerProfilePage() {
   const { format: fmt } = useCurrency();
@@ -95,7 +95,7 @@ export default function CustomerProfilePage() {
     };
   }, [params.id, reloadTick]);
 
-  useAppSync(["customers", "orders", "reviews", "loyalty", "invoices"], () => setReloadTick((n) => n + 1));
+  useCommerceLive(["customers", "orders", "reviews", "loyalty", "invoices"], () => setReloadTick((n) => n + 1));
 
   const handleAddNote = async () => {
     if (!newNote.trim() || !customer) return;

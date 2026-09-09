@@ -42,7 +42,7 @@ import { relativeTime } from "@doloyal/shared";
 import type { Customer, CustomerQuery, Paginated } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { useAppSync } from "@/lib/data-sync";
+import { useCommerceLive } from "@/lib/data-sync";
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -71,9 +71,9 @@ export default function CustomersPage() {
   }, [search]);
 
   const loadCustomers = React.useCallback(
-    async (cursorVal?: string) => {
+    async (cursorVal?: string, opts?: { silent?: boolean }) => {
       try {
-        setLoading(true);
+        if (!opts?.silent) setLoading(true);
         setError(null);
         const params: CustomerQuery = { limit: 50 };
         if (debouncedSearch) params.search = debouncedSearch;
@@ -104,7 +104,7 @@ export default function CustomersPage() {
     loadCustomers();
   }, [loadCustomers]);
 
-  useAppSync(["customers", "orders", "loyalty", "reviews"], () => loadCustomers());
+  useCommerceLive(["customers", "orders", "loyalty", "reviews"], () => loadCustomers(undefined, { silent: true }));
 
   const handleAddCustomer = async () => {
     if (!addName.trim() || !addPhone.trim()) {

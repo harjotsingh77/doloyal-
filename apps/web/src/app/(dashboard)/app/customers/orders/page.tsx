@@ -56,7 +56,7 @@ import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 import { OrderFormDialog } from "./order-form-dialog";
-import { useAppSync } from "@/lib/data-sync";
+import { useCommerceLive } from "@/lib/data-sync";
 
 const ALL = "__all__";
 
@@ -113,9 +113,9 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
       setError(null);
       const query: ClientOrderQuery = {
         search: debouncedSearch || undefined,
@@ -151,7 +151,7 @@ export default function OrdersPage() {
     void load();
   }, [load]);
 
-  useAppSync(["orders", "customers", "products"], () => void load());
+  useCommerceLive(["orders", "customers", "products"], () => void load({ silent: true }));
 
   const handleDelete = async () => {
     if (!deleting) return;

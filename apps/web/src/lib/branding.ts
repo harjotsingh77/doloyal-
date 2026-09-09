@@ -23,7 +23,7 @@ export const BRAND_COLOR_DEFAULTS = {
 export const PAGE_SURFACE_DEFAULTS = {
   background: "#FFFFFF",
   text: "#111111",
-  accent: "#111111",
+  accent: BRAND_COLOR_DEFAULTS.primary,
 } as const;
 
 const FALLBACK_NAME = "Doloyal";
@@ -96,6 +96,18 @@ export function readableTextColor(bg: string): string {
   return contrastRatio("#FFFFFF", bg) >= 4.5 ? "#FFFFFF" : "#111111";
 }
 
+export function hexToRgba(hex: string, alpha: number): string {
+  const triplet = hexToRgbTriplet(hex);
+  if (!triplet) return hex;
+  const [r, g, b] = triplet.split(" ");
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Buttons and chrome: saved brand color, otherwise Doloyal blue. */
+export function resolveBrandPrimary(value?: string | null): string {
+  return resolveHexColor(value, BRAND_COLOR_DEFAULTS.primary);
+}
+
 /* ── Brand resolution ────────────────────────────────────────────────────── */
 
 /** Structural subset so callers may pass a full Tenant or a partial draft. */
@@ -160,8 +172,7 @@ export function resolvePageText(value?: string | null): string {
 }
 
 /**
- * Buttons and highlights. Unset / invalid colors fall back to ink on white,
- * not a canned template palette.
+ * Buttons and highlights. Unset / invalid colors use Doloyal primary.
  */
 export function resolvePageAccent(value?: string | null): string {
   return resolveHexColor(value, PAGE_SURFACE_DEFAULTS.accent);

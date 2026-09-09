@@ -3,6 +3,61 @@
 import * as React from "react";
 import type { ClientPortal } from "@doloyal/shared";
 
+export type BusinessType = "salon" | "gym" | "cafe" | "restaurant" | "spa" | "boutique" | "custom";
+
+export type HeroSlide = {
+  id: string;
+  kind: "image" | "video";
+  src: string;
+  poster?: string;
+};
+
+export type SectionUi = {
+  eyebrow?: string;
+  body?: string;
+  cta?: string;
+  secondaryCta?: string;
+  emptyText?: string;
+  layout?: "cards" | "grid" | "list" | "image" | "horizontal" | "masonry" | "slider";
+  columns?: 1 | 2 | 3 | 4;
+  showPrice?: boolean;
+  showDuration?: boolean;
+  showImage?: boolean;
+  showCta?: boolean;
+  showRating?: boolean;
+  showAvatar?: boolean;
+  showBalance?: boolean;
+  showCounters?: boolean;
+  showPhone?: boolean;
+  showEmail?: boolean;
+  showWhatsapp?: boolean;
+  showMap?: boolean;
+  showSocial?: boolean;
+  autoplay?: boolean;
+  muted?: boolean;
+  loop?: boolean;
+  overlayText?: string;
+  coupon?: string;
+  validity?: string;
+  discount?: string;
+  imagePosition?: "left" | "right";
+  featuredCount?: number;
+  mapZoom?: number;
+  mapHeight?: number;
+  stat1Label?: string;
+  stat1Value?: string;
+  stat2Label?: string;
+  stat2Value?: string;
+  stat3Label?: string;
+  stat3Value?: string;
+  instagram?: string;
+  facebook?: string;
+  youtube?: string;
+  tiktok?: string;
+  whatsapp?: string;
+  formTitle?: string;
+};
+
 export type MasterConfig = {
   heroHeading?: string;
   heroDescription?: string;
@@ -10,16 +65,52 @@ export type MasterConfig = {
   heroButtonLabel?: string;
   bookingButtonLabel?: string;
   showSearch?: boolean;
-  /** Keep the customer header and left menu pinned while the page scrolls. */
   pinChrome?: boolean;
   featuredTitle?: string;
   visibleSections?: string[];
   sectionTitles?: Record<string, string>;
   brandColor?: string;
+  businessType?: BusinessType;
+  heroMode?: "image" | "video" | "slider";
+  heroSlides?: HeroSlide[];
+  heroVideoSrc?: string;
+  heroOverlay?: number;
+  heroAlign?: "left" | "center";
+  heroHeight?: "compact" | "default" | "tall";
+  secondaryCta?: string;
+  autoSlide?: boolean;
+  slideMs?: number;
+  marqueeEnabled?: boolean;
+  marqueeText?: string;
+  animations?: boolean;
+  hoverEffects?: boolean;
+  navStyle?: "solid" | "transparent" | "blur";
+  socialAnimations?: boolean;
+  serviceColumns?: 2 | 3 | 4;
+  introHeading?: string;
+  introBody?: string;
+  ctaHeading?: string;
+  ctaBody?: string;
+  videoUrl?: string;
+  galleryUrls?: string[];
+  offerTitle?: string;
+  offerBody?: string;
+  offerCta?: string;
+  websiteVersion?: number;
+  websiteLayout?: number;
+  faqs?: Array<{ question: string; answer: string }>;
+  testimonials?: Array<{ name: string; text: string; rating?: number }>;
+  sectionUi?: Record<string, SectionUi>;
 };
+
+export function sectionUi(config?: MasterConfig, id?: string): SectionUi {
+  if (!id) return {};
+  return config?.sectionUi?.[id] ?? {};
+}
 
 export const SECTION_ANCHORS: Record<string, string> = {
   hero: "portal-hero",
+  intro: "portal-intro",
   services: "portal-catalog",
   featured: "portal-services",
   booking: "portal-booking",
@@ -35,6 +126,10 @@ export const SECTION_ANCHORS: Record<string, string> = {
   offers: "portal-offers",
   faq: "portal-faq",
   testimonials: "portal-testimonials",
+  video: "portal-video",
+  social: "portal-social",
+  map: "portal-map",
+  cta: "portal-cta",
   footer: "portal-footer",
 };
 
@@ -43,21 +138,26 @@ export const PORTAL_TO_SECTION: Record<string, string> = Object.fromEntries(
 );
 
 export const FRIENDLY_TITLES: Record<string, string> = {
-  services: "What are you in the mood for?",
-  featured: "Treatments for you",
-  booking: "When would you like to come in?",
-  loyalty: "Points that actually add up",
-  rewards: "What your points can get you",
-  membership: "Your place in the club",
-  referrals: "They get a welcome. You get the credit.",
-  reviews: "How did we do?",
+  intro: "Welcome in",
+  services: "What we offer",
+  featured: "Highlights",
+  booking: "Book a time",
+  loyalty: "Your points",
+  rewards: "Rewards",
+  membership: "Membership",
+  referrals: "Invite a friend",
+  reviews: "What people say",
   about: "Our story",
-  contact: "Come see us",
-  hours: "When we’re in",
-  gallery: "The space",
+  contact: "Visit us",
+  hours: "Hours",
+  gallery: "Inside",
   offers: "This week",
-  faq: "Before you come",
-  testimonials: "From other guests",
+  faq: "Questions",
+  testimonials: "From guests",
+  video: "See the space",
+  social: "Follow along",
+  map: "Find us",
+  cta: "Ready when you are",
   footer: "Find us",
 };
 
@@ -137,6 +237,13 @@ const CATEGORY_PHOTOS: Record<string, string> = {
   massage: "https://images.unsplash.com/photo-1544161515-4af6b4e9ddaf?auto=format&fit=crop&w=900&q=80",
 };
 
+export function catalogImageSrc(url: string | null | undefined, fallback: string) {
+  if (!url) return fallback;
+  if (url.startsWith("data:") || url.startsWith("blob:") || /^https?:\/\//i.test(url)) return url;
+  const base = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) || "http://localhost:4000";
+  return `${String(base).replace(/\/+$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 export function artFor(seed: string, index = 0) {
   const key = seed.toLowerCase();
   for (const [name, url] of Object.entries(CATEGORY_PHOTOS)) {
@@ -213,12 +320,12 @@ export function SelectableBlock({
         e.stopPropagation();
         chrome.onSelect?.(sid);
       }}
-      className={`relative cursor-pointer rounded-[32px] transition duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isSelected ? "outline outline-[color:#8a5a32]" : "outline outline-[color:transparent] hover:outline-[color:rgba(138,90,50,.4)]"}`}
+      className={`relative cursor-pointer transition duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${sid === "hero" || sid === "footer" ? "" : "rounded-[28px]"} ${isSelected ? "outline outline-[color:var(--site-accent,#2563EB)]" : "outline outline-[color:transparent] hover:outline-[color:rgba(23,23,23,.18)]"}`}
       style={{ outlineWidth: screenPx(isSelected ? 2 : 1), outlineOffset: screenPx(3) }}
     >
       {isSelected && (
         <span
-          className="absolute z-10 whitespace-nowrap bg-[#8a5a32] font-semibold leading-none text-white"
+          className="absolute z-10 whitespace-nowrap bg-[color:var(--site-ink,#171717)] font-semibold leading-none text-white"
           style={{
             left: screenPx(14),
             top: screenPx(14),
@@ -248,10 +355,10 @@ export function LoungeButton({
 }) {
   const palette =
     tone === "ghost"
-      ? "bg-transparent text-[var(--lounge-ink)] ring-1 ring-[rgba(28,20,16,.14)] hover:bg-white/70"
+      ? "bg-transparent text-[color:var(--site-ink,#171717)] ring-1 ring-black/10 hover:bg-black/[0.04]"
       : tone === "light"
-        ? "bg-white text-[var(--lounge-ink)] hover:bg-black/[0.04]"
-        : "bg-[var(--lounge-accent)] text-[var(--lounge-accent-fg,#fff)] hover:brightness-110";
+        ? "bg-white text-[color:var(--site-ink,#171717)] hover:bg-black/[0.04]"
+        : "bg-[color:var(--site-accent,#111)] text-white hover:brightness-110";
   return (
     <button
       type="button"
@@ -327,13 +434,13 @@ export function MobileNavButton({
 
 export function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8a5a32]">{children}</p>
+    <p className="text-[13px] font-medium text-[color:var(--site-accent,#2563EB)]">{children}</p>
   );
 }
 
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mt-2 font-[family-name:var(--font-lounge-display)] text-3xl font-medium tracking-[-0.045em] text-[#1c1410] sm:text-[2.15rem]">
+    <h3 className="mt-2 max-w-[18ch] text-3xl font-semibold tracking-[-0.045em] text-[color:var(--site-ink,#171717)] sm:text-[2.35rem] sm:leading-[1.1]">
       {children}
     </h3>
   );

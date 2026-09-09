@@ -299,5 +299,16 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .mk-float, .mk-float-2, .mk-float-3, .marquee-track, .ww-track, .animate-blob, .pulse-ring, .shimmer-overlay::after, .gradient-text-animate { animation: none; }
+  .mk-float, .mk-float-2, .mk-float-3, .marquee-track, .ww-track, .animate-blob, .pulse-ring, .shimmer-overlay::after, .gradient-text-animate, .site-marquee-track { animation: none; }
+}
+
+@keyframes site-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.site-marquee-track {
+  animation: site-marquee 32s linear infinite;
+}
+.site-marquee:hover .site-marquee-track {
+  animation-play-state: paused;
 }

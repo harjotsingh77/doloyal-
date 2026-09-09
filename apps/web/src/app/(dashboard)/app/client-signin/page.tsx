@@ -36,16 +36,16 @@ function brandingFromTenant(tenant: Tenant | undefined): ClientSignInBranding {
   const saved = (tenant?.clientSignInBranding || {}) as ClientSignInBranding;
   const customized = saved.customized === true;
   return {
-    customized: true,
+    customized,
     welcomeMessage: saved.welcomeMessage || (tenant ? `Welcome to ${tenant.name}` : "Welcome"),
     tagline: customized ? saved.tagline || "" : tenant?.tagline || "",
     primaryColor: (customized ? saved.primaryColor : null) || tenant?.brandColor || CLIENT_SIGNIN_DEFAULTS.primaryColor,
     backgroundColor: (customized ? saved.backgroundColor : null) || tenant?.backgroundColor || CLIENT_SIGNIN_DEFAULTS.backgroundColor,
     textColor: (customized ? saved.textColor : null) || tenant?.textColor || CLIENT_SIGNIN_DEFAULTS.textColor,
-    accentColor: (customized ? saved.accentColor : null) || tenant?.accentColor || CLIENT_SIGNIN_DEFAULTS.accentColor,
+    accentColor: (customized && saved.accentColor && saved.accentColor.toUpperCase() !== "#F59E0B" ? saved.accentColor : null) || CLIENT_SIGNIN_DEFAULTS.accentColor,
     logoUrl: tenant?.logoUrl || null,
     layout: customized && saved.layout === "split" ? "split" : "centered",
-    fontFamily: (customized ? saved.fontFamily : null) || tenant?.fontFamily || CLIENT_SIGNIN_DEFAULTS.fontFamily,
+    fontFamily: (customized ? saved.fontFamily : null) || CLIENT_SIGNIN_DEFAULTS.fontFamily,
     cardColor: (customized ? saved.cardColor : null) || CLIENT_SIGNIN_DEFAULTS.cardColor,
     cornerRadius: customized ? saved.cornerRadius ?? CLIENT_SIGNIN_DEFAULTS.cornerRadius : CLIENT_SIGNIN_DEFAULTS.cornerRadius,
     buttonLabel: (customized ? saved.buttonLabel : null) || CLIENT_SIGNIN_DEFAULTS.buttonLabel,
@@ -136,7 +136,7 @@ export default function ClientSignInSettingsPage() {
   }, [tenant]);
 
   const set = <K extends keyof ClientSignInBranding>(key: K, value: ClientSignInBranding[K]) => {
-    setDraft((current) => ({ ...current, [key]: value }));
+    setDraft((current) => ({ ...current, [key]: value, customized: true }));
   };
 
   const preview = resolveClientSignInPublicConfig({
@@ -145,6 +145,12 @@ export default function ClientSignInSettingsPage() {
     businessName: tenant?.name || "Your business",
     logoUrl: tenant?.logoUrl || null,
     branding: draft,
+    brand: {
+      primaryColor: tenant?.brandColor,
+      backgroundColor: tenant?.backgroundColor,
+      textColor: tenant?.textColor,
+      accentColor: tenant?.accentColor,
+    },
   });
 
   const save = async (branding: ClientSignInBranding | null) => {

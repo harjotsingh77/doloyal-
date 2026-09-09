@@ -26,6 +26,13 @@ export const CLIENT_SIGNIN_DEFAULTS = {
   heroImageUrl: null as string | null,
 };
 
+/** Prisma seeds this on tenants. It is not Doloyal sign-in branding. */
+const TENANT_STOCK_ACCENT = "#F59E0B";
+
+function isSignInAccent(value?: string | null): value is string {
+  return !!value && /^#[0-9a-fA-F]{6}$/.test(value) && value.toUpperCase() !== TENANT_STOCK_ACCENT;
+}
+
 function pickString(raw: Record<string, unknown>, key: string): string | null {
   const value = raw[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -47,12 +54,20 @@ export function resolveClientSignInPublicConfig(input: {
   businessName: string;
   logoUrl?: string | null;
   branding?: ClientSignInBranding | Record<string, unknown> | null;
+  brand?: {
+    primaryColor?: string | null;
+    backgroundColor?: string | null;
+    textColor?: string | null;
+    accentColor?: string | null;
+  } | null;
 }): ClientSignInPublicConfig {
   const raw = (input.branding || {}) as Record<string, unknown>;
   const customized = raw.customized === true;
   const defaults = CLIENT_SIGNIN_DEFAULTS;
   const layoutRaw = pickString(raw, "layout");
   const layout: ClientSignInLayout = layoutRaw === "split" ? "split" : "centered";
+  const hex = (value?: string | null, fallback?: string) =>
+    value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
 
   if (!customized) {
     return {
@@ -60,10 +75,22 @@ export function resolveClientSignInPublicConfig(input: {
       tenantId: input.tenantId,
       businessName: input.businessName,
       customized: false,
-      logoUrl: null,
+      logoUrl: input.logoUrl || null,
       welcomeMessage: pickString(raw, "welcomeMessage") || `Welcome to ${input.businessName}`,
       tagline: null,
-      ...defaults,
+      primaryColor: hex(input.brand?.primaryColor, defaults.primaryColor)!,
+      backgroundColor: hex(input.brand?.backgroundColor, defaults.backgroundColor)!,
+      textColor: hex(input.brand?.textColor, defaults.textColor)!,
+      accentColor: isSignInAccent(input.brand?.accentColor) ? input.brand.accentColor : defaults.accentColor,
+      cardColor: defaults.cardColor,
+      fontFamily: defaults.fontFamily,
+      layout: defaults.layout,
+      cornerRadius: defaults.cornerRadius,
+      buttonLabel: defaults.buttonLabel,
+      showGoogle: defaults.showGoogle,
+      showForgotPassword: defaults.showForgotPassword,
+      showLogo: defaults.showLogo,
+      heroImageUrl: null,
     };
   }
 
@@ -78,7 +105,7 @@ export function resolveClientSignInPublicConfig(input: {
     primaryColor: pickString(raw, "primaryColor") || defaults.primaryColor,
     backgroundColor: pickString(raw, "backgroundColor") || defaults.backgroundColor,
     textColor: pickString(raw, "textColor") || defaults.textColor,
-    accentColor: pickString(raw, "accentColor") || defaults.accentColor,
+    accentColor: isSignInAccent(pickString(raw, "accentColor")) ? pickString(raw, "accentColor")! : defaults.accentColor,
     cardColor: pickString(raw, "cardColor") || defaults.cardColor,
     fontFamily: pickString(raw, "fontFamily") || defaults.fontFamily,
     layout,

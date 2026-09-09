@@ -4,11 +4,12 @@ import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant-query";
 import { useCurrency } from "@/lib/currency-context";
+import { CURRENCY_MAP, STORAGE_KEY } from "@/lib/currency";
 
 /**
- * Loads the tenant's saved currency from the cached tenant query on app start.
- * Shares the same React Query entry as the Settings pages, so the tenant is
- * fetched at most once per stale window no matter how many consumers exist.
+ * Seeds display currency from the tenant only when the user has not already
+ * picked one. A header selection is stored in localStorage and must not be
+ * overwritten on every tenant refetch or page load.
  */
 export function TenantCurrencySync() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -17,9 +18,10 @@ export function TenantCurrencySync() {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-    if (tenant?.currency) setCurrency(tenant.currency);
-    // Keep localStorage in sync for the pre-hydration currency bootstrap.
-    if (tenant?.currency) localStorage.setItem("doloyal_currency", tenant.currency);
+    if (!tenant?.currency || !CURRENCY_MAP.has(tenant.currency)) return;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && CURRENCY_MAP.has(stored)) return;
+    setCurrency(tenant.currency);
   }, [isLoading, isAuthenticated, tenant?.currency, setCurrency]);
 
   return null;

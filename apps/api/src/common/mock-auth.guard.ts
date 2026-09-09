@@ -26,11 +26,13 @@ export class MockAuthGuard implements CanActivate {
 
     if ((request as any).user) return true;
 
-    const authHeader = request.headers['authorization'] as string;
-
-    // A present bearer token is validated by the real JwtAuthGuard (passport-jwt).
-    // Nothing here should ever "trust" a token — we only skip mock provisioning.
-    if (authHeader?.startsWith('Bearer ') && authHeader.length > 30) {
+    const token = this.tokenFromRequest(request);
+    if (token && token.length > 30) {
+      // EventSource cannot send Authorization headers, so live streams pass
+      // the JWT as `?access_token=`. Promote it so JwtAuthGuard can validate.
+      if (!String(request.headers['authorization'] || '').startsWith('Bearer ')) {
+        request.headers['authorization'] = `Bearer ${token}`;
+      }
       return true;
     }
 
@@ -119,15 +121,21 @@ export class MockAuthGuard implements CanActivate {
     return true;
   }
 
+  private tokenFromRequest(request: { headers?: Record<string, unknown>; query?: Record<string, unknown> }): string | null {
+    const header = String(request.headers?.['authorization'] || '');
+    if (header.startsWith('Bearer ') && header.length > 15) return header.slice(7).trim();
+    const query = request.query?.access_token ?? request.query?.token;
+    if (typeof query === 'string' && query.trim()) return query.trim();
+    return null;
+  }
+
   private async handleClerkAuth(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers['authorization'] as string;
+    const token = this.tokenFromRequest(request);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       throw new UnauthorizedException('Missing or invalid Authorization header');
     }
-
-    const token = authHeader.slice(7);
 
     try {
       const { createClerkClient, verifyToken } = await import('@clerk/backend');

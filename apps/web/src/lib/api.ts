@@ -251,22 +251,37 @@ export const api = {
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(`${BASE_URL}/products/${id}/image`, { method: "POST", headers, body: form });
-    if (!res.ok) {
-      let message = "Image upload failed";
-      try {
-        const b = await res.json();
-        message = b.error?.message ?? message;
-      } catch {}
-      throw new ApiError(res.status, "UPLOAD_FAILED", message);
+    if (res.ok) {
+      const envelope = (await res.json()) as ApiResponse<CatalogProduct>;
+      if (isApiError(envelope) || !("data" in envelope)) {
+        const err = "error" in envelope ? envelope.error : { code: "UPLOAD_FAILED", message: "Image upload failed" };
+        throw new ApiError(res.status, err.code, err.message);
+      }
+      notifyFromApiPath(`/products/${id}/image`, "POST");
+      return envelope.data;
     }
-    const envelope = (await res.json()) as ApiResponse<CatalogProduct>;
-    if (isApiError(envelope) || !("data" in envelope)) {
-      const err = "error" in envelope ? envelope.error : { code: "UPLOAD_FAILED", message: "Image upload failed" };
-      throw new ApiError(res.status, err.code, err.message);
+    let message = "Image upload failed";
+    try {
+      const b = await res.json();
+      message = b.error?.message ?? message;
+    } catch {}
+    if (/no image uploaded/i.test(message)) {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read image"));
+        reader.readAsDataURL(file);
+      });
+      return request<CatalogProduct>(`/products/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ imageUrl: dataUrl }),
+      });
     }
-    notifyFromApiPath(`/products/${id}/image`, "POST");
-    return envelope.data;
+    throw new ApiError(res.status, "UPLOAD_FAILED", message);
   },
+
+  deleteProductImage: (id: string) =>
+    request<CatalogProduct>(`/products/${id}/image`, { method: "DELETE" }),
 
   listOrders: (params?: ClientOrderQuery) => {
     const searchParams = new URLSearchParams();
@@ -2031,6 +2046,21 @@ export const api = {
 
   duplicateWebsite: (id: string) =>
     withFallback(() => request<any>(`/websites/${id}/duplicate`, { method: "POST" }), "duplicateWebsite", id),
+
+  chatClientPageAi: (data: {
+    message: string;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
+    selectedSection?: string;
+    config?: Record<string, unknown>;
+  }) =>
+    request<{
+      reply: string;
+      configPatch: Record<string, unknown>;
+      brandPatch: Record<string, unknown>;
+      selectSection?: string;
+      provider?: string;
+      model?: string;
+    }>("/client-page/ai/chat", { method: "POST", body: JSON.stringify(data) }),
 
   generateWebsite: (id: string, data: { prompt: string; industry?: string }) =>
     withFallback(() => request<any>(`/websites/${id}/generate`, { method: "POST", body: JSON.stringify(data) }), "generateWebsite", id, data),

@@ -48,7 +48,12 @@ export function useUpdateTenant() {
       if (context?.previous) {
         queryClient.setQueryData(TENANT_QUERY_KEY, context.previous);
       }
-      toast.error(err instanceof Error ? err.message : "Unable to save changes. Try again.");
+      const message = err instanceof Error ? err.message : "";
+      toast.error(
+        /unauthorized|authentication required|session expired/i.test(message)
+          ? "Your session expired. Please sign in again."
+          : message || "Unable to save changes. Try again.",
+      );
     },
     onSuccess: (updated) => {
       queryClient.setQueryData(TENANT_QUERY_KEY, updated);

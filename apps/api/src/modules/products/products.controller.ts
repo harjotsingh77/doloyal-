@@ -5,12 +5,15 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
   BadRequestException,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   IsIn,
@@ -23,12 +26,35 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import type { FastifyRequest } from 'fastify';
+import { Type, Transform } from 'class-transformer';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { Public } from '../auth/public.decorator';
 import { Roles } from '../../common/roles.decorator';
 import { ProductsService } from './products.service';
+
+type MultipartRequest = FastifyRequest & {
+  file?: () => Promise<any>;
+  raw?: { file?: () => Promise<any> };
+};
+
+async function readMultipartImage(req: MultipartRequest) {
+  const fileFn =
+    typeof req.file === 'function'
+      ? req.file.bind(req)
+      : typeof req.raw?.file === 'function'
+        ? req.raw.file.bind(req.raw)
+        : null;
+  const file = fileFn ? await fileFn() : null;
+  if (!file) return null;
+  return {
+    buffer: await file.toBuffer(),
+    mimetype: file.mimetype || 'application/octet-stream',
+    filename: file.filename || 'upload.jpg',
+  };
+}
 
 class ListProductsQuery {
   @IsString()
@@ -97,6 +123,8 @@ class ProductBodyDto {
   @MaxLength(5000)
   description?: string;
 
+  @Transform(({ value }) => (value === '' || value === null || value === undefined ? null : value))
+  @ValidateIf((_, value) => value != null)
   @IsUUID()
   @IsOptional()
   categoryId?: string | null;
@@ -107,13 +135,15 @@ class ProductBodyDto {
   @IsOptional()
   price?: number;
 
-  @Type(() => Number)
+  @Transform(({ value }) => (value === '' || value === null || value === undefined ? null : Number(value)))
+  @ValidateIf((_, value) => value != null)
   @IsNumber()
   @Min(0)
   @IsOptional()
   originalPrice?: number | null;
 
-  @Type(() => Number)
+  @Transform(({ value }) => (value === '' || value === null || value === undefined ? null : Number(value)))
+  @ValidateIf((_, value) => value != null)
   @IsNumber()
   @Min(0)
   @IsOptional()
@@ -148,6 +178,7 @@ class ProductBodyDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(20_000_000)
   imageUrl?: string | null;
 
   @IsIn(['ACTIVE', 'INACTIVE'])
@@ -175,6 +206,8 @@ class CreateProductDto {
   @MaxLength(5000)
   description?: string;
 
+  @Transform(({ value }) => (value === '' || value === null || value === undefined ? null : value))
+  @ValidateIf((_, value) => value != null)
   @IsUUID()
   @IsOptional()
   categoryId?: string | null;
@@ -184,13 +217,15 @@ class CreateProductDto {
   @Min(0)
   price: number;
 
-  @Type(() => Number)
+  @Transform(({ value }) => (value === '' || value === null || value === undefined ? null : Number(value)))
+  @ValidateIf((_, value) => value != null)
   @IsNumber()
   @Min(0)
   @IsOptional()
   originalPrice?: number | null;
 
-  @Type(() => Number)
+  @Transform(({ value }) => (value === '' || value === null || value === undefined ? null : Number(value)))
+  @ValidateIf((_, value) => value != null)
   @IsNumber()
   @Min(0)
   @IsOptional()
@@ -225,6 +260,7 @@ class CreateProductDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(20_000_000)
   imageUrl?: string | null;
 
   @IsIn(['ACTIVE', 'INACTIVE'])
@@ -312,26 +348,61 @@ export class ProductsController {
 
   @Post('products/:id/image')
   @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  @HttpCode(HttpStatus.OK)
   async uploadImage(
     @CurrentUser() user: { activeTenantId: string },
     @Param('id') id: string,
-    @Req() req: FastifyRequest & { file?: () => Promise<any> },
+    @Req() req: MultipartRequest,
   ) {
-    const file = await req.file?.();
+    const file = await readMultipartImage(req);
     if (!file) throw new BadRequestException('No image uploaded');
-    const buffer = await file.toBuffer();
     return this.products.setImage(
       user.activeTenantId,
       id,
-      buffer,
+      file.buffer,
       file.mimetype,
-      file.filename || 'upload.png',
+      file.filename,
     );
+  }
+
+  @Delete('products/:id/image')
+  @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  clearImage(@CurrentUser() user: { activeTenantId: string }, @Param('id') id: string) {
+    return this.products.clearImage(user.activeTenantId, id);
+  }
+
+  @Get('products/:id/image')
+  async ownerImage(
+    @CurrentUser() user: { activeTenantId: string },
+    @Param('id') id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    return this.sendProductImage(reply, await this.products.openImage({ id, tenantId: user.activeTenantId }));
+  }
+
+  @Public()
+  @Get('public/products/:id/image')
+  async publicImage(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    return this.sendProductImage(reply, await this.products.openImage({ id }));
   }
 
   @Delete('products/:id')
   @Roles('OWNER', 'MANAGER')
   remove(@CurrentUser() user: { activeTenantId: string }, @Param('id') id: string) {
     return this.products.remove(user.activeTenantId, id);
+  }
+
+  private sendProductImage(
+    reply: FastifyReply,
+    media: { mime: string; stream?: NodeJS.ReadableStream; buffer?: Buffer },
+  ) {
+    reply.header('Content-Type', media.mime);
+    reply.header('Cache-Control', 'public, max-age=86400');
+    if (media.buffer) return new StreamableFile(media.buffer);
+    if (media.stream) return new StreamableFile(media.stream as any);
+    throw new NotFoundException('Product image not found');
   }
 }

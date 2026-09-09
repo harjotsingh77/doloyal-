@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
+import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
 import {
   applyCustomerSpendDelta,
   awardSpendPoints,
@@ -23,7 +24,10 @@ export function computeOrderTotal(quantity: number, unitPrice: number, discount:
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: CommerceRealtimeService,
+  ) {}
 
   private map(
     row: {
@@ -275,7 +279,7 @@ export class OrdersService {
         : `Order ${orderNumber} created (${status})`,
     });
 
-    return this.map(row);
+    return this.afterOrderChange(this.map(row));
   }
 
   async update(
@@ -442,7 +446,7 @@ export class OrdersService {
       });
     }
 
-    return this.map(row);
+    return this.afterOrderChange(this.map(row));
   }
 
   async remove(tenantId: string, id: string) {
@@ -478,6 +482,16 @@ export class OrdersService {
       type: 'NOTE_ADDED',
       message: `Order ${existing.orderNumber} deleted`,
     });
+    this.realtime.publish(tenantId, 'orders');
+    this.realtime.publish(tenantId, 'products');
+    this.realtime.publish(tenantId, 'customers');
     return { ok: true };
+  }
+
+  private afterOrderChange<T>(row: T): T {
+    this.realtime.publish((row as { tenantId?: string }).tenantId || '', 'orders');
+    this.realtime.publish((row as { tenantId?: string }).tenantId || '', 'products');
+    this.realtime.publish((row as { tenantId?: string }).tenantId || '', 'customers');
+    return row;
   }
 }

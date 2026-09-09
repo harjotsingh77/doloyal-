@@ -29,7 +29,7 @@ import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 import { OrderFormDialog } from "../order-form-dialog";
-import { useAppSync } from "@/lib/data-sync";
+import { useCommerceLive } from "@/lib/data-sync";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -50,9 +50,9 @@ export default function OrderDetailPage() {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
       setError(null);
       setOrder(await api.getOrder(params.id));
     } catch (err) {
@@ -66,7 +66,7 @@ export default function OrderDetailPage() {
     void load();
   }, [load]);
 
-  useAppSync(["orders"], () => void load());
+  useCommerceLive(["orders"], () => void load({ silent: true }));
 
   const handleDelete = async () => {
     if (!order) return;

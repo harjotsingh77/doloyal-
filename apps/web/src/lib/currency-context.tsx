@@ -20,14 +20,18 @@ interface CurrencyContextValue {
 
 const CurrencyContext = React.createContext<CurrencyContextValue | null>(null);
 
+function readStoredCurrency(): string {
+  if (typeof window === "undefined") return DEFAULT_CURRENCY;
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored && CURRENCY_MAP.has(stored) ? stored : DEFAULT_CURRENCY;
+}
+
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = React.useState(DEFAULT_CURRENCY);
 
   React.useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && CURRENCY_MAP.has(stored)) {
-      setCurrencyState(stored);
-    }
+    const stored = readStoredCurrency();
+    setCurrencyState(stored);
   }, []);
 
   const setCurrency = React.useCallback((code: string) => {

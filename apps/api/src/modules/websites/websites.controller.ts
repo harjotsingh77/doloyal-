@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body } from "@nestjs/common";
-import { IsString, IsOptional, IsNotEmpty } from "class-validator";
+import { IsString, IsOptional, IsNotEmpty, IsArray, IsObject, MaxLength, MinLength, ValidateNested } from "class-validator";
+import { Type } from "class-transformer";
 import { WebsitesService } from "./websites.service";
 import { WebsiteAIService } from "./website-ai.service";
 import { WebsitePublishingService } from "./website-publishing.service";
@@ -40,6 +41,19 @@ class RegenerateSectionDto {
   @IsString() @IsNotEmpty() prompt: string;
 }
 
+class ClientPageAiHistoryDto {
+  @IsString() role: string;
+  @IsString() content: string;
+}
+
+class ClientPageAiChatDto {
+  @IsString() @MinLength(1) @MaxLength(8000) message: string;
+  @IsArray() @IsOptional() @ValidateNested({ each: true }) @Type(() => ClientPageAiHistoryDto)
+  history?: ClientPageAiHistoryDto[];
+  @IsString() @IsOptional() selectedSection?: string;
+  @IsObject() @IsOptional() config?: Record<string, unknown>;
+}
+
 @Controller()
 export class WebsitesController {
   constructor(
@@ -77,6 +91,19 @@ export class WebsitesController {
   @Post("websites/:id/duplicate")
   duplicate(@Param("id") id: string, @CurrentUser() user: any) {
     return this.websitesService.duplicate(user.activeTenantId, id);
+  }
+
+  // ─── Client Page AI (website NVIDIA key only) ──────────────────────────
+
+  @Post("client-page/ai/chat")
+  chatClientPage(@Body() dto: ClientPageAiChatDto, @CurrentUser() user: any) {
+    return this.aiService.chatClientPage({
+      tenantId: user.activeTenantId,
+      message: dto.message,
+      history: dto.history,
+      selectedSection: dto.selectedSection,
+      config: dto.config,
+    });
   }
 
   // ─── AI Generation ──────────────────────────────────────────────────────

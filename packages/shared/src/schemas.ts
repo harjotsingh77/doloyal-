@@ -690,7 +690,7 @@ export const createProductSchema = z.object({
   unit: z.string().max(40).optional().or(z.literal("")),
   brand: z.string().max(80).optional().or(z.literal("")),
   productCode: z.string().max(64).optional().or(z.literal("")),
-  imageUrl: z.string().max(5_000_000).optional().nullable(),
+  imageUrl: z.string().max(20_000_000).optional().nullable(),
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
   availability: z.enum(["IN_STOCK", "OUT_OF_STOCK"]).default("IN_STOCK"),
 });

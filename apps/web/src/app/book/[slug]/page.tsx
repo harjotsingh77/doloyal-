@@ -35,8 +35,10 @@ import type {
   BookingConfirmation,
 } from "@doloyal/shared";
 import { ClientPageRenderer, masterConfigFromPageConfig } from "@/app/(dashboard)/app/client-page/client-page-renderer";
+import { catalogImageSrc } from "@/app/(dashboard)/app/client-page/portal-shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
 import { useClientAuth } from "@/lib/client-auth";
+import { useCommerceLive } from "@/lib/data-sync";
 
 const BASE_URL = getApiBaseUrl();
 
@@ -381,7 +383,7 @@ function ThemeToggle() {
     <button
       type="button"
       onClick={() => setTheme(dark ? "light" : "dark")}
-      className="grid h-9 w-9 place-items-center rounded-full text-[#1c1410] hover:bg-white/80"
+      className="grid h-9 w-9 place-items-center rounded-full text-current hover:bg-black/5"
       aria-label="Toggle theme"
     >
       {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -431,11 +433,29 @@ export default function BookingPage() {
 
   const [services, setServices] = React.useState<PublicService[]>([]);
   const [servicesLoading, setServicesLoading] = React.useState(true);
+  const [selectedService, setSelectedService] = React.useState<PublicService | null>(null);
+
+  const refreshCatalog = React.useCallback(async () => {
+    if (!slug) return;
+    try {
+      const res = await fetch(`${BASE_URL}/public/book/${slug}/services`);
+      const json = await res.json();
+      const next = (json.data ?? []) as PublicService[];
+      setServices(next);
+      setSelectedService((current) => {
+        if (!current) return current;
+        return next.find((service) => service.id === current.id) ?? current;
+      });
+    } catch {
+      /* keep the last good catalog */
+    }
+  }, [slug]);
+
+  useCommerceLive(["products"], () => void refreshCatalog(), { publicSlug: slug });
 
   const [staff, setStaff] = React.useState<PublicStaff[]>([]);
   const [staffLoading, setStaffLoading] = React.useState(true);
 
-  const [selectedService, setSelectedService] = React.useState<PublicService | null>(null);
   const [selectedStaff, setSelectedStaff] = React.useState<string | null>(null);
   const [selectedStaffName, setSelectedStaffName] = React.useState<string | null>(null);
   const [selectedDate, setSelectedDate] = React.useState<Date | null>(null);
@@ -1161,13 +1181,17 @@ function StepService({
                   key={s.id}
                   onClick={() => onSelect(s)}
                   className={`
-                    relative text-left p-4 rounded-[var(--radius)] border transition-all duration-200
+                    relative overflow-hidden text-left rounded-[var(--radius)] border transition-all duration-200
                     ${isSelected
                       ? "border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.05)] shadow-sm"
                       : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] hover:border-[rgb(var(--color-primary)/0.4)] hover:shadow-soft"
                     }
                   `}
                 >
+                  {s.imageUrl ? (
+                    <img src={catalogImageSrc(s.imageUrl, "")} alt="" className="h-28 w-full object-cover" />
+                  ) : null}
+                  <div className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h3 className="text-sm font-semibold leading-snug">
                       {s.name}
@@ -1191,6 +1215,7 @@ function StepService({
                         {s.category}
                       </span>
                     )}
+                  </div>
                   </div>
                   {isSelected && (
                     <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[rgb(var(--color-primary))] flex items-center justify-center">

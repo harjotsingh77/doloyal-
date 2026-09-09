@@ -65,6 +65,10 @@ export class ClientAuthService {
     id: string;
     name: string;
     logoUrl: string | null;
+    brandColor?: string | null;
+    backgroundColor?: string | null;
+    textColor?: string | null;
+    accentColor?: string | null;
     clientSignInBranding: unknown;
   }, slug: string): ClientSignInPublicConfig {
     return resolveClientSignInPublicConfig({
@@ -73,6 +77,12 @@ export class ClientAuthService {
       businessName: tenant.name,
       logoUrl: tenant.logoUrl,
       branding: tenant.clientSignInBranding as Record<string, unknown> | null,
+      brand: {
+        primaryColor: tenant.brandColor,
+        backgroundColor: tenant.backgroundColor,
+        textColor: tenant.textColor,
+        accentColor: tenant.accentColor,
+      },
     });
   }
 

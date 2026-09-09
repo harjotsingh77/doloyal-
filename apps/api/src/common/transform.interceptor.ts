@@ -12,6 +12,11 @@ import { FastifyReply } from 'fastify';
 @Injectable()
 export class TransformInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const request = context.switchToHttp().getRequest<{ url?: string; raw?: { url?: string } }>();
+    const url = String(request?.url || request?.raw?.url || '');
+    if (url.includes('/events')) {
+      return next.handle();
+    }
     const reply = context.switchToHttp().getResponse<FastifyReply>();
     return next.handle().pipe(
       map((payload) => {

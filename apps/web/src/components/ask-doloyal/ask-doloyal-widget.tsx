@@ -31,8 +31,9 @@ export function AskDoloyalWidget() {
       <button
         onClick={toggle}
         aria-label={isOpen ? "Close Ask Doloyal" : "Open Ask Doloyal"}
+        data-ask-doloyal-fab=""
         className={cn(
-          "fixed bottom-5 right-5 z-[70] flex items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6",
+          "fixed bottom-5 right-5 z-[70] flex items-center justify-center rounded-full transition-[bottom,transform] duration-200 hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6",
           isOpen
             ? "bg-[rgb(var(--color-primary))] p-3.5 text-white shadow-lg shadow-black/20"
             : "p-0 drop-shadow-xl",

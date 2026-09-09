@@ -1,4 +1,5 @@
 import * as React from "react";
+import { getApiBaseUrl } from "./api-base";
 
 export type AppDataScope =
   | "dashboard"
@@ -80,6 +81,14 @@ export function notifyFromApiPath(path: string, method: string) {
   if (scopes) notifyAppChange(scopes);
 }
 
+/** Finder / OS file dialogs blur the window. Reloading on focus would unmount
+ *  the <input type="file"> before its change event fires. */
+let suppressFocusReloadUntil = 0;
+
+export function suppressAppSyncFocusReload(ms = 20_000) {
+  suppressFocusReloadUntil = Math.max(suppressFocusReloadUntil, Date.now() + ms);
+}
+
 export function useAppSync(scopes: AppDataScope[], reload: () => void) {
   const reloadRef = React.useRef(reload);
   reloadRef.current = reload;
@@ -100,7 +109,10 @@ export function useAppSync(scopes: AppDataScope[], reload: () => void) {
     };
 
     window.addEventListener(EVENT, onChange);
-    const onFocus = () => reloadRef.current();
+    const onFocus = () => {
+      if (Date.now() < suppressFocusReloadUntil) return;
+      reloadRef.current();
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       if (timer) clearTimeout(timer);
@@ -108,4 +120,51 @@ export function useAppSync(scopes: AppDataScope[], reload: () => void) {
       window.removeEventListener("focus", onFocus);
     };
   }, [scopesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+export function useCommerceLive(
+  scopes: AppDataScope[],
+  reload: () => void,
+  options?: { publicSlug?: string | null },
+) {
+  useAppSync(scopes, reload);
+  const reloadRef = React.useRef(reload);
+  reloadRef.current = reload;
+  const scopesKey = scopes.slice().sort().join(",");
+  const slug = options?.publicSlug || "";
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const base = getApiBaseUrl();
+    const token = window.localStorage.getItem("doloyal_token");
+    const liveToken = token && token !== "mock-token" && token !== "demo-token" ? token : "";
+    const url = slug
+      ? `${base}/public/book/${encodeURIComponent(slug)}/events`
+      : liveToken
+        ? `${base}/commerce/events?access_token=${encodeURIComponent(liveToken)}`
+        : `${base}/commerce/events`;
+    const source = new EventSource(url);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const wanted = new Set(scopes);
+    const onMessage = (event: MessageEvent) => {
+      let scope = "";
+      try {
+        const payload = JSON.parse(event.data) as { scope?: string };
+        scope = payload.scope || "";
+      } catch {
+        return;
+      }
+      if (!scope || (!wanted.has(scope as AppDataScope) && !wanted.has("all"))) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => reloadRef.current(), 120);
+    };
+    source.onmessage = onMessage;
+    source.onerror = () => {
+      // Auth/network drops are expected; the next successful connection refreshes.
+    };
+    return () => {
+      if (timer) clearTimeout(timer);
+      source.close();
+    };
+  }, [scopesKey, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 }
