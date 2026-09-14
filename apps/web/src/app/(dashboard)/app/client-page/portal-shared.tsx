@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { ClientPortal } from "@doloyal/shared";
+import { getApiBaseUrl } from "@/lib/api-base";
 
 export type BusinessType = "salon" | "gym" | "cafe" | "restaurant" | "spa" | "boutique" | "custom";
 
@@ -240,7 +241,7 @@ const CATEGORY_PHOTOS: Record<string, string> = {
 export function catalogImageSrc(url: string | null | undefined, fallback: string) {
   if (!url) return fallback;
   if (url.startsWith("data:") || url.startsWith("blob:") || /^https?:\/\//i.test(url)) return url;
-  const base = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) || "http://localhost:4000";
+  const base = getApiBaseUrl();
   return `${String(base).replace(/\/+$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
 }
 

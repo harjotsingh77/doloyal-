@@ -28,7 +28,7 @@ export default function AffiliatePage() {
       >
         <div className="mt-2 flex flex-col items-center gap-4 sm:flex-row">
           <a
-            href="mailto:affiliates@doloyal.ai?subject=Affiliate%20sign-up"
+            href="mailto:hello@doloyal.com?subject=Affiliate%20sign-up"
             className="group inline-flex h-12 items-center gap-2 rounded-full bg-[#0F172A] px-7 text-[14.5px] font-semibold text-white shadow-[0_1px_2px_rgba(15,23,42,0.3),0_12px_32px_-12px_rgba(15,23,42,0.5)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1E293B]"
           >
             Apply to join <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

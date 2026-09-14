@@ -1464,7 +1464,7 @@ export class StaffService {
         const { Resend } = await import('resend');
         const resend = new Resend(apiKey);
         await resend.emails.send({
-          from: process.env.RESEND_FROM || 'Doloyal <noreply@doloyal.ai>',
+          from: process.env.RESEND_FROM || 'Doloyal <onboarding@resend.dev>',
           to: invitation.email,
           subject: `You've been invited to join ${businessName} on Doloyal`,
           html,

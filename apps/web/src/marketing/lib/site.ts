@@ -9,7 +9,7 @@ export const site = {
   ogImage: "https://doloyal.ai/og.png",
   logo: "/logo-full.png",
   logoMark: "/logo-symbol.png",
-  email: "hello@doloyal.ai",
+  email: "hello@doloyal.com",
   social: {
     twitter: "https://x.com/doloyal",
     linkedin: "https://www.linkedin.com/company/doloyal",

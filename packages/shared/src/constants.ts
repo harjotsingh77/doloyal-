@@ -16,7 +16,7 @@ export const BRAND = {
   background: "#F8FAFC",
 } as const;
 
-export const SUPPORT_EMAIL = "hello@doloyal.ai";
+export const SUPPORT_EMAIL = "hello@doloyal.com";
 
 export const DEFAULT_CURRENCY = "INR";
 export const DEFAULT_CURRENCY_SYMBOL = "₹";

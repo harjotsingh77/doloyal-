@@ -72,7 +72,7 @@ export default function CareersPage() {
             {ROLES.map((r, i) => (
               <Reveal key={r.title} delay={i * 0.05}>
                 <a
-                  href="mailto:careers@doloyal.ai"
+                  href="mailto:hello@doloyal.com"
                   className="group flex flex-col gap-3 rounded-2xl border border-[rgb(var(--color-border))] bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0F172A]/15 hover:shadow-[0_20px_44px_-20px_rgba(15,23,42,0.22)] sm:flex-row sm:items-center"
                 >
                   <div className="flex-1">

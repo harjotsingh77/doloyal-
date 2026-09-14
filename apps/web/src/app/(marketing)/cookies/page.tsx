@@ -37,7 +37,7 @@ export default function CookiesPage() {
         },
         {
           h: "Contact",
-          p: "Questions about cookies? Email privacy@doloyal.ai.",
+          p: "Questions about cookies? Email hello@doloyal.com.",
         },
       ]}
     />

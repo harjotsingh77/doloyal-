@@ -417,8 +417,9 @@ export class AuthService {
     if (!apiKey) {
       return { ok: false, error: 'RESEND_API_KEY is not configured on this environment' };
     }
-    const from = process.env.RESEND_FROM || 'Doloyal <onboarding@resend.dev>';
-    try {
+    const preferredFrom = process.env.RESEND_FROM || 'Doloyal <onboarding@resend.dev>';
+    const fallbackFrom = 'Doloyal <onboarding@resend.dev>';
+    const sendOnce = async (from: string) => {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -429,9 +430,19 @@ export class AuthService {
       });
       if (!response.ok) {
         const body: any = await response.json().catch(() => null);
-        return { ok: false, error: body?.message || `Resend returned ${response.status}` };
+        return { ok: false as const, error: body?.message || `Resend returned ${response.status}` };
       }
-      return { ok: true };
+      return { ok: true as const };
+    };
+
+    try {
+      let result = await sendOnce(preferredFrom);
+      const unverified = /not verified|invalid `from`/i.test(result.error || '');
+      if (!result.ok && unverified && !preferredFrom.includes('resend.dev')) {
+        this.logger.warn(`Resend rejected ${preferredFrom}; retrying with ${fallbackFrom}`);
+        result = await sendOnce(fallbackFrom);
+      }
+      return result;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to reach Resend' };
     }

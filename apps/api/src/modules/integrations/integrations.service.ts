@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
 import { WhatsAppIntegrationService } from './services/whatsapp.service';
@@ -37,6 +38,7 @@ export class IntegrationsService {
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
     private readonly whatsapp: WhatsAppIntegrationService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /** Builds a Stripe client from the tenant's stored (encrypted) key. */
@@ -46,7 +48,7 @@ export class IntegrationsService {
       include: { tokens: true },
     });
     const raw = (integration?.tokens?.[0] as any) || {};
-    const apiKey = raw.apiKey ? this.encryption.decrypt(raw.apiKey) : process.env.STRIPE_SECRET_KEY;
+    const apiKey = raw.apiKey ? this.encryption.decrypt(raw.apiKey) : null;
     if (!apiKey) return null;
     const { default: Stripe } = await import('stripe');
     return new Stripe(apiKey);
@@ -99,6 +101,23 @@ export class IntegrationsService {
       throw new BadRequestException(
         'Resend connects through OAuth only. Use the Connect button to authorize with Resend.',
       );
+    }
+
+    if (type === 'STRIPE') {
+      const apiKey = credentials.apiKey?.trim();
+      if (!apiKey || !apiKey.startsWith('sk_')) {
+        throw new BadRequestException('A Stripe secret key starting with sk_ is required.');
+      }
+      await this.assertStripeSecretKey(apiKey);
+    }
+
+    if (type === 'RAZORPAY') {
+      const keyId = credentials.apiKey?.trim();
+      const keySecret = credentials.apiSecret?.trim();
+      if (!keyId || !keySecret) {
+        throw new BadRequestException('Razorpay Key ID and Key Secret are required.');
+      }
+      await this.assertRazorpayKeys(keyId, keySecret);
     }
 
     // WhatsApp requires a live-verified phone number id before accepting a
@@ -215,7 +234,13 @@ export class IntegrationsService {
       return this.testResendConnection(integration.id);
     }
 
-    const token = await this.getDecryptedToken(integration.id);
+    let token: Awaited<ReturnType<IntegrationsService['getDecryptedToken']>>;
+    try {
+      token = await this.getDecryptedToken(integration.id);
+    } catch {
+      await this.markExpired(integration.id, 'Saved credentials cannot be read. Please reconnect this integration.');
+      throw new BadRequestException('Saved credentials cannot be read. Please reconnect this integration.');
+    }
     if (!token) throw new BadRequestException('No credentials found');
 
     try {
@@ -251,14 +276,16 @@ export class IntegrationsService {
       return { success: true, message: email ? `Connected as ${email}` : 'Connection successful' };
     } catch (err: any) {
       const message = err?.message || 'Connection test failed';
-      const isRevoked = /revoked|invalid_grant|expired/i.test(message);
+      const needsReconnect = /revoked|invalid_grant|expired|decrypt|reconnect/i.test(message);
+      if (needsReconnect) {
+        await this.markExpired(integrationId, 'Google Calendar access was revoked or credentials cannot be read. Please reconnect.');
+        throw new BadRequestException('Google Calendar access was revoked or credentials cannot be read. Please reconnect.');
+      }
       await this.prisma.integration.update({
         where: { id: integrationId },
-        data: { errorLog: message, status: isRevoked ? 'EXPIRED' : 'ERROR' },
+        data: { errorLog: message, status: 'ERROR' },
       });
-      throw new BadRequestException(
-        isRevoked ? 'Google Calendar access was revoked. Please reconnect.' : `Google Calendar connection test failed: ${message}`,
-      );
+      throw new BadRequestException(`Google Calendar connection test failed: ${message}`);
     }
   }
 
@@ -273,7 +300,7 @@ export class IntegrationsService {
     });
 
     try {
-      const result = await this.syncWithProvider(type as any);
+      const result = await this.syncWithProvider(tenantId, type as any);
       await this.prisma.integration.update({
         where: { id: integration.id },
         data: { lastSyncedAt: new Date(), errorLog: null },
@@ -388,6 +415,11 @@ export class IntegrationsService {
     const providedSecretHeader = headers?.['x-webhook-secret'] || headers?.['x-doloyal-signature'];
     const providedSignature = headers?.['x-hub-signature-256'] || headers?.['x-signature'];
     const rawPayload = typeof rawBody === 'string' ? rawBody : rawBody?.toString('utf8') || '';
+    const stripeSignature = headers?.['stripe-signature'];
+
+    if (type === 'STRIPE' && stripeSignature) {
+      return this.handleStripeSignedWebhook(stripeSignature, rawPayload, candidates);
+    }
 
     const match = candidates.find((integration) => {
       const token = integration.tokens?.[0] as any;
@@ -1073,13 +1105,29 @@ export class IntegrationsService {
       where: { integrationId },
     });
     if (!token) return null;
-    return {
-      ...token,
-      apiKey: token.apiKey ? this.encryption.decrypt(token.apiKey) : null,
-      apiSecret: token.apiSecret ? this.encryption.decrypt(token.apiSecret) : null,
-      accessToken: token.accessToken ? this.encryption.decrypt(token.accessToken) : null,
-      refreshToken: token.refreshToken ? this.encryption.decrypt(token.refreshToken) : null,
-    };
+    try {
+      return {
+        ...token,
+        apiKey: token.apiKey ? this.encryption.decrypt(token.apiKey) : null,
+        apiSecret: token.apiSecret ? this.encryption.decrypt(token.apiSecret) : null,
+        accessToken: token.accessToken ? this.encryption.decrypt(token.accessToken) : null,
+        refreshToken: token.refreshToken ? this.encryption.decrypt(token.refreshToken) : null,
+        webhookSecret: token.webhookSecret ? this.encryption.decrypt(token.webhookSecret) : null,
+      };
+    } catch {
+      throw new BadRequestException('Saved credentials cannot be read. Please reconnect this integration.');
+    }
+  }
+
+  /** Live credentials for payment providers — never the sanitized public token blob. */
+  async getConnectedProviderSecrets(tenantId: string, type: string) {
+    const integration = await this.prisma.integration.findFirst({
+      where: { tenantId, type: type as any, status: 'CONNECTED' },
+    });
+    if (!integration) return null;
+    const token = await this.getDecryptedToken(integration.id);
+    if (!token) return null;
+    return { integrationId: integration.id, tenantId, token };
   }
 
   private async validateWithProvider(type: string, token: any) {
@@ -1088,8 +1136,9 @@ export class IntegrationsService {
 
     switch (type) {
       case 'STRIPE':
-        if (apiKey?.startsWith('sk_')) return { message: `Stripe account verified` };
-        throw new Error('Invalid Stripe key format');
+        if (!apiKey?.startsWith('sk_')) throw new Error('Invalid Stripe key format');
+        await this.assertStripeSecretKey(apiKey);
+        return { message: 'Stripe account verified' };
       case 'WHATSAPP': {
         const metadata = (token.metadata || {}) as Record<string, any>;
         if (!apiKey) throw new Error('Missing WhatsApp access token');
@@ -1101,8 +1150,9 @@ export class IntegrationsService {
         };
       }
       case 'RAZORPAY':
-        if (apiKey && apiSecret) return { message: 'Razorpay credentials valid' };
-        throw new Error('Missing Razorpay credentials');
+        if (!apiKey || !apiSecret) throw new Error('Missing Razorpay credentials');
+        await this.assertRazorpayKeys(apiKey, apiSecret);
+        return { message: 'Razorpay credentials valid' };
       case 'RESEND':
       case 'SENDGRID':
       case 'MAILGUN':
@@ -1157,26 +1207,129 @@ export class IntegrationsService {
     }
   }
 
-  private async syncWithProvider(type: string) {
-    switch (type) {
-      case 'HUBSPOT':
-      case 'SALESFORCE':
-      case 'PIPEDRIVE':
-        return { recordsProcessed: 0 };
-      case 'GOOGLE_CALENDAR':
-      case 'GOOGLE_BUSINESS_PROFILE':
-      case 'MICROSOFT_CALENDAR':
-        return { recordsProcessed: 0 };
-      case 'STRIPE':
-      case 'RAZORPAY':
-        return { recordsProcessed: 0 };
-      case 'SHOPIFY':
-        return { recordsProcessed: 0 };
-      case 'MAILCHIMP':
-        return { recordsProcessed: 0 };
-      default:
-        return { recordsProcessed: 0 };
+  private async syncWithProvider(tenantId: string, type: string) {
+    if (type === 'GOOGLE_CALENDAR') {
+      const { GoogleCalendarIntegrationService } = await import('./services/google-calendar.service');
+      const calendar = this.moduleRef.get(GoogleCalendarIntegrationService, { strict: false });
+      return calendar.syncUpcomingAppointments(tenantId);
     }
+    if (type === 'STRIPE') {
+      const secrets = await this.getConnectedProviderSecrets(tenantId, 'STRIPE');
+      if (!secrets?.token?.apiKey) throw new Error('Stripe is not connected');
+      await this.assertStripeSecretKey(secrets.token.apiKey);
+      return { recordsProcessed: 1 };
+    }
+    if (type === 'RAZORPAY') {
+      const secrets = await this.getConnectedProviderSecrets(tenantId, 'RAZORPAY');
+      if (!secrets?.token?.apiKey || !secrets.token.apiSecret) throw new Error('Razorpay is not connected');
+      await this.assertRazorpayKeys(secrets.token.apiKey, secrets.token.apiSecret);
+      return { recordsProcessed: 1 };
+    }
+    return { recordsProcessed: 0 };
+  }
+
+  private async assertStripeSecretKey(apiKey: string) {
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(apiKey);
+    await stripe.balance.retrieve();
+  }
+
+  private async assertRazorpayKeys(keyId: string, keySecret: string) {
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    const res = await fetch('https://api.razorpay.com/v1/orders?count=1', {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) {
+      const body: any = await res.json().catch(() => null);
+      throw new Error(body?.error?.description || `Razorpay rejected the keys (${res.status})`);
+    }
+  }
+
+  /**
+   * Stripe signs deliveries with `Stripe-Signature`, not a generic HMAC header.
+   * Try each tenant webhook secret, then the platform STRIPE_WEBHOOK_SECRET.
+   */
+  private async handleStripeSignedWebhook(
+    signature: string,
+    rawPayload: string,
+    candidates: Array<{ id: string; tenantId: string; tokens?: any[] }>,
+  ) {
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_webhook_verify');
+
+    const secrets: Array<{ secret: string; tenantId: string; integrationId: string }> = [];
+    for (const row of candidates) {
+      const token = row.tokens?.[0] as any;
+      if (!token?.webhookSecret) continue;
+      try {
+        secrets.push({
+          secret: this.encryption.decrypt(token.webhookSecret),
+          tenantId: row.tenantId,
+          integrationId: row.id,
+        });
+      } catch {
+        // skip undecryptable secrets
+      }
+    }
+    const platformSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (platformSecret) {
+      secrets.push({ secret: platformSecret, tenantId: '', integrationId: candidates[0]?.id || '' });
+    }
+
+    let event: any = null;
+    let matchedTenantId = '';
+    let matchedIntegrationId = '';
+    for (const entry of secrets) {
+      try {
+        event = stripe.webhooks.constructEvent(rawPayload, signature, entry.secret);
+        matchedTenantId = entry.tenantId;
+        matchedIntegrationId = entry.integrationId;
+        break;
+      } catch {
+        // try next secret
+      }
+    }
+    if (!event) throw new UnauthorizedException('Invalid Stripe webhook signature');
+
+    const intent = event?.data?.object;
+    const appointmentId = intent?.metadata?.appointmentId;
+    if (!matchedTenantId && appointmentId) {
+      const appointment = await this.prisma.appointment.findFirst({ where: { id: appointmentId } });
+      if (appointment) matchedTenantId = appointment.tenantId;
+    }
+    if (!matchedTenantId) {
+      return { received: true, type: event.type };
+    }
+
+    const integrationId =
+      matchedIntegrationId || candidates.find((c) => c.tenantId === matchedTenantId)?.id;
+    if (!integrationId) {
+      return { received: true, type: event.type };
+    }
+
+    const externalEventId = event.id || crypto.createHash('sha256').update(rawPayload).digest('hex');
+    try {
+      await p(this.prisma).webhookEvent.create({
+        data: {
+          integrationId,
+          externalEventId,
+          eventType: event.type,
+          payload: event,
+          status: 'PROCESSED',
+          processedAt: new Date(),
+        },
+      });
+    } catch (err: any) {
+      if (String(err?.code) === 'P2002') return { received: true, duplicate: true };
+      throw err;
+    }
+
+    try {
+      await this.processStripeEvent(matchedTenantId, event);
+    } catch (err: any) {
+      this.logger.warn(`Stripe webhook processing failed for tenant ${matchedTenantId}: ${err?.message}`);
+    }
+    return { received: true, type: event.type };
   }
 
   private sanitize(integration: any) {

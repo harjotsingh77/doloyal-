@@ -37,7 +37,8 @@ const ALL_PAGES_MENU = [
     { label: "Book a Demo", href: "/book-demo" },
     { label: "Integrations", href: "/integrations" },
     { label: "Privacy Policy", href: "/privacy-policy" },
-    { label: "Terms & Conditions", href: "/terms-and-conditions" },
+    { label: "Terms of Service", href: "/terms-of-service" },
+    { label: "Data Deletion", href: "/data-deletion" },
   ],
 ];
 

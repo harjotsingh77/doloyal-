@@ -256,4 +256,36 @@ export class GoogleCalendarIntegrationService {
     }
     return { success: true, message: 'Connection successful' };
   }
+
+  /** Push upcoming Doloyal appointments onto the connected Google Calendar. */
+  async syncUpcomingAppointments(tenantId: string): Promise<{ recordsProcessed: number }> {
+    const integration = await this.getConnectedIntegration(tenantId);
+    if (!integration) throw new Error('Google Calendar not connected');
+
+    const upcoming = await this.prisma.appointment.findMany({
+      where: {
+        tenantId,
+        startTime: { gte: new Date() },
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+      },
+      include: { customer: true },
+      orderBy: { startTime: 'asc' },
+      take: 100,
+    });
+
+    let recordsProcessed = 0;
+    for (const appointment of upcoming) {
+      await this.syncAppointmentToCalendar(tenantId, {
+        id: appointment.id,
+        tenantId,
+        serviceName: appointment.serviceName,
+        startTime: appointment.startTime,
+        endTime: appointment.endTime,
+        notes: appointment.notes,
+        customer: appointment.customer,
+      });
+      recordsProcessed += 1;
+    }
+    return { recordsProcessed };
+  }
 }

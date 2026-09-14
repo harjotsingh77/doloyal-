@@ -1,1 +1,1 @@
-export { default, metadata } from "../terms-and-conditions/page";
+export { default, metadata } from "../terms-of-service/page";

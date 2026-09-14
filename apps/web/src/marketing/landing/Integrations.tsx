@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 import { Container, Section, SectionHead, Stagger, StaggerItem } from "./ui";
 
 const ROW = [
-  "Slack", "Stripe", "Google", "WhatsApp", "Meta", "Shopify",
-  "Zapier", "QuickBooks", "HubSpot", "Zoom", "LinkedIn", "Instagram",
+  "Google Calendar", "WhatsApp", "Stripe", "Razorpay",
+  "Resend", "Google Business", "OpenAI", "Website widget",
 ];
 
 function LogoCell({ name }: { name: string }) {

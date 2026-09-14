@@ -8,7 +8,14 @@ export class RazorpayIntegrationService {
 
   async validateCredentials(keyId: string, keySecret: string): Promise<{ valid: boolean; accountName?: string; error?: string }> {
     try {
-      new Razorpay({ key_id: keyId, key_secret: keySecret });
+      const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+      const res = await fetch('https://api.razorpay.com/v1/orders?count=1', {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      if (!res.ok) {
+        const body: any = await res.json().catch(() => null);
+        return { valid: false, error: body?.error?.description || `Razorpay rejected the keys (${res.status})` };
+      }
       return { valid: true, accountName: 'Razorpay Account' };
     } catch (err: any) {
       return { valid: false, error: err.message };
@@ -16,14 +23,10 @@ export class RazorpayIntegrationService {
   }
 
   async getClient(tenantId: string): Promise<Razorpay | null> {
-    const integration = await this.integrations.get(tenantId, 'RAZORPAY' as any);
-    if (!integration || !integration.connected || !integration.token) return null;
-
-    const raw = integration.token as any;
-    const keyId = raw.apiKey;
-    const keySecret = raw.apiSecret;
+    const secrets = await this.integrations.getConnectedProviderSecrets(tenantId, 'RAZORPAY');
+    const keyId = secrets?.token?.apiKey;
+    const keySecret = secrets?.token?.apiSecret;
     if (!keyId || !keySecret) return null;
-
     return new Razorpay({ key_id: keyId, key_secret: keySecret });
   }
 

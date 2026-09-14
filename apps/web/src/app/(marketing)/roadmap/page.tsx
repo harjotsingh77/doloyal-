@@ -58,7 +58,7 @@ export default function RoadmapPage() {
       >
         <div className="mt-4 rounded-full border border-[rgb(var(--color-border))] bg-white px-5 py-2.5 text-[13px] font-semibold text-[rgb(var(--color-muted-foreground))] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           💬 Want to suggest a feature? Write to{" "}
-          <a href="mailto:roadmap@doloyal.ai" className="text-[#2563EB]">roadmap@doloyal.ai</a>
+          <a href="mailto:hello@doloyal.com" className="text-[#2563EB]">hello@doloyal.com</a>
         </div>
       </PageHero>
 

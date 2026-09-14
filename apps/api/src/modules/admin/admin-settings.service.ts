@@ -35,7 +35,7 @@ const SETTING_DEFINITIONS: Array<{ key: string; group: string; type: string; des
 
 const DEFAULT_VALUES: Record<string, unknown> = {
   'general.platformName': 'Doloyal',
-  'general.supportEmail': 'hello@doloyal.ai',
+  'general.supportEmail': 'hello@doloyal.com',
   'general.defaultCurrency': 'INR',
   'brand.primaryColor': '#105EF6',
   'brand.landingLogo': '',

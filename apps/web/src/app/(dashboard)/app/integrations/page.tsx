@@ -592,7 +592,7 @@ export default function IntegrationsPage() {
                         <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                           Webhook URL for your Meta app:{" "}
                           <code className="rounded bg-[rgb(var(--color-surface-2))] px-1 py-0.5">
-                            {typeof window !== "undefined" ? new URL(getApiBaseUrl()).origin : ""}/integrations/webhook/whatsapp
+                            {getApiBaseUrl()}/integrations/webhook/whatsapp
                           </code>
                         </p>
                       </div>

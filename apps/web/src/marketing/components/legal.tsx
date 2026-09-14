@@ -31,8 +31,8 @@ export function LegalPage({
           <p className="mt-4 text-sm text-[rgb(var(--color-subtle))]">Last updated: {updated}</p>
           <p className="mt-8 text-[15px] leading-relaxed text-[rgb(var(--color-muted-foreground))]">
             This is a summary of our {eyebrow.toLowerCase()} policy. For the full legal agreement, please email{" "}
-            <a href="mailto:legal@doloyal.ai" className="text-[#2563EB] font-semibold hover:underline">
-              legal@doloyal.ai
+            <a href="mailto:hello@doloyal.com" className="text-[#2563EB] font-semibold hover:underline">
+              hello@doloyal.com
             </a>
             .
           </p>
@@ -65,6 +65,7 @@ export function LegalPage({
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[rgb(var(--color-subtle))]">
             <Link href="/privacy" className="hover:text-[rgb(var(--color-muted-foreground))]">Privacy</Link>
             <Link href="/terms" className="hover:text-[rgb(var(--color-muted-foreground))]">Terms</Link>
+            <Link href="/data-deletion" className="hover:text-[rgb(var(--color-muted-foreground))]">Data Deletion</Link>
             <Link href="/security" className="hover:text-[rgb(var(--color-muted-foreground))]">Security</Link>
             <Link href="/refund" className="hover:text-[rgb(var(--color-muted-foreground))]">Refund policy</Link>
             <Link href="/cookies" className="hover:text-[rgb(var(--color-muted-foreground))]">Cookie policy</Link>

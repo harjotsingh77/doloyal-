@@ -15,7 +15,7 @@ const INTEGRATION_CATEGORIES = [
   {
     category: "Payments",
     items: [
-      { name: "Stripe", desc: "Connect payments and customer transactions.", status: "Coming Soon" },
+      { name: "Stripe", desc: "Connect payments and customer transactions.", status: "Available" },
       { name: "Razorpay", desc: "Process local Indian UPI & card transactions.", status: "Available" },
       { name: "UPI AutoPay", desc: "Recurring membership subscriptions via UPI.", status: "Coming Soon" },
     ],
@@ -45,7 +45,7 @@ const INTEGRATION_CATEGORIES = [
     category: "Website & Ecommerce",
     items: [
       { name: "Website Widget", desc: "Embed booking & loyalty widgets directly into your site.", status: "Available" },
-      { name: "WordPress / Shopify", desc: "Connect online booking & store customer accounts.", status: "Available" },
+      { name: "WordPress / Shopify", desc: "Native store plugins for booking and loyalty.", status: "Coming Soon" },
     ],
   },
   {

@@ -48,16 +48,28 @@ export class EncryptionService {
       this.logger.error('ENCRYPTION_KEY (or JWT_SECRET) must be set in production.');
       throw new Error('ENCRYPTION_KEY must be configured in production');
     }
-    this.currentKey = deriveKey(
-      primarySecret || 'doloyal-encryption-key-dev-only',
-    );
+    const resolvedPrimary = primarySecret || 'doloyal-encryption-key-dev-only';
+    this.currentKey = deriveKey(resolvedPrimary);
 
-    // Support key rotation: previous keys can decrypt old data
+    // Support key rotation: previous keys can decrypt old data.
     const prevSecrets = this.config.get<string>('ENCRYPTION_PREVIOUS_KEYS');
     if (prevSecrets) {
       for (const secret of prevSecrets.split(',').map(s => s.trim()).filter(Boolean)) {
         this.previousKeys.push(deriveKey(secret));
       }
+    }
+
+    // Tokens may have been encrypted under JWT_SECRET or the historical
+    // dev default before ENCRYPTION_KEY was introduced. Always try those
+    // as fallbacks so reconnect is not required after a key split.
+    const migrationSecrets = [
+      this.config.get<string>('JWT_SECRET'),
+      'doloyal-encryption-key-dev-only',
+      'doloyal-jwt-secret-dev',
+    ];
+    for (const secret of migrationSecrets) {
+      if (!secret || secret === resolvedPrimary) continue;
+      this.previousKeys.push(deriveKey(secret));
     }
   }
 
@@ -76,10 +88,8 @@ export class EncryptionService {
       throw new Error('Invalid encrypted data format');
     }
 
-    // Try current key first
-    if (this.tryDecrypt(parsed, this.currentKey)) {
-      return this.tryDecrypt(parsed, this.currentKey)!;
-    }
+    const current = this.tryDecrypt(parsed, this.currentKey);
+    if (current !== null) return current;
 
     // Try previous keys (for rotation)
     for (const key of this.previousKeys) {

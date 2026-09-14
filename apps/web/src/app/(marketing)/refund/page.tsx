@@ -37,7 +37,7 @@ export default function RefundPage() {
         },
         {
           h: "How to request",
-          p: "Email billing@doloyal.ai with your account email. Refunds are processed to the original payment method within 5–7 business days.",
+          p: "Email hello@doloyal.com with your account email. Refunds are processed to the original payment method within 5–7 business days.",
         },
       ]}
     />

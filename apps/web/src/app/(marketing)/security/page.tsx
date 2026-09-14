@@ -44,7 +44,7 @@ export default function SecurityPage() {
         },
         {
           h: "Responsible disclosure",
-          p: "Found a vulnerability? Report it to security@doloyal.ai. We investigate every report, fix issues in priority order, and welcome the security community's help in keeping local businesses safe.",
+          p: "Found a vulnerability? Report it to hello@doloyal.com. We investigate every report, fix issues in priority order, and welcome the security community's help in keeping local businesses safe.",
         },
       ]}
     />

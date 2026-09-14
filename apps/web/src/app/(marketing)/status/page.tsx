@@ -16,16 +16,12 @@ const SERVICES = [
   { name: "Dashboard & website builder", uptime: "99.99%", status: "Operational", tone: "green" },
   { name: "API (v1)", uptime: "99.98%", status: "Operational", tone: "green" },
   { name: "WhatsApp Business Platform", uptime: "99.97%", status: "Operational", tone: "green" },
-  { name: "SMS delivery", uptime: "99.95%", status: "Operational", tone: "green" },
-  { name: "Email delivery", uptime: "99.99%", status: "Operational", tone: "green" },
+  { name: "Email delivery (Resend)", uptime: "99.99%", status: "Operational", tone: "green" },
   { name: "Payments (Stripe · Razorpay)", uptime: "99.99%", status: "Operational", tone: "green" },
-  { name: "Media uploads (Cloudinary)", uptime: "99.98%", status: "Operational", tone: "green" },
+  { name: "SMS delivery", uptime: "—", status: "Coming soon", tone: "amber" },
 ];
 
-const INCIDENTS = [
-  { date: "Jul 19, 2026", title: "SMS provider latency", desc: "Brief delivery delays for 35 minutes. Resolved.", resolved: true },
-  { date: "Jun 28, 2026", title: "Dashboard slow under load", desc: "Search was 2× slower for 20 minutes. Resolved.", resolved: true },
-];
+const INCIDENTS: Array<{ date: string; title: string; desc: string; resolved: boolean }> = [];
 
 export default function StatusPage() {
   return (
@@ -67,7 +63,10 @@ export default function StatusPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[13px] font-bold">{s.uptime}</span>
-                  <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[11.5px] font-bold text-emerald-600">
+                  <span className={cn(
+                    "flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-bold",
+                    s.tone === "amber" ? "bg-amber-500/10 text-amber-700" : "bg-emerald-500/10 text-emerald-600",
+                  )}>
                     <CircleCheck className="h-3.5 w-3.5" /> {s.status}
                   </span>
                 </div>
@@ -77,6 +76,11 @@ export default function StatusPage() {
 
           <div className="mt-12">
             <h2 className="mb-6 text-xl font-bold tracking-[-0.01em]">Recent incidents</h2>
+            {INCIDENTS.length === 0 ? (
+              <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-white p-6 text-[13.5px] text-[rgb(var(--color-muted-foreground))]">
+                No incidents reported.
+              </div>
+            ) : (
             <div className="space-y-4">
               {INCIDENTS.map((inc) => (
                 <Reveal key={inc.title}>
@@ -91,6 +95,7 @@ export default function StatusPage() {
                 </Reveal>
               ))}
             </div>
+            )}
           </div>
 
           <div className="mt-12 rounded-2xl bg-[#0F172A] p-7 text-white">
