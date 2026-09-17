@@ -22,6 +22,7 @@ export const CLIENT_SIGNIN_DEFAULTS = {
   buttonLabel: "Sign in",
   showGoogle: true,
   showForgotPassword: true,
+  showGuestLogin: false,
   showLogo: true,
   heroImageUrl: null as string | null,
 };
@@ -89,6 +90,7 @@ export function resolveClientSignInPublicConfig(input: {
       buttonLabel: defaults.buttonLabel,
       showGoogle: defaults.showGoogle,
       showForgotPassword: defaults.showForgotPassword,
+      showGuestLogin: defaults.showGuestLogin,
       showLogo: defaults.showLogo,
       heroImageUrl: null,
     };
@@ -113,6 +115,7 @@ export function resolveClientSignInPublicConfig(input: {
     buttonLabel: pickString(raw, "buttonLabel") || defaults.buttonLabel,
     showGoogle: pickBool(raw, "showGoogle", defaults.showGoogle),
     showForgotPassword: pickBool(raw, "showForgotPassword", defaults.showForgotPassword),
+    showGuestLogin: pickBool(raw, "showGuestLogin", defaults.showGuestLogin),
     showLogo: pickBool(raw, "showLogo", defaults.showLogo),
     heroImageUrl: pickString(raw, "heroImageUrl"),
   };

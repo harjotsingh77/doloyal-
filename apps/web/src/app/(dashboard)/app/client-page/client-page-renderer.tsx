@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
+import type { AuthUser, ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
 import { MasterClientTemplate, type MasterConfig } from "./master-template";
 import { clientPageBrand, liveCopy } from "./client-page-brand";
 import { readableTextColor } from "@/lib/branding";
@@ -144,7 +144,9 @@ export function ClientPageRenderer({
   onNavigate,
   headerAccessory,
   portal,
+  user,
   onLogout,
+  onLogin,
   focusKey,
 }: {
   business: PublicBusinessInfo;
@@ -158,7 +160,9 @@ export function ClientPageRenderer({
   onNavigate?: (id: string) => void;
   headerAccessory?: React.ReactNode;
   portal?: ClientPortal | null;
+  user?: AuthUser | null;
   onLogout?: () => void;
+  onLogin?: () => void;
   focusKey?: number;
 }) {
   const brand = clientPageBrand(business);
@@ -205,7 +209,9 @@ export function ClientPageRenderer({
         onSelect={selectable}
         focusKey={focusKey}
         portal={portal}
+        user={user}
         onLogout={onLogout}
+        onLogin={onLogin}
         headerAccessory={headerAccessory}
       />
     </div>

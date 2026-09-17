@@ -32,7 +32,7 @@ export function Faq() {
   const [open, setOpen] = React.useState<number | null>(0);
 
   return (
-    <section id="faq" className="relative py-20 sm:py-28 bg-[#FAFAFC]">
+    <section id="faq" className="relative scroll-mt-24 py-20 sm:py-28 bg-white">
       <Container>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
           {/* Left Column: Heading & Subtitle */}

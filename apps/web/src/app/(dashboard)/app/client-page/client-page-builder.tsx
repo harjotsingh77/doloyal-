@@ -315,6 +315,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
           config={masterConfig}
           mode="published"
           onBook={() => toast.message("Preview: customers will start the booking flow here.")}
+          onLogin={() => toast.message("Preview: customers will open sign-in here.")}
         />
       </div>
     );
@@ -409,6 +410,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
               onSelect={selectSection}
               focusKey={focusKey}
               onBook={() => toast.message("Preview: customers will start the booking flow here.")}
+              onLogin={() => toast.message("Preview: customers will open sign-in here.")}
               onNavigate={(id) => {
                 const sid = PORTAL_TO_SECTION[id];
                 if (sid) selectSection(sid);

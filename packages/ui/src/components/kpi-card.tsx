@@ -4,6 +4,7 @@ import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card } from "./card";
+import { CardHoverHint } from "./card-hover-hint";
 import { cn } from "../lib/utils";
 
 export interface KpiCardProps {
@@ -21,6 +22,8 @@ export interface KpiCardProps {
   delay?: number;
   className?: string;
   onClick?: () => void;
+  /** Label and value only — extra comparison, hint, and "View details" stay in the opened view. */
+  compact?: boolean;
 }
 
 function useCountUp(target: number, durationMs = 800) {
@@ -62,6 +65,7 @@ export function KpiCard({
   delay = 0,
   className,
   onClick,
+  compact,
 }: KpiCardProps) {
   const isNumeric = typeof value === "number";
   const animated = useCountUp(isNumeric ? (value as number) : 0);
@@ -72,7 +76,7 @@ export function KpiCard({
     : (value as string);
 
   const positive = deltaInvert ? (delta ?? 0) <= 0 : (delta ?? 0) >= 0;
-  const footer = delta !== undefined || hint || onClick;
+  const footer = !compact && (delta !== undefined || hint || onClick);
   const deltaTone =
     delta === 0 || deltaLabel === "No change" || deltaLabel === "New"
       ? "text-[rgb(var(--color-muted-foreground))]"
@@ -91,6 +95,7 @@ export function KpiCard({
         onClick={onClick}
         role={onClick ? "button" : undefined}
         tabIndex={onClick ? 0 : undefined}
+        aria-label={onClick ? `${label} details` : undefined}
         onKeyDown={
           onClick
             ? (e) => {
@@ -102,11 +107,12 @@ export function KpiCard({
             : undefined
         }
         className={cn(
-          "group flex h-full flex-col rounded-lg p-4 shadow-none",
+          "group relative flex h-full flex-col rounded-lg p-4 shadow-none",
           onClick &&
             "cursor-pointer transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)] hover:shadow-sm",
         )}
       >
+        {onClick ? <CardHoverHint /> : null}
         <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-[rgb(var(--color-muted-foreground))]">
           {label}
         </p>

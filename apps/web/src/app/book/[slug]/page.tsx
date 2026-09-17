@@ -38,6 +38,7 @@ import { ClientPageRenderer, masterConfigFromPageConfig } from "@/app/(dashboard
 import { catalogImageSrc } from "@/app/(dashboard)/app/client-page/portal-shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
 import { useClientAuth } from "@/lib/client-auth";
+import { api } from "@/lib/api";
 import { useCommerceLive } from "@/lib/data-sync";
 
 const BASE_URL = getApiBaseUrl();
@@ -411,15 +412,40 @@ export default function BookingPage() {
   const router = useRouter();
   const slug = params.slug;
   const { user, logout, portal } = useClientAuth();
+  const [guestAllowed, setGuestAllowed] = React.useState(false);
+  const [accessReady, setAccessReady] = React.useState(false);
 
   React.useEffect(() => {
-    if (!user) {
-      router.replace(`/book/${slug}/sign-in`);
+    if (user) {
+      setGuestAllowed(false);
+      setAccessReady(true);
+      if (user.needsPhone) {
+        router.replace(`/book/${slug}/complete-profile`);
+      }
       return;
     }
-    if (user.needsPhone) {
-      router.replace(`/book/${slug}/complete-profile`);
-    }
+
+    let cancelled = false;
+    setAccessReady(false);
+    void api
+      .getClientSignInConfig(slug)
+      .then((data) => {
+        if (cancelled) return;
+        const allowed = data.showGuestLogin === true;
+        setGuestAllowed(allowed);
+        setAccessReady(true);
+        if (!allowed) router.replace(`/book/${slug}/sign-in`);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setGuestAllowed(false);
+        setAccessReady(true);
+        router.replace(`/book/${slug}/sign-in`);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, slug, router]);
 
   const [step, setStep] = React.useState(1);
@@ -764,7 +790,7 @@ export default function BookingPage() {
     }
   }
 
-  if (!user || user.needsPhone) {
+  if (!accessReady || (!user && !guestAllowed) || user?.needsPhone) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgb(var(--color-border))] border-t-[rgb(var(--color-primary))]" />
@@ -815,6 +841,7 @@ export default function BookingPage() {
         mode="published"
         onBook={startBooking}
         portal={portal}
+        user={user}
         onLogout={() => logout(slug)}
         headerAccessory={<ThemeToggle />}
       />

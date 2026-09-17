@@ -21,9 +21,9 @@ export const site = {
 export const nav = [
   { label: "Features", href: "/features" },
   { label: "Solutions", href: "/solutions" },
-  { label: "Pricing", href: "/pricing" },
+  { label: "Pricing", href: "/#pricing" },
   { label: "Resources", href: "/resources" },
-  { label: "FAQ", href: "/pricing#faq" },
+  { label: "FAQ", href: "/#faq" },
 ] as const;
 
 export const trustBadges = [

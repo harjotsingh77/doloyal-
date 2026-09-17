@@ -83,7 +83,7 @@ const TRACK = [...HALF, ...HALF];
 
 export function IntegrationStrip() {
   return (
-    <section aria-label="Partner logos" className="relative z-10 w-full bg-white pt-2 pb-10 sm:pt-4 sm:pb-14 lg:pb-16 overflow-hidden">
+    <section aria-label="Partner logos" className="relative w-full bg-white pt-1 pb-1 sm:pt-2 sm:pb-2 overflow-hidden">
       <div className="mx-auto max-w-[1280px] px-6">
         {/* Moving logo track */}
         <div className="ww-marquee relative overflow-hidden">
@@ -103,26 +103,6 @@ export function IntegrationStrip() {
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Opposite Curved Bottom Transition into Why Choose Doloyal */}
-      <div className="absolute bottom-0 inset-x-0 overflow-hidden leading-none z-20 pointer-events-none">
-        <svg
-          viewBox="0 0 1440 90"
-          preserveAspectRatio="none"
-          className="relative block w-full h-8 sm:h-11 lg:h-13"
-        >
-          <path
-            d="M0,90 C420,10 1020,10 1440,90 L1440,90 L0,90 Z"
-            fill="#FAFAFC"
-          />
-          <path
-            d="M0,90 C420,10 1020,10 1440,90"
-            fill="none"
-            stroke="rgba(0,0,0,0.06)"
-            strokeWidth="1.5"
-          />
-        </svg>
       </div>
     </section>
   );

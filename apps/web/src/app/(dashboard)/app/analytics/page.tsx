@@ -14,6 +14,7 @@ import {
   StatChart,
   EmptyState,
   KpiCard,
+  CardHoverHint,
   Table,
   TableHeader,
   TableBody,
@@ -32,7 +33,7 @@ import {
   DialogTitle,
 } from "@doloyal/ui";
 import type { BusinessHealthInsight, DashboardMetricDetail, DashboardMetricId, DashboardOverview } from "@doloyal/shared";
-import { comparePercentagePoints, compareValues } from "@doloyal/shared";
+import { compareValues } from "@doloyal/shared";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
@@ -54,13 +55,6 @@ function healthStatusFromScore(score: number): keyof typeof HEALTH_LABEL {
 function healthSignalPrompt(label: string, from?: string, to?: string) {
   const period = from && to ? ` for ${from} to ${to}` : "";
   return `Business Health signal: "${label}"${period}. Fetch live data from the whole Doloyal SaaS (customers, invoices, orders, products, reviews, appointments, loyalty, rewards, campaigns, referrals, memberships). First write What's happening, Why this problem is happening, How to fix it, and How the fix will work. After those sections output the exact line <<<STRATEGIST>>> then write a separate Business Strategist briefing: analyze the same numbers as a strategist (priority, risk, 90-day play, what to ignore). Keep the strategist part self-contained so it can be read on its own.`;
-}
-
-function kpiDelta(change: ReturnType<typeof compareValues>) {
-  return {
-    delta: change.percentChange ?? 0,
-    deltaLabel: change.percentChangeLabel,
-  };
 }
 
 const METRIC_TITLES: Record<DashboardMetricId, string> = {
@@ -241,20 +235,8 @@ export default function AnalyticsPage() {
     kpis.repeatCustomers + newInPeriod > 0
       ? (kpis.repeatCustomers / (kpis.repeatCustomers + newInPeriod)) * 100
       : 0;
-  const prevNew = kpis.previousNewCustomers ?? 0;
-  const prevRepeat = kpis.previousRepeatCustomers ?? 0;
-  const prevRepeatRate =
-    prevRepeat + prevNew > 0 ? (prevRepeat / (prevRepeat + prevNew)) * 100 : 0;
-  const prevOrderCount = kpis.previousOrderCount ?? 0;
-  const prevAov =
-    prevOrderCount > 0 ? (kpis.previousOrderRevenue || 0) / prevOrderCount : 0;
 
   const revenueChange = compareValues(totalRevenue, kpis.previousPeriodRevenue ?? 0);
-  const customersChange = compareValues(totalCustomers, kpis.previousTotalCustomers ?? 0);
-  const aovChange = compareValues(avgOrderValue, prevAov);
-  const repeatChange = comparePercentagePoints(repeatRate, prevRepeatRate);
-  const membersChange = compareValues(kpis.repeatCustomers, prevRepeat);
-  const pointsChange = compareValues(kpis.pointsRedeemed30d, kpis.previousPointsRedeemed ?? 0);
 
   const fallbackScore = Math.min(
     100,
@@ -354,48 +336,43 @@ export default function AnalyticsPage() {
       {/* Row 1: 6 KPI Cards in 1 clean row on desktop (linked dynamically) */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard
+          compact
           label="Total Revenue"
           value={totalRevenue}
           format={(v) => fmt(v)}
-          {...kpiDelta(revenueChange)}
-          deltaSuffix="vs last period"
           onClick={() => setOpenMetric("revenue")}
         />
         <KpiCard
+          compact
           label="Total Customers"
           value={totalCustomers}
-          hint={`${newInPeriod} new in range`}
-          {...kpiDelta(customersChange)}
           onClick={() => setOpenMetric("customers")}
         />
         <KpiCard
+          compact
           label="Avg Order Value"
           value={avgOrderValue}
           format={(v) => fmt(v)}
-          hint={orderCount ? `${orderCount} orders in range` : "No orders in range"}
-          {...kpiDelta(aovChange)}
           onClick={() => setOpenMetric("orders")}
         />
         <KpiCard
+          compact
           label="Repeat Rate"
           value={repeatRate}
           format={(v) => `${v.toFixed(1)}%`}
-          hint={`${kpis.repeatCustomers} with 2+ purchases`}
-          {...kpiDelta(repeatChange)}
           onClick={() => setOpenMetric("repeat_rate")}
         />
         <KpiCard
+          compact
           label="Active Members"
           value={kpis.repeatCustomers}
-          hint="Customers with 2+ purchases"
-          {...kpiDelta(membersChange)}
           onClick={() => setOpenMetric("repeat_rate")}
         />
         <KpiCard
+          compact
           label="Points Issued"
           value={kpis.pointsRedeemed30d}
           format={(v) => v.toLocaleString("en-IN")}
-          {...kpiDelta(pointsChange)}
           onClick={() => setOpenMetric("points")}
         />
       </div>
@@ -437,19 +414,15 @@ export default function AnalyticsPage() {
               setOpenPanel("services");
             }
           }}
-          className="flex h-full cursor-pointer flex-col transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
+          className="relative flex h-full cursor-pointer flex-col transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
         >
+          <CardHoverHint />
           <CardHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle>Top Services</CardTitle>
-                <CardDescription>
-                  Revenue and growth by service category ({periodLabel})
-                </CardDescription>
-              </div>
-              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
-                View details
-              </span>
+            <div>
+              <CardTitle>Top Services</CardTitle>
+              <CardDescription>
+                Revenue and growth by service category ({periodLabel})
+              </CardDescription>
             </div>
           </CardHeader>
           <CardContent className="flex-1 p-0">
@@ -511,19 +484,15 @@ export default function AnalyticsPage() {
               setOpenPanel("health");
             }
           }}
-          className="flex h-full cursor-pointer flex-col transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
+          className="relative flex h-full cursor-pointer flex-col transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
         >
+          <CardHoverHint />
           <CardHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle>Business Health</CardTitle>
-                <CardDescription>
-                  Overall score based on key metrics ({periodLabel})
-                </CardDescription>
-              </div>
-              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
-                View details
-              </span>
+            <div>
+              <CardTitle>Business Health</CardTitle>
+              <CardDescription>
+                Overall score based on key metrics ({periodLabel})
+              </CardDescription>
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col justify-between px-6 pb-6 pt-0">

@@ -93,6 +93,7 @@ export default function ClientSignUpPage() {
           isLoading={isLoading}
           error={error}
           showGoogle={config.showGoogle}
+          showGuestLogin={config.showGuestLogin}
           cornerRadius={config.cornerRadius}
           onSubmit={async (data) => {
             setError(null);
@@ -104,6 +105,9 @@ export default function ClientSignUpPage() {
             }
           }}
           onGoogle={() => loginWithGoogle(config.slug)}
+          onGuest={() => {
+            window.location.href = `/book/${config.slug}`;
+          }}
         />
       </ClientAuthShell>
     </ClientAuthBrandScope>

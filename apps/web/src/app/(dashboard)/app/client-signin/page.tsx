@@ -51,6 +51,7 @@ function brandingFromTenant(tenant: Tenant | undefined): ClientSignInBranding {
     buttonLabel: (customized ? saved.buttonLabel : null) || CLIENT_SIGNIN_DEFAULTS.buttonLabel,
     showGoogle: customized ? saved.showGoogle ?? true : true,
     showForgotPassword: customized ? saved.showForgotPassword ?? true : true,
+    showGuestLogin: customized ? saved.showGuestLogin === true : false,
     showLogo: customized ? saved.showLogo ?? true : true,
     heroImageUrl: customized ? saved.heroImageUrl || null : null,
   };
@@ -270,6 +271,7 @@ export default function ClientSignInSettingsPage() {
             <Section title="Form">
               <ToggleRow label="Google sign-in" checked={draft.showGoogle !== false} onChange={(value) => set("showGoogle", value)} />
               <ToggleRow label="Forgot password" checked={draft.showForgotPassword !== false} onChange={(value) => set("showForgotPassword", value)} />
+              <ToggleRow label="Guest login" checked={draft.showGuestLogin === true} onChange={(value) => set("showGuestLogin", value)} />
             </Section>
 
             <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
@@ -287,7 +289,7 @@ export default function ClientSignInSettingsPage() {
                   })
                 }
               >
-                Save branding
+                Save
               </Button>
               <Button
                 variant="secondary"
@@ -311,6 +313,7 @@ export default function ClientSignInSettingsPage() {
                     buttonLabel: CLIENT_SIGNIN_DEFAULTS.buttonLabel,
                     showGoogle: true,
                     showForgotPassword: true,
+                    showGuestLogin: false,
                     showLogo: true,
                     heroImageUrl: null,
                   });
@@ -350,6 +353,7 @@ export default function ClientSignInSettingsPage() {
                   error={null}
                   onSubmit={async () => undefined}
                   onGoogle={() => toast.message("Customers use this Google button on the live page.")}
+                  onGuest={() => toast.message("Customers can skip sign-in and open your Client Page.")}
                 />
               </ClientAuthShell>
             </ClientAuthBrandScope>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Check, RotateCcw } from "lucide-react";
 import {
@@ -74,6 +75,19 @@ const LANGUAGES = [
 ];
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"];
+
+const PROFILE_TABS = [
+  { id: "information", label: "Information" },
+  { id: "location", label: "Location" },
+  { id: "hours", label: "Hours" },
+  { id: "branding", label: "Branding" },
+] as const;
+
+type ProfileTab = (typeof PROFILE_TABS)[number]["id"];
+
+function parseTab(value: string | null): ProfileTab {
+  return PROFILE_TABS.some((t) => t.id === value) ? (value as ProfileTab) : "information";
+}
 
 const FONTS = [
   "Inter",
@@ -228,6 +242,54 @@ type Draft = {
   textColor: string;
 };
 
+const TAB_FIELDS: Record<ProfileTab, (keyof Draft)[]> = {
+  information: [
+    "name",
+    "tagline",
+    "description",
+    "category",
+    "gst",
+    "registrationNumber",
+    "phone",
+    "whatsapp",
+    "email",
+    "website",
+  ],
+  location: [
+    "mapsUrl",
+    "googleReviewUrl",
+    "googlePlaceId",
+    "address",
+    "city",
+    "state",
+    "zip",
+    "country",
+    "timezone",
+    "currency",
+    "language",
+    "dateFormat",
+    "timeFormat",
+  ],
+  hours: ["hours"],
+  branding: [
+    "logoUrl",
+    "coverBannerUrl",
+    "faviconUrl",
+    "brandName",
+    "brandShortName",
+    "fontFamily",
+    "brandColor",
+    "secondaryColor",
+    "accentColor",
+    "backgroundColor",
+    "textColor",
+  ],
+};
+
+function tabHasChanges(tab: ProfileTab, draft: Draft, baseline: Draft) {
+  return TAB_FIELDS[tab].some((key) => !jsonEqual(draft[key], baseline[key]));
+}
+
 function draftFrom(t: Tenant): Draft {
   return {
     name: t.name ?? "",
@@ -269,9 +331,31 @@ function draftFrom(t: Tenant): Draft {
 }
 
 export default function BusinessProfilePage() {
+  return (
+    <React.Suspense fallback={<SettingsSkeleton />}>
+      <BusinessProfileForm />
+    </React.Suspense>
+  );
+}
+
+function BusinessProfileForm() {
   const { data: tenant, isLoading, isError, error, refetch } = useTenant();
   const updateTenant = useUpdateTenant();
   const { setStatus } = useSettingsChrome();
+  const searchParams = useSearchParams();
+  const [tab, setTab] = React.useState<ProfileTab>(() => parseTab(searchParams.get("tab")));
+
+  React.useEffect(() => {
+    setTab(parseTab(searchParams.get("tab")));
+  }, [searchParams]);
+
+  const selectTab = React.useCallback((next: ProfileTab) => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if (next === "information") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", next);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
+  }, []);
 
   const [draft, setDraft] = React.useState<Draft | null>(null);
   const [baseline, setBaseline] = React.useState<Draft | null>(null);
@@ -321,18 +405,18 @@ export default function BusinessProfilePage() {
     });
   };
 
-  const validate = (): string | null => {
+  const validate = (): { tab: ProfileTab; message: string } | null => {
     if (!draft.name.trim() || draft.name.trim().length < 2)
-      return "Business name is required";
-    if (!draft.phone.trim()) return "Business phone is required";
+      return { tab: "information", message: "Business name is required" };
+    if (!draft.phone.trim()) return { tab: "information", message: "Business phone is required" };
     if (!draft.email.trim() || !/^\S+@\S+\.\S+$/.test(draft.email))
-      return "A valid business email is required";
+      return { tab: "information", message: "A valid business email is required" };
     if (draft.website.trim() && !/^https?:\/\//i.test(draft.website.trim()))
-      return "Website must start with http:// or https://";
+      return { tab: "information", message: "Website must start with http:// or https://" };
     if (draft.mapsUrl.trim() && !/^https?:\/\//i.test(draft.mapsUrl.trim()))
-      return "Google Maps link must start with http:// or https://";
+      return { tab: "location", message: "Google Maps link must start with http:// or https://" };
     if (draft.googleReviewUrl.trim() && !/^https?:\/\//i.test(draft.googleReviewUrl.trim()))
-      return "Google review URL must start with http:// or https://";
+      return { tab: "location", message: "Google review URL must start with http:// or https://" };
     for (const [key, label] of [
       ["brandColor", "Primary color"],
       ["secondaryColor", "Secondary color"],
@@ -340,15 +424,18 @@ export default function BusinessProfilePage() {
       ["backgroundColor", "Background color"],
       ["textColor", "Text color"],
     ] as const) {
-      if (!isHexColor(draft[key])) return `${label} must be a 6-digit hex value (e.g. #2563EB)`;
+      if (!isHexColor(draft[key]))
+        return { tab: "branding", message: `${label} must be a 6-digit hex value (e.g. #2563EB)` };
     }
-    return validateHours(draft.hours);
+    const hoursProblem = validateHours(draft.hours);
+    return hoursProblem ? { tab: "hours", message: hoursProblem } : null;
   };
 
   const handleSave = async () => {
     const problem = validate();
     if (problem) {
-      toast.error(problem);
+      if (problem.tab !== tab) selectTab(problem.tab);
+      toast.error(problem.message);
       return;
     }
     setSaving(true);
@@ -456,15 +543,54 @@ export default function BusinessProfilePage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-2xl font-semibold tracking-tight md:text-[1.7rem]">Business Profile</h2>
         <p className="mt-0.5 text-sm text-[rgb(var(--color-muted-foreground))]">
-          Manage your business information, branding, and how your workspace appears to your team and customers.
+          {tab === "information" && "Your identity across Doloyal and customer-facing pages."}
+          {tab === "location" && "Where you operate and how amounts and dates are formatted."}
+          {tab === "hours" && "Your weekly schedule, shown to customers on your booking page."}
+          {tab === "branding" && "Logo, colors and how your workspace appears to your team and customers."}
         </p>
       </div>
 
-      {/* ── Business information ── */}
-      <SettingsSection title="Business Information" description="Your identity across Doloyal and customer-facing pages.">
+      <nav aria-label="Business profile sections" className="mb-2">
+        <div className="-mx-1 flex gap-0.5 overflow-x-auto border-b border-[rgb(var(--color-border))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {PROFILE_TABS.map((item) => {
+            const active = tab === item.id;
+            const changed = !!baseline && tabHasChanges(item.id, draft, baseline);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => selectTab(item.id)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative shrink-0 px-3.5 py-2.5 text-sm font-medium transition-colors",
+                  active
+                    ? "text-[rgb(var(--color-foreground))]"
+                    : "text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]",
+                )}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {item.label}
+                  {changed ? (
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--color-primary))]"
+                      aria-label="Unsaved changes"
+                    />
+                  ) : null}
+                </span>
+                {active ? (
+                  <span className="absolute inset-x-2.5 -bottom-px h-0.5 rounded-full bg-[rgb(var(--color-foreground))]" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {tab === "information" ? (
+      <SettingsSection className="border-t-0 pt-4">
         <div className="grid gap-x-6 sm:grid-cols-2">
           <SettingRow label="Business name" htmlFor="bp-name" stacked>
             <Input
@@ -529,9 +655,10 @@ export default function BusinessProfilePage() {
           </SettingRow>
         </div>
       </SettingsSection>
+      ) : null}
 
-      {/* ── Location & localization ── */}
-      <SettingsSection title="Business Location" description="Where you operate and how amounts and dates are formatted.">
+      {tab === "location" ? (
+      <SettingsSection className="border-t-0 pt-4">
         <SettingRow label="Address" htmlFor="bp-address" stacked>
           <Textarea id="bp-address" rows={2} value={draft.address} onChange={(e) => set("address", e.target.value)} />
         </SettingRow>
@@ -654,9 +781,10 @@ export default function BusinessProfilePage() {
           </SettingRow>
         </div>
       </SettingsSection>
+      ) : null}
 
-      {/* ── Business hours ── */}
-      <SettingsSection title="Business Hours" description="Your weekly schedule, shown to customers on your booking page.">
+      {tab === "hours" ? (
+      <SettingsSection className="border-t-0 pt-4">
         <div className="mb-3 flex justify-end">
           <Button variant="secondary" size="sm" onClick={applyMondayToWeekdays}>
             Apply Monday to weekdays
@@ -714,9 +842,11 @@ export default function BusinessProfilePage() {
           })}
         </div>
       </SettingsSection>
+      ) : null}
 
-      {/* ── Brand identity ── */}
-      <SettingsSection title="Brand Identity" description="Your logo and brand name replace the default Doloyal identity across your workspace.">
+      {tab === "branding" ? (
+      <>
+      <SettingsSection title="Brand Identity" description="Your logo and brand name replace the default Doloyal identity across your workspace." className="border-t-0">
         <div className="pb-3">
           <ImageUploadField
             label="Logo"
@@ -843,6 +973,8 @@ export default function BusinessProfilePage() {
           </Button>
         </div>
       </SettingsSection>
+      </>
+      ) : null}
 
       <SaveBar
         dirty={dirty}

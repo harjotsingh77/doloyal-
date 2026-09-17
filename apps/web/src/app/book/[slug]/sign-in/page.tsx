@@ -108,6 +108,9 @@ export default function ClientSignInPage() {
             }
           }}
           onGoogle={() => loginWithGoogle(config.slug)}
+          onGuest={() => {
+            window.location.href = `/book/${config.slug}`;
+          }}
         />
       </ClientAuthShell>
     </ClientAuthBrandScope>

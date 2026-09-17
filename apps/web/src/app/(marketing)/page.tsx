@@ -2,30 +2,26 @@
 
 import { HeroContent } from "@/marketing/landing/Hero";
 import { IntegrationStrip } from "@/marketing/landing/IntegrationStrip";
-import { WhyChooseUs } from "@/marketing/landing/WhyChooseUs";
 import { ProblemSection } from "@/marketing/landing/ProblemSection";
-import { FeaturesSection } from "@/marketing/landing/FeaturesSection";
+import { MultiplierSection } from "@/marketing/landing/MultiplierSection";
 import { Pricing } from "@/marketing/landing/Pricing";
 import { Faq } from "@/marketing/landing/Faq";
 import { FinalCta } from "@/marketing/landing/FinalCta";
 
 export default function HomePage() {
   return (
-    <div className="overflow-hidden bg-[#FAFAFC] font-[family-name:var(--font-sora)]">
+    <div className="overflow-x-clip bg-white font-[family-name:var(--font-sora)]">
       {/* 1 · HERO */}
       <HeroContent />
 
-      {/* 1.5 · INTEGRATIONS TRUST STRIP */}
+      {/* 2 · INTEGRATIONS TRUST STRIP */}
       <IntegrationStrip />
-
-      {/* 2 · WHY CHOOSE US */}
-      <WhyChooseUs />
 
       {/* 3 · THE PROBLEM */}
       <ProblemSection />
 
-      {/* 4 · FEATURES */}
-      <FeaturesSection />
+      {/* 4 · RETENTION MULTIPLIER */}
+      <MultiplierSection />
 
       {/* 5 · PRICING */}
       <Pricing />

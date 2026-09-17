@@ -97,7 +97,7 @@ export function Pricing() {
   const [yearly, setYearly] = React.useState(true);
 
   return (
-    <Section id="pricing">
+    <Section id="pricing" className="scroll-mt-24 pt-10 pb-24 sm:pt-14 sm:pb-32">
       <Container>
         <SectionHead
           eyebrow="Pricing"

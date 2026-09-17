@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
+import type { AuthUser, ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
 import { resolveBrandPrimary } from "@/lib/branding";
 import {
   FRIENDLY_TITLES,
@@ -68,7 +68,9 @@ export function MasterClientTemplate({
   onSelect,
   focusKey = 0,
   portal,
+  user,
   onLogout,
+  onLogin,
   headerAccessory,
 }: {
   business: PublicBusinessInfo;
@@ -81,7 +83,9 @@ export function MasterClientTemplate({
   onSelect?: (id: string) => void;
   focusKey?: number;
   portal?: ClientPortal | null;
+  user?: AuthUser | null;
   onLogout?: () => void;
+  onLogin?: () => void;
   headerAccessory?: React.ReactNode;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -278,7 +282,9 @@ export function MasterClientTemplate({
         onJump={go}
         accessory={headerAccessory}
         onLogout={onLogout}
+        onLogin={onLogin}
         portal={portal}
+        user={user}
       />
       <div>
         {sequence.map((id) => renderBlock(id))}

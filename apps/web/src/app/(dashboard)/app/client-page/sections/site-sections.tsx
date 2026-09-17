@@ -508,7 +508,7 @@ export function ContactBooking({
         </div>
         <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
           <p className="text-lg font-semibold tracking-[-0.03em]">{ui.formTitle?.trim() || "Send a note, or book a time"}</p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--site-ink)]/55">Name, phone, and a preferred time. We'll take it from there.</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--site-ink)]/55">Name, phone, and a preferred time. We&apos;ll take it from there.</p>
           <LoungeButton onClick={onBook} className="mt-6">{ui.cta?.trim() || bookLabel}</LoungeButton>
         </div>
       </Inner>

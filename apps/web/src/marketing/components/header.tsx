@@ -7,7 +7,7 @@ import { ArrowRight, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@doloyal/ui";
 import { TextRoll } from "../landing/ui";
-import { useWaitlistModal } from "./waitlist-modal";
+import { goToHash } from "./hash-scroll";
 
 interface NavItem {
   label: string;
@@ -19,7 +19,7 @@ const NAV: NavItem[] = [
   { label: "All Pages", href: "#", hasDropdown: true },
   { label: "Features", href: "/features" },
   { label: "Company", href: "/about" },
-  { label: "Pricing", href: "/pricing" },
+  { label: "Pricing", href: "/#pricing" },
 ];
 
 const ALL_PAGES_MENU = [
@@ -28,7 +28,7 @@ const ALL_PAGES_MENU = [
     { label: "Homepage", href: "/" },
     { label: "About", href: "/about" },
     { label: "Features", href: "/features" },
-    { label: "Pricing", href: "/pricing" },
+    { label: "Pricing", href: "/#pricing" },
     { label: "Blog", href: "/blog" },
   ],
   // Column 2
@@ -43,7 +43,6 @@ const ALL_PAGES_MENU = [
 ];
 
 export function SiteHeader() {
-  const { openWaitlistModal } = useWaitlistModal();
   const [scrolled, setScrolled] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
@@ -70,10 +69,10 @@ export function SiteHeader() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
-          "fixed inset-x-0 top-0 z-50 transition-all duration-300",
+          "fixed inset-x-0 top-0 z-50 transition-all duration-300 rounded-b-2xl sm:rounded-b-[28px] lg:rounded-b-[32px]",
           scrolled
-            ? "border-b border-black/[0.06] bg-white/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md"
-            : "bg-transparent",
+            ? "border-b border-x border-black/[0.06] bg-white/95 shadow-[0_6px_24px_-4px_rgba(0,0,0,0.06)] backdrop-blur-md"
+            : "border-b border-x border-black/[0.04] bg-white/80 backdrop-blur-md",
         )}
       >
         <div
@@ -128,7 +127,10 @@ export function SiteHeader() {
                                   <Link
                                     key={pIdx}
                                     href={page.href}
-                                    onClick={() => setDropdownOpen(false)}
+                                    onClick={(event) => {
+                                      goToHash(page.href, event);
+                                      setDropdownOpen(false);
+                                    }}
                                     className="text-[14.5px] font-semibold text-[#1F2937] transition-all duration-200 hover:text-[#2563EB] hover:translate-x-1"
                                   >
                                     {page.label}
@@ -148,6 +150,7 @@ export function SiteHeader() {
                 <Link
                   key={item.label}
                   href={item.href}
+                  onClick={(event) => goToHash(item.href, event)}
                   className="flex items-center gap-1 text-[15px] font-semibold text-[#1F2937] transition-colors hover:text-[#2563EB]"
                 >
                   {item.label}
@@ -158,21 +161,21 @@ export function SiteHeader() {
 
           {/* Right Action Buttons */}
           <div className="hidden items-center gap-3 md:flex">
-            <button
-              onClick={openWaitlistModal}
+            <Link
+              href="/sign-in"
               className="rounded-full px-4 py-2 text-[15px] font-semibold text-[#1F2937] transition-colors hover:text-[#2563EB]"
             >
               Log in
-            </button>
-            <button
-              onClick={openWaitlistModal}
+            </Link>
+            <Link
+              href="/sign-up"
               className="group flex items-center gap-3.5 rounded-full bg-[#1F242B] pl-6 pr-2 py-2 text-[14px] font-semibold text-white shadow-md transition-all duration-300 hover:bg-[#2563EB] hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5"
             >
               <TextRoll>Get Started</TextRoll>
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#1F242B] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:translate-x-0.5">
                 <ArrowRight className="h-3.5 w-3.5 stroke-[2.5]" />
               </div>
-            </button>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -219,8 +222,11 @@ export function SiteHeader() {
                   Features
                 </Link>
                 <Link
-                  href="/pricing"
-                  onClick={() => setOpen(false)}
+                  href="/#pricing"
+                  onClick={(event) => {
+                    goToHash("/#pricing", event);
+                    setOpen(false);
+                  }}
                   className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Pricing
@@ -254,27 +260,23 @@ export function SiteHeader() {
                   Integrations
                 </Link>
                 <div className="my-2 border-t border-gray-100" />
-                <button
-                  onClick={() => {
-                    setOpen(false);
-                    openWaitlistModal();
-                  }}
+                <Link
+                  href="/sign-in"
+                  onClick={() => setOpen(false)}
                   className="flex w-full items-center justify-center rounded-xl py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors"
                 >
                   Log in
-                </button>
-                <button
-                  onClick={() => {
-                    setOpen(false);
-                    openWaitlistModal();
-                  }}
+                </Link>
+                <Link
+                  href="/sign-up"
+                  onClick={() => setOpen(false)}
                   className="group flex w-full items-center justify-between rounded-full bg-[#1F242B] px-6 py-3 text-base font-semibold text-white shadow-md active:scale-[0.98] transition-all"
                 >
                   <TextRoll>Get Started</TextRoll>
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#1F242B]">
                     <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                   </div>
-                </button>
+                </Link>
               </nav>
             </motion.div>
           )}

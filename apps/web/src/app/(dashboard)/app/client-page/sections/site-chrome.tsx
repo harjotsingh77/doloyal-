@@ -2,10 +2,121 @@
 
 import * as React from "react";
 import { Instagram, Facebook, Menu, X, Phone } from "lucide-react";
-import type { ClientPortal, PublicBusinessInfo } from "@doloyal/shared";
+import type { AuthUser, ClientPortal, PublicBusinessInfo } from "@doloyal/shared";
 import { clientPageBrand } from "../client-page-brand";
-import { previewDocument, sectionUi, type MasterConfig } from "../portal-shared";
+import { firstName, previewDocument, sectionUi, type MasterConfig } from "../portal-shared";
 import { siteCopy } from "../website-copy";
+
+function profileName(user?: AuthUser | null, portal?: ClientPortal | null) {
+  const fromPortal = portal?.customer?.name?.trim();
+  if (fromPortal) return fromPortal;
+  const fromUser = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
+  return fromUser || user?.email || "Profile";
+}
+
+function profileInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+  return letters || "P";
+}
+
+function ProfileButton({
+  user,
+  portal,
+  frosted,
+  onJump,
+  onLogout,
+}: {
+  user: AuthUser;
+  portal?: ClientPortal | null;
+  frosted: boolean;
+  onJump: (id: string) => void;
+  onLogout?: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const name = profileName(user, portal);
+  const email = portal?.customer?.email || user.email;
+  const points = portal?.pointsBalance ?? 0;
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative hidden sm:block">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={`inline-flex h-10 items-center gap-2 rounded-full pl-1.5 pr-3 text-sm font-semibold ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-[color:var(--site-ink)]"}`}
+      >
+        <span
+          className="grid h-7 w-7 place-items-center rounded-full text-[10px] font-semibold text-white"
+          style={{ backgroundColor: "var(--site-accent)" }}
+        >
+          {profileInitials(name)}
+        </span>
+        <span className="max-w-[7.5rem] truncate">{firstName(name)}</span>
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-2xl bg-white text-[color:var(--site-ink)] shadow-[0_18px_40px_rgba(17,17,17,.16)]"
+        >
+          <div className="border-b border-black/[0.06] px-4 py-3">
+            <p className="truncate text-sm font-semibold">{name}</p>
+            {email ? <p className="mt-0.5 truncate text-xs text-black/45">{email}</p> : null}
+            <p className="mt-2 text-xs font-medium text-black/55">{points.toLocaleString("en-IN")} pts</p>
+          </div>
+          <div className="p-1.5">
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-black/[0.04]"
+              onClick={() => {
+                setOpen(false);
+                onJump("portal-booking");
+              }}
+            >
+              Your visits
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-black/[0.04]"
+              onClick={() => {
+                setOpen(false);
+                onJump("portal-rewards");
+              }}
+            >
+              Rewards
+            </button>
+            {onLogout ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full rounded-xl px-3 py-2 text-left text-sm text-black/55 hover:bg-black/[0.04]"
+                onClick={() => {
+                  setOpen(false);
+                  onLogout();
+                }}
+              >
+                Sign out
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function SiteMarquee({ text, enabled }: { text?: string; enabled?: boolean }) {
   if (!enabled) return null;
@@ -27,7 +138,9 @@ export function SiteNav({
   onJump,
   accessory,
   portal,
+  user,
   onLogout,
+  onLogin,
 }: {
   business: PublicBusinessInfo;
   config?: MasterConfig;
@@ -35,7 +148,9 @@ export function SiteNav({
   onJump: (id: string) => void;
   accessory?: React.ReactNode;
   portal?: ClientPortal | null;
+  user?: AuthUser | null;
   onLogout?: () => void;
+  onLogin?: () => void;
 }) {
   const brand = clientPageBrand(business);
   const copy = siteCopy(config?.businessType || "custom");
@@ -76,6 +191,15 @@ export function SiteNav({
   const frosted = style !== "solid" && !solid;
   const points = portal?.pointsBalance ?? 0;
   const pointsTarget = visible.has("rewards") ? "portal-rewards" : "portal-loyalty";
+  const signedIn = !!user;
+  const accountName = profileName(user, portal);
+  const signInHref = `/book/${business.bookingLink?.slug || business.slug}/sign-in`;
+  const loginClass = `hidden h-10 items-center rounded-full px-4 text-sm font-semibold sm:inline-flex ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-[color:var(--site-ink)]"}`;
+  const goSignIn = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!onLogin) return;
+    event.preventDefault();
+    onLogin();
+  };
 
   return (
     <header ref={navRef} className={`${pin ? "sticky top-0 z-40" : "relative z-40"}`}>
@@ -109,6 +233,13 @@ export function SiteNav({
               <span className={`text-[11px] font-medium ${frosted ? "text-white/70" : "text-[color:var(--site-ink)]/45"}`}>pts</span>
             </button>
             {accessory}
+            {signedIn && user ? (
+              <ProfileButton user={user} portal={portal} frosted={frosted} onJump={onJump} onLogout={onLogout} />
+            ) : (
+              <a href={signInHref} onClick={goSignIn} className={loginClass}>
+                Login
+              </a>
+            )}
             <button
               type="button"
               onClick={onBook}
@@ -155,11 +286,34 @@ export function SiteNav({
           <button type="button" onClick={() => { onBook(); setOpen(false); }} className="mt-8 h-12 w-full rounded-full text-sm font-semibold text-white" style={{ backgroundColor: "var(--site-accent)" }}>
             {book}
           </button>
-          {portal && onLogout ? (
-            <button type="button" onClick={() => { onLogout(); setOpen(false); }} className="mt-3 w-full py-2 text-sm text-white/55">
-              Sign out
-            </button>
-          ) : null}
+          {signedIn ? (
+            <>
+              <div className="mt-8 rounded-2xl bg-white/10 px-4 py-3">
+                <p className="text-sm font-semibold">{accountName}</p>
+                <p className="mt-1 text-xs text-white/55">{(portal?.pointsBalance ?? 0).toLocaleString("en-IN")} pts</p>
+              </div>
+              <button type="button" onClick={() => { onJump("portal-booking"); setOpen(false); }} className="mt-3 w-full py-2 text-left text-sm text-white/80">
+                Your visits
+              </button>
+              {onLogout ? (
+                <button type="button" onClick={() => { onLogout(); setOpen(false); }} className="mt-1 w-full py-2 text-left text-sm text-white/55">
+                  Sign out
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <a
+              href={signInHref}
+              onClick={(event) => {
+                if (onLogin) event.preventDefault();
+                onLogin?.();
+                setOpen(false);
+              }}
+              className="mt-3 block w-full py-2 text-center text-sm text-white/55"
+            >
+              Login
+            </a>
+          )}
         </div>
       ) : null}
     </header>

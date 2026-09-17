@@ -194,12 +194,40 @@ function GoogleButton({
   );
 }
 
+function GuestButton({
+  disabled,
+  onClick,
+  radius,
+  spaced,
+}: {
+  disabled?: boolean;
+  onClick: () => void;
+  radius: number;
+  spaced?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex w-full items-center justify-center border border-[rgb(var(--color-border))] bg-transparent px-4 py-2.5 text-sm font-medium text-[rgb(var(--color-foreground))] transition hover:bg-[rgb(var(--color-foreground)/0.04)] disabled:opacity-60",
+        spaced ? "mt-3" : "",
+      )}
+      style={{ borderRadius: Math.max(8, radius - 4) }}
+    >
+      Continue as guest
+    </button>
+  );
+}
+
 export function ClientSignInForm({
   config,
   isLoading,
   error,
   onSubmit,
   onGoogle,
+  onGuest,
   preview = false,
 }: {
   config: ClientSignInPublicConfig;
@@ -207,6 +235,7 @@ export function ClientSignInForm({
   error: string | null;
   onSubmit: (email: string, password: string) => Promise<void>;
   onGoogle: () => void;
+  onGuest?: () => void;
   preview?: boolean;
 }) {
   const [email, setEmail] = React.useState("");
@@ -285,6 +314,17 @@ export function ClientSignInForm({
           <GoogleButton disabled={isLoading} onClick={onGoogle} radius={config.cornerRadius} />
         </>
       ) : null}
+      {config.showGuestLogin ? (
+        <>
+          {config.showGoogle ? null : <GoogleDivider />}
+          <GuestButton
+            disabled={isLoading}
+            onClick={() => onGuest?.()}
+            radius={config.cornerRadius}
+            spaced={config.showGoogle}
+          />
+        </>
+      ) : null}
     </>
   );
 }
@@ -294,14 +334,18 @@ export function ClientSignUpForm({
   error,
   onSubmit,
   onGoogle,
+  onGuest,
   showGoogle = true,
+  showGuestLogin = false,
   cornerRadius = 16,
 }: {
   isLoading: boolean;
   error: string | null;
   onSubmit: (data: { name: string; email: string; phone: string; password: string }) => Promise<void>;
   onGoogle: () => void;
+  onGuest?: () => void;
   showGoogle?: boolean;
+  showGuestLogin?: boolean;
   cornerRadius?: number;
 }) {
   const [name, setName] = React.useState("");
@@ -384,6 +428,12 @@ export function ClientSignUpForm({
         <>
           <GoogleDivider />
           <GoogleButton disabled={isLoading} onClick={onGoogle} radius={cornerRadius} />
+        </>
+      ) : null}
+      {showGuestLogin ? (
+        <>
+          {showGoogle ? null : <GoogleDivider />}
+          <GuestButton disabled={isLoading} onClick={() => onGuest?.()} radius={cornerRadius} spaced={showGoogle} />
         </>
       ) : null}
     </>

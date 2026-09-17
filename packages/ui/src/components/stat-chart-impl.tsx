@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
+import { CardHoverHint } from "./card-hover-hint";
 import { CHART_PALETTE } from "../brand";
 import { cn } from "../lib/utils";
 
@@ -81,24 +82,19 @@ export default function StatChartImpl({
           : undefined
       }
       className={cn(
+        "group relative",
         className,
         onClick &&
           "cursor-pointer transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm",
       )}
     >
+      {onClick ? <CardHoverHint /> : null}
       {title ? (
         <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>{title}</CardTitle>
-              {description ? (
-                <p className="text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
-              ) : null}
-            </div>
-            {onClick ? (
-              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
-                View details
-              </span>
+          <div>
+            <CardTitle>{title}</CardTitle>
+            {description ? (
+              <p className="text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
             ) : null}
           </div>
         </CardHeader>

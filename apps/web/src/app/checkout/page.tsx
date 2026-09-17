@@ -7,18 +7,17 @@ import {
   ArrowLeft,
   BadgeCheck,
   Building2,
-  Check,
   CreditCard,
   Landmark,
   Loader2,
   Lock,
   ShieldCheck,
   Smartphone,
-  Wallet,
   XCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CURRENCY_MAP } from "@/lib/currency";
 import { getPlan } from "@doloyal/shared";
 import type { BillingSubscription } from "@doloyal/shared";
 import { LogoMark } from "@doloyal/ui";
@@ -26,16 +25,8 @@ import { LogoMark } from "@doloyal/ui";
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
 type Cycle = "monthly" | "yearly";
-
+type DisplayCurrency = "INR" | "USD";
 type FlowState = "idle" | "processing" | "success" | "failed" | "cancelled";
-
-interface SuccessResult {
-  title: string;
-  planName: string;
-  status: string;
-  transactionId?: string;
-  nextBillingDate?: string | null;
-}
 
 declare global {
   interface Window {
@@ -43,7 +34,44 @@ declare global {
   }
 }
 
-/* ── Helpers ───────────────────────────────────────────────────────────── */
+/* ── Money ─────────────────────────────────────────────────────────────── */
+
+const GST_RATE = 0.18;
+const CONVERSION_FEE = 0.04;
+const INR_PER_USD = CURRENCY_MAP.get("INR")?.rate ?? 83.5;
+const DISPLAY_INR_PER_USD = INR_PER_USD * (1 + CONVERSION_FEE);
+
+function toDisplay(amountInr: number, currency: DisplayCurrency) {
+  if (currency === "USD") return amountInr / DISPLAY_INR_PER_USD;
+  return amountInr;
+}
+
+function fmtMoney(amountInr: number, currency: DisplayCurrency, compact = false) {
+  const value = toDisplay(amountInr, currency);
+  const whole = Math.abs(value - Math.round(value)) < 0.005;
+  return new Intl.NumberFormat(currency === "USD" ? "en-US" : "en-IN", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: compact && whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function gstBreakdown(amountInr: number) {
+  const exclusive = amountInr / (1 + GST_RATE);
+  return {
+    subtotal: exclusive,
+    gst: amountInr - exclusive,
+    total: amountInr,
+  };
+}
+
+function errorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err && typeof (err as Error).message === "string") {
+    return (err as Error).message;
+  }
+  return "Something went wrong. Please try again.";
+}
 
 function loadRazorpaySdk(): Promise<boolean> {
   if (typeof window === "undefined") return Promise.resolve(false);
@@ -55,21 +83,6 @@ function loadRazorpaySdk(): Promise<boolean> {
     script.onerror = () => resolve(false);
     document.body.appendChild(script);
   });
-}
-
-const fmtINR = (n: number) =>
-  `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const fmtDate = (iso?: string | null) =>
-  iso
-    ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
-    : "—";
-
-function errorMessage(err: unknown): string {
-  if (err && typeof err === "object" && "message" in err && typeof (err as any).message === "string") {
-    return (err as Error).message;
-  }
-  return "Something went wrong. Please try again.";
 }
 
 /* ── Small building blocks ─────────────────────────────────────────────── */
@@ -91,11 +104,11 @@ function FieldShell({
         {label}
       </label>
       <div
-        className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 transition-colors focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-[#2563EB]/15 ${
-          error ? "border-red-400" : "border-black/10"
+        className={`flex items-center gap-3 rounded-[10px] bg-[#F6F8FA] px-3.5 py-[13px] transition-colors focus-within:bg-white focus-within:ring-2 focus-within:ring-[#105EF6]/25 ${
+          error ? "ring-2 ring-red-400" : "ring-1 ring-black/[0.06]"
         }`}
       >
-        <span className="w-24 shrink-0 text-sm text-gray-500">{label}</span>
+        <span className="w-[4.5rem] shrink-0 text-[13px] text-[#6B7280]">{label}</span>
         <div className="min-w-0 flex-1">{children}</div>
       </div>
       {error ? (
@@ -108,7 +121,7 @@ function FieldShell({
 }
 
 const inputClass =
-  "w-full border-0 bg-transparent p-0 text-sm text-[#282628] outline-none placeholder:text-gray-400";
+  "w-full border-0 bg-transparent p-0 text-[14px] text-[#111111] outline-none placeholder:text-[#9CA3AF]";
 
 /* ── Page ──────────────────────────────────────────────────────────────── */
 
@@ -117,7 +130,7 @@ export default function CheckoutPage() {
     <React.Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center bg-white">
-          <Loader2 className="h-6 w-6 animate-spin text-[#2563EB]" aria-label="Loading checkout" />
+          <Loader2 className="h-6 w-6 animate-spin text-[#105EF6]" aria-label="Loading checkout" />
         </div>
       }
     >
@@ -133,15 +146,14 @@ function CheckoutInner() {
 
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
 
-  /* Plan resolution */
   const normalizedPlanId = rawPlan === "free-trial" ? "free" : rawPlan;
   const plan = getPlan(normalizedPlanId);
   const isFreeTrial = plan?.id === "free";
   const isPaidPlan = !!plan && plan.priceMonthly > 0;
   const planValid = !!plan && (isFreeTrial || isPaidPlan);
 
-  /* State */
   const [cycle, setCycle] = React.useState<Cycle>(initialCycle);
+  const [currency, setCurrency] = React.useState<DisplayCurrency>("INR");
   const [sub, setSub] = React.useState<BillingSubscription | null>(null);
   const [subLoaded, setSubLoaded] = React.useState(false);
 
@@ -156,15 +168,12 @@ function CheckoutInner() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [banner, setBanner] = React.useState<{ kind: "error" | "warning"; text: string } | null>(null);
   const [flow, setFlow] = React.useState<FlowState>("idle");
-  const [result, setResult] = React.useState<SuccessResult | null>(null);
   const inFlight = React.useRef(false);
 
-  /* Prefill email once auth resolves */
   React.useEffect(() => {
     if (user?.email) setEmail((e) => e || user.email);
   }, [user]);
 
-  /* Fetch current subscription — real data only (no mock fallback). */
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -172,7 +181,6 @@ function CheckoutInner() {
         const s = await api.getSubscriptionStrict();
         if (!cancelled) setSub(s ?? null);
       } catch {
-        // No subscription yet / API unavailable — treat as no subscription.
         if (!cancelled) setSub(null);
       } finally {
         if (!cancelled) setSubLoaded(true);
@@ -186,26 +194,26 @@ function CheckoutInner() {
   const amount = !plan || isFreeTrial ? 0 : cycle === "yearly" ? plan.priceYearly : plan.priceMonthly;
   const fullYearCost = plan ? plan.priceMonthly * 12 : 0;
   const yearlySavings = plan && plan.priceYearly > 0 ? Math.max(0, fullYearCost - plan.priceYearly) : 0;
-
-  /* ── Derived views ─────────────────────────────────────────────────── */
+  const yearlyMonthly = plan && plan.priceYearly > 0 ? plan.priceYearly / 12 : 0;
+  const totals = gstBreakdown(amount);
 
   if (!authLoading && !isAuthenticated) {
     return (
       <CenteredState
-        icon={<Lock className="h-6 w-6 text-[#2563EB]" />}
+        icon={<Lock className="h-6 w-6 text-[#105EF6]" />}
         title="Sign in to continue"
         body="You need a Doloyal account before subscribing to a plan."
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
             href="/sign-in"
-            className="inline-flex h-11 items-center justify-center rounded-full bg-[#232529] px-8 text-sm font-semibold text-white transition-colors hover:bg-[#2563EB]"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-[#111111] px-8 text-sm font-semibold text-white transition-colors hover:bg-[#105EF6]"
           >
             Sign In
           </Link>
           <Link
-            href="/pricing"
-            className="inline-flex h-11 items-center justify-center rounded-full border border-black/10 px-8 text-sm font-semibold text-[#282628] transition-colors hover:border-[#2563EB] hover:text-[#2563EB]"
+            href="/#pricing"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-black/10 px-8 text-sm font-semibold text-[#111111] transition-colors hover:border-[#105EF6] hover:text-[#105EF6]"
           >
             View Plans
           </Link>
@@ -226,8 +234,8 @@ function CheckoutInner() {
         }
       >
         <Link
-          href="/pricing"
-          className="inline-flex h-11 items-center justify-center rounded-full bg-[#232529] px-8 text-sm font-semibold text-white transition-colors hover:bg-[#2563EB]"
+          href="/#pricing"
+          className="inline-flex h-11 items-center justify-center rounded-lg bg-[#111111] px-8 text-sm font-semibold text-white transition-colors hover:bg-[#105EF6]"
         >
           View Plans
         </Link>
@@ -251,13 +259,13 @@ function CheckoutInner() {
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
             href="/app/dashboard"
-            className="inline-flex h-11 items-center justify-center rounded-full bg-[#232529] px-8 text-sm font-semibold text-white transition-colors hover:bg-[#2563EB]"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-[#111111] px-8 text-sm font-semibold text-white transition-colors hover:bg-[#105EF6]"
           >
             Go to Dashboard
           </Link>
           <Link
             href="/app/billing"
-            className="inline-flex h-11 items-center justify-center rounded-full border border-black/10 px-8 text-sm font-semibold text-[#282628] transition-colors hover:border-[#2563EB] hover:text-[#2563EB]"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-black/10 px-8 text-sm font-semibold text-[#111111] transition-colors hover:border-[#105EF6] hover:text-[#105EF6]"
           >
             Manage Billing
           </Link>
@@ -265,8 +273,6 @@ function CheckoutInner() {
       </CenteredState>
     );
   }
-
-  /* ── Validation ────────────────────────────────────────────────────── */
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -285,8 +291,6 @@ function CheckoutInner() {
     return Object.keys(e).length === 0;
   };
 
-  /* ── Free trial ────────────────────────────────────────────────────── */
-
   async function startTrial() {
     if (inFlight.current) return;
     if (!validate()) return;
@@ -294,14 +298,9 @@ function CheckoutInner() {
     setFlow("processing");
     setBanner(null);
     try {
-      const r = await api.activateFreeTrial();
-      setResult({
-        title: "Your free trial has started",
-        planName: r.planName || plan!.name,
-        status: "Trialing",
-        nextBillingDate: r.trialEndsAt ?? r.nextBillingDate ?? null,
-      });
+      await api.activateFreeTrial();
       setFlow("success");
+      window.location.assign("/app/dashboard");
     } catch (err) {
       setFlow("failed");
       setBanner({ kind: "error", text: errorMessage(err) });
@@ -309,8 +308,6 @@ function CheckoutInner() {
       inFlight.current = false;
     }
   }
-
-  /* ── Paid checkout via Razorpay ────────────────────────────────────── */
 
   async function startPayment(methodHint?: "card" | "upi" | "netbanking" | "wallet") {
     if (inFlight.current) return;
@@ -342,33 +339,28 @@ function CheckoutInner() {
         notes: {
           plan: plan!.id,
           cycle,
+          displayCurrency: currency,
           country: country || undefined,
           pincode: pincode.trim() || undefined,
           businessName: isBusiness ? businessName.trim() : undefined,
           gstin: isBusiness ? gstin.trim().toUpperCase() : undefined,
         },
-        theme: { color: "#2563EB" },
+        theme: { color: "#105EF6" },
         handler: async (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
           razorpay_signature: string;
         }) => {
           try {
-            const verified = await api.verifyCheckoutPayment({
+            await api.verifyCheckoutPayment({
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature,
               planId: plan!.id,
               cycle,
             });
-            setResult({
-              title: "Payment successful",
-              planName: verified.planName || plan!.name,
-              status: verified.status || "Active",
-              transactionId: verified.transactionId,
-              nextBillingDate: verified.nextBillingDate,
-            });
             setFlow("success");
+            window.location.assign("/app/dashboard");
           } catch (verifyErr) {
             setFlow("failed");
             setBanner({
@@ -416,377 +408,428 @@ function CheckoutInner() {
   }
 
   const processing = flow === "processing";
-  const ctaLabel = isFreeTrial
-    ? "Start Free Trial"
-    : `Pay ${fmtINR(amount)}${cycle === "yearly" ? "/yr" : ""}`;
+  const ctaLabel = isFreeTrial ? "Start Free Trial" : "Subscribe";
 
-  /* ── Success screen ────────────────────────────────────────────────── */
-
-  if (flow === "success" && result) {
-    return (
-      <SuccessScreen
-        result={result}
-        email={email}
-        isTrial={isFreeTrial}
-      />
-    );
+  if (flow === "success") {
+    return <OpeningDashboard />;
   }
 
-  /* ── Main layout ───────────────────────────────────────────────────── */
-
   return (
-    <div className="min-h-screen bg-white text-[#282628] antialiased">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-black/5 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-[1080px] items-center gap-5 px-5 sm:px-8">
+    <div className="min-h-screen bg-white font-[family-name:var(--font-inter)] text-[#111111] antialiased lg:grid lg:grid-cols-2">
+      {/* ── LEFT: primary-blue summary ──────────────────────────────────── */}
+      <aside className="relative flex bg-[#105EF6] text-white lg:justify-end">
+        <div className="flex w-full max-w-[420px] flex-col px-6 py-8 sm:px-10 lg:min-h-screen lg:px-8 lg:py-12 xl:mr-10 xl:px-4">
           <Link
-            href="/pricing"
-            className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-gray-500 transition-colors hover:text-[#282628] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
+            href="/"
+            className="inline-flex w-fit items-center gap-1.5 rounded-md text-[14px] font-medium text-white/80 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            Doloyal
           </Link>
-          <span className="h-5 w-px bg-black/10" aria-hidden />
-          <Link href="/" className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] rounded-md">
-            <LogoMark size={26} />
-            <span className="text-lg font-bold tracking-tight">Doloyal</span>
-          </Link>
-        </div>
-      </header>
 
-      {!subLoaded ? (
-        <div className="mx-auto flex max-w-[1080px] items-center justify-center px-5 py-40">
-          <Loader2 className="h-6 w-6 animate-spin text-[#2563EB]" aria-label="Loading your subscription" />
-        </div>
-      ) : (
-        <main className="mx-auto grid max-w-[1080px] gap-12 px-5 pb-20 pt-10 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-16 lg:pt-14">
-          {/* ── LEFT: plan summary ─────────────────────────────────────── */}
-          <section aria-labelledby="plan-heading">
-            <h1 id="plan-heading" className="text-lg font-semibold tracking-tight">
-              {isFreeTrial ? "Start your free trial" : `Subscribe to Doloyal ${plan!.name}`}
-            </h1>
-
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-                {fmtINR(amount)}
-              </span>
-              <span className="text-sm font-medium text-gray-500">
-                {isFreeTrial ? "for 1 month" : cycle === "yearly" ? "per year" : "per month"}
-              </span>
+          {!subLoaded ? (
+            <div className="flex flex-1 items-center justify-center py-24">
+              <Loader2 className="h-6 w-6 animate-spin text-white" aria-label="Loading your subscription" />
             </div>
+          ) : (
+            <>
+              <h1 className="mt-12 text-[22px] font-semibold tracking-tight sm:mt-16">
+                {isFreeTrial ? "Start your free trial" : `Subscribe to Doloyal ${plan!.name}`}
+              </h1>
 
-            {!isFreeTrial && (
-              <>
-                {/* Billing selector */}
-                <fieldset className="mt-7">
-                  <legend className="sr-only">Billing cycle</legend>
-                  <div className="grid grid-cols-2 gap-3">
-                    <CycleOption
-                      selected={cycle === "monthly"}
-                      onClick={() => setCycle("monthly")}
-                      title="Monthly"
-                      subtitle={`${fmtINR(plan!.priceMonthly)} / month`}
-                      inputProps={{ id: "cycle-monthly" }}
-                    />
-                    <CycleOption
-                      selected={cycle === "yearly"}
-                      onClick={() => setCycle("yearly")}
-                      title="Annual"
-                      subtitle={`${fmtINR(plan!.priceYearly)} / year`}
-                      badge={yearlySavings > 0 ? `Save ${fmtINR(yearlySavings)}` : undefined}
-                      inputProps={{ id: "cycle-yearly" }}
-                    />
-                  </div>
-                </fieldset>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className="text-[42px] font-semibold leading-none tracking-tight sm:text-[48px]">
+                  {fmtMoney(totals.total, currency)}
+                </span>
+                <span className="text-[15px] font-medium text-white/75">
+                  {isFreeTrial ? "for 1 month" : cycle === "yearly" ? "per year" : "per month"}
+                </span>
+              </div>
 
-                {/* Order summary */}
-                <div className="mt-8 overflow-hidden rounded-xl border border-black/10">
-                  <div className="flex items-start justify-between gap-4 px-5 py-4">
-                    <div>
-                      <p className="text-sm font-semibold">{plan!.name}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">Billed {cycle}</p>
+              <div className="mt-7 grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Display currency">
+                <CurrencyChip
+                  selected={currency === "INR"}
+                  onClick={() => setCurrency("INR")}
+                  flag="🇮🇳"
+                  label="INR"
+                />
+                <CurrencyChip
+                  selected={currency === "USD"}
+                  onClick={() => setCurrency("USD")}
+                  flag="🇺🇸"
+                  label="USD"
+                />
+              </div>
+              <p className="mt-2.5 max-w-[340px] text-[11px] leading-relaxed text-white/65">
+                1 USD = {DISPLAY_INR_PER_USD.toFixed(2)} INR (includes 4% conversion fee). Charges can
+                vary based on exchange rates.
+              </p>
+
+              <div className="mt-7 rounded-xl bg-black/15 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white">
+                    <LogoMark size={22} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[14px] font-semibold">Doloyal {plan!.name}</p>
+                        <p className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-white/70">
+                          {plan!.tagline}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-[14px] font-medium">
+                        {fmtMoney(totals.subtotal, currency)}
+                      </p>
                     </div>
-                    <p className="text-sm font-medium">{fmtINR(amount)}</p>
+                    <p className="mt-2 text-[12px] text-white/55">
+                      {isFreeTrial ? "1 month free, no card required" : `Billed ${cycle}`}
+                    </p>
                   </div>
-                  <dl className="divide-y divide-black/5 border-t border-black/5 text-sm">
-                    <div className="flex items-center justify-between px-5 py-3.5">
-                      <dt className="text-gray-600">Subtotal</dt>
-                      <dd className="font-medium">{fmtINR(amount)}</dd>
-                    </div>
-                    <div className="flex items-center justify-between px-5 py-3.5">
-                      <dt className="text-gray-600">Tax</dt>
-                      <dd className="text-gray-500">Calculated at payment</dd>
-                    </div>
-                    <div className="flex items-center justify-between bg-gray-50/60 px-5 py-4">
-                      <dt className="font-semibold">Total due today</dt>
-                      <dd className="text-base font-bold">{fmtINR(amount)}</dd>
-                    </div>
-                  </dl>
                 </div>
+              </div>
 
-                {cycle === "yearly" && yearlySavings > 0 && (
-                  <p className="mt-3 text-xs font-medium text-emerald-700">
-                    You save {fmtINR(yearlySavings)} a year with annual billing.
-                  </p>
-                )}
-              </>
-            )}
+              {!isFreeTrial && yearlySavings > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={cycle === "yearly"}
+                  onClick={() => setCycle(cycle === "yearly" ? "monthly" : "yearly")}
+                  className="mt-4 flex w-full items-center gap-2.5 rounded-full bg-black/25 px-2.5 py-2 text-left transition-colors hover:bg-black/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                >
+                  <span
+                    className={`relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full transition-colors ${
+                      cycle === "yearly" ? "bg-emerald-400" : "bg-black/35"
+                    }`}
+                    aria-hidden
+                  >
+                    <span
+                      className={`inline-block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform ${
+                        cycle === "yearly" ? "translate-x-[18px]" : "translate-x-[3px]"
+                      }`}
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px]">
+                    <span className="font-semibold text-emerald-300">
+                      Save {fmtMoney(yearlySavings, currency, true)}
+                    </span>
+                    <span className="text-white/85"> with annual billing</span>
+                  </span>
+                  <span className="hidden shrink-0 text-[13px] text-white/80 sm:inline">
+                    {fmtMoney(yearlyMonthly, currency, true)}/mo
+                  </span>
+                </button>
+              )}
 
-            {isFreeTrial && (
-              <ul className="mt-7 space-y-2.5 border-t border-black/5 pt-6">
-                {(plan!.features ?? []).slice(0, 4).map((f) => (
-                  <li key={f} className="flex items-center gap-2.5 text-sm text-gray-700">
-                    <Check className="h-4 w-4 shrink-0 stroke-[3] text-[#2563EB]" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+              <dl className="mt-8 space-y-3.5 text-[14px]">
+                <div className="flex items-center justify-between">
+                  <dt className="text-white/80">Subtotal</dt>
+                  <dd className="font-medium">{fmtMoney(totals.subtotal, currency)}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="inline-flex items-center gap-1.5 text-white/80">
+                    GST (18%)
+                    <span
+                      title="GST is included in the total charged today. Payment is collected in INR."
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/45 text-[9px] font-semibold leading-none text-white/70"
+                    >
+                      i
+                    </span>
+                  </dt>
+                  <dd className="font-medium">{fmtMoney(totals.gst, currency)}</dd>
+                </div>
+                <div className="border-t border-white/20 pt-4">
+                  <div className="flex items-center justify-between">
+                    <dt className="font-medium">Total due today</dt>
+                    <dd className="text-[16px] font-semibold">{fmtMoney(totals.total, currency)}</dd>
+                  </div>
+                </div>
+              </dl>
+            </>
+          )}
+        </div>
+      </aside>
 
-          {/* ── RIGHT: payment ─────────────────────────────────────────── */}
-          <section aria-label="Payment details">
-            {/* Express checkout */}
-            {!isFreeTrial && (
-              <>
-                <div>
-                  <h2 className="sr-only">Express payment</h2>
+      {/* ── RIGHT: payment ──────────────────────────────────────────────── */}
+      <section className="flex bg-white lg:justify-start" aria-label="Payment details">
+        <div className="flex w-full max-w-[420px] flex-col px-6 py-10 sm:px-10 lg:min-h-screen lg:justify-center lg:px-8 lg:py-12 xl:ml-10 xl:px-4">
+          {!subLoaded ? (
+            <div className="flex items-center justify-center py-24">
+              <Loader2 className="h-6 w-6 animate-spin text-[#105EF6]" aria-label="Loading checkout" />
+            </div>
+          ) : (
+            <>
+              {!isFreeTrial && (
+                <>
                   <div className="grid grid-cols-2 gap-3">
                     <ExpressButton
+                      tone="dark"
                       icon={<Smartphone className="h-4 w-4" />}
                       label="UPI"
                       onClick={() => startPayment("upi")}
                       disabled={processing}
                     />
                     <ExpressButton
+                      tone="green"
                       icon={<CreditCard className="h-4 w-4" />}
                       label="Card"
                       onClick={() => startPayment("card")}
                       disabled={processing}
                     />
                   </div>
-                  <p className="mt-2 text-center text-[11px] leading-relaxed text-gray-400">
-                    Opens Razorpay&apos;s secure payment window
-                  </p>
-                </div>
+                  <div className="my-7 flex items-center gap-4" aria-hidden>
+                    <span className="h-px flex-1 bg-black/10" />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF]">
+                      or
+                    </span>
+                    <span className="h-px flex-1 bg-black/10" />
+                  </div>
+                </>
+              )}
 
-                <div className="my-7 flex items-center gap-4" aria-hidden>
-                  <span className="h-px flex-1 bg-black/10" />
-                  <span className="text-xs font-medium uppercase tracking-wider text-gray-400">or</span>
-                  <span className="h-px flex-1 bg-black/10" />
-                </div>
-              </>
-            )}
-
-            {banner && (
-              <div
-                role="alert"
-                className={`mb-6 rounded-xl border px-4 py-3.5 text-sm ${
-                  banner.kind === "error"
-                    ? "border-red-200 bg-red-50 text-red-800"
-                    : "border-amber-200 bg-amber-50 text-amber-900"
-                }`}
-              >
-                {banner.kind === "error" && (
-                  <p className="font-semibold">Payment unsuccessful</p>
-                )}
-                <p>{banner.text}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBanner(null);
-                    setFlow("idle");
-                  }}
-                  className="mt-2 text-xs font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-
-            {flow === "cancelled" && !banner && (
-              <div
-                role="status"
-                className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm text-amber-900"
-              >
-                <p className="font-semibold">Payment cancelled</p>
-                <p>Your subscription has not been activated.</p>
-                <button
-                  type="button"
-                  onClick={() => setFlow("idle")}
-                  className="mt-2 text-xs font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-
-            <form
-              onSubmit={(ev) => {
-                ev.preventDefault();
-                if (isFreeTrial) void startTrial();
-                else void startPayment();
-              }}
-              noValidate
-            >
-              {/* Contact information */}
-              <h2 className="text-base font-semibold">Contact information</h2>
-              <div className="mt-3">
-                <FieldShell id="email" label="Email" error={errors.email}>
-                  <input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@business.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    aria-invalid={!!errors.email}
-                    className={inputClass}
-                  />
-                </FieldShell>
-              </div>
-
-              {/* Payment method */}
-              <h2 className="mt-9 text-base font-semibold">Payment method</h2>
-              <div className="mt-3 rounded-xl border border-black/10">
+              {banner && (
                 <div
-                  className="flex items-center gap-3 border-b border-black/5 px-4 py-3.5"
-                  aria-hidden
+                  role="alert"
+                  className={`mb-6 rounded-xl border px-4 py-3.5 text-sm ${
+                    banner.kind === "error"
+                      ? "border-red-200 bg-red-50 text-red-800"
+                      : "border-amber-200 bg-amber-50 text-amber-900"
+                  }`}
                 >
-                  <CreditCard className="h-5 w-5 text-[#282628]" />
-                  <span className="text-sm font-semibold">Card, UPI, NetBanking &amp; wallets</span>
-                  <span className="ml-auto inline-flex items-center gap-1 rounded-md bg-[#2563EB]/5 px-2 py-0.5 text-[11px] font-semibold text-[#2563EB]">
-                    <ShieldCheck className="h-3 w-3" /> Secure
-                  </span>
-                </div>
-                <div className="flex items-start gap-3 px-4 py-4">
-                  <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-                  <p className="text-xs leading-relaxed text-gray-500">
-                    {isFreeTrial
-                      ? "No card needed — your trial starts immediately and we'll remind you before it ends."
-                      : "You'll enter your card or UPI details in Razorpay's encrypted payment window after clicking the button below. Your details never touch Doloyal's servers."}
-                  </p>
-                </div>
-              </div>
-
-              {/* Billing information */}
-              <h2 className="mt-9 text-base font-semibold">Billing information</h2>
-              <div className="mt-3 space-y-3">
-                <FieldShell id="country" label="Country">
-                  <select
-                    id="country"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    className={`${inputClass} appearance-none pr-6`}
+                  {banner.kind === "error" && (
+                    <p className="font-semibold">Payment unsuccessful</p>
+                  )}
+                  <p>{banner.text}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBanner(null);
+                      setFlow("idle");
+                    }}
+                    className="mt-2 text-xs font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
                   >
-                    {["India", "United States", "United Kingdom", "United Arab Emirates", "Singapore", "Australia"].map(
-                      (c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </FieldShell>
-                <FieldShell id="pincode" label="PIN code" error={errors.pincode}>
-                  <input
-                    id="pincode"
-                    inputMode="numeric"
-                    autoComplete="postal-code"
-                    placeholder="6-digit PIN"
-                    maxLength={6}
-                    value={pincode}
-                    onChange={(e) => setPincode(e.target.value.replace(/[^\d]/g, ""))}
-                    aria-invalid={!!errors.pincode}
-                    className={inputClass}
-                  />
-                </FieldShell>
-              </div>
-
-              {/* Business purchase */}
-              <label className="mt-5 flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={isBusiness}
-                  onChange={(e) => setIsBusiness(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#2563EB]"
-                />
-                <span className="flex items-center gap-2 text-sm text-gray-700">
-                  <Building2 className="h-4 w-4 text-gray-400" aria-hidden />
-                  I&apos;m purchasing as a business
-                </span>
-              </label>
-
-              {isBusiness && (
-                <div className="mt-3 space-y-3 rounded-xl border border-black/10 bg-gray-50/50 p-4">
-                  <FieldShell id="business-name" label="Business" error={errors.businessName}>
-                    <input
-                      id="business-name"
-                      autoComplete="organization"
-                      placeholder="Legal business name"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      aria-invalid={!!errors.businessName}
-                      className={inputClass}
-                    />
-                  </FieldShell>
-                  <FieldShell id="gstin" label="GSTIN" error={errors.gstin}>
-                    <input
-                      id="gstin"
-                      placeholder="Optional — for GST input credit"
-                      maxLength={15}
-                      value={gstin}
-                      onChange={(e) => setGstin(e.target.value.toUpperCase())}
-                      aria-invalid={!!errors.gstin}
-                      className={inputClass}
-                    />
-                  </FieldShell>
-                  <FieldShell id="billing-address" label="Address" error={errors.address}>
-                    <input
-                      id="billing-address"
-                      autoComplete="street-address"
-                      placeholder="Registered billing address"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      aria-invalid={!!errors.address}
-                      className={inputClass}
-                    />
-                  </FieldShell>
+                    Try Again
+                  </button>
                 </div>
               )}
 
-              {/* CTA */}
-              <button
-                type="submit"
-                disabled={processing}
-                className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2563EB] text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1d4fd8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    Processing payment…
-                  </>
-                ) : (
-                  <>
-                    {!isFreeTrial && <Lock className="h-4 w-4" aria-hidden />}
-                    {ctaLabel}
-                  </>
-                )}
-              </button>
+              {flow === "cancelled" && !banner && (
+                <div
+                  role="status"
+                  className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm text-amber-900"
+                >
+                  <p className="font-semibold">Payment cancelled</p>
+                  <p>Your subscription has not been activated.</p>
+                  <button
+                    type="button"
+                    onClick={() => setFlow("idle")}
+                    className="mt-2 text-xs font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
 
-              <p className="mt-3.5 flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-400">
-                <Wallet className="h-3 w-3" aria-hidden />
-                Payments secured by Razorpay · PCI DSS compliant · 256-bit encryption
-              </p>
-            </form>
-          </section>
-        </main>
-      )}
+              <form
+                onSubmit={(ev) => {
+                  ev.preventDefault();
+                  if (isFreeTrial) void startTrial();
+                  else void startPayment();
+                }}
+                noValidate
+              >
+                <h2 className="text-[15px] font-semibold">Contact information</h2>
+                <div className="mt-3">
+                  <FieldShell id="email" label="Email" error={errors.email}>
+                    <input
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@business.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      aria-invalid={!!errors.email}
+                      className={inputClass}
+                    />
+                  </FieldShell>
+                </div>
+
+                <h2 className="mt-8 text-[15px] font-semibold">Payment method</h2>
+                <div className="mt-3 rounded-[10px] ring-1 ring-black/[0.08]">
+                  <div className="flex items-center gap-3 px-4 py-3.5">
+                    <CreditCard className="h-4 w-4 text-[#111111]" />
+                    <span className="text-[14px] font-medium">
+                      {isFreeTrial ? "No card needed" : "Card, UPI, NetBanking & wallets"}
+                    </span>
+                    <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-[#6B7280]">
+                      <ShieldCheck className="h-3.5 w-3.5 text-[#105EF6]" />
+                      Secure
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-3 border-t border-black/[0.06] px-4 py-3.5">
+                    <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-[#9CA3AF]" />
+                    <p className="text-[12px] leading-relaxed text-[#6B7280]">
+                      {isFreeTrial
+                        ? "Your trial starts immediately and we’ll remind you before it ends."
+                        : "You’ll enter card or UPI details in Razorpay’s encrypted window. Your details never touch Doloyal’s servers."}
+                    </p>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-3 border-t border-black/[0.06] px-4 py-3.5">
+                    <input
+                      type="checkbox"
+                      checked={isBusiness}
+                      onChange={(e) => setIsBusiness(e.target.checked)}
+                      className="h-4 w-4 shrink-0 cursor-pointer accent-[#105EF6]"
+                    />
+                    <span className="flex items-center gap-2 text-[13px] text-[#374151]">
+                      <Building2 className="h-4 w-4 text-[#9CA3AF]" aria-hidden />
+                      I&apos;m purchasing as a business
+                    </span>
+                  </label>
+                </div>
+
+                {isBusiness && (
+                  <div className="mt-3 space-y-3">
+                    <FieldShell id="business-name" label="Business" error={errors.businessName}>
+                      <input
+                        id="business-name"
+                        autoComplete="organization"
+                        placeholder="Legal business name"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        aria-invalid={!!errors.businessName}
+                        className={inputClass}
+                      />
+                    </FieldShell>
+                    <FieldShell id="gstin" label="GSTIN" error={errors.gstin}>
+                      <input
+                        id="gstin"
+                        placeholder="Optional — for GST input credit"
+                        maxLength={15}
+                        value={gstin}
+                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                        aria-invalid={!!errors.gstin}
+                        className={inputClass}
+                      />
+                    </FieldShell>
+                    <FieldShell id="billing-address" label="Address" error={errors.address}>
+                      <input
+                        id="billing-address"
+                        autoComplete="street-address"
+                        placeholder="Registered billing address"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        aria-invalid={!!errors.address}
+                        className={inputClass}
+                      />
+                    </FieldShell>
+                  </div>
+                )}
+
+                <h2 className="mt-8 text-[15px] font-semibold">Billing information</h2>
+                <div className="mt-3 space-y-3">
+                  <FieldShell id="country" label="Country">
+                    <select
+                      id="country"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      className={`${inputClass} appearance-none pr-6`}
+                    >
+                      {["India", "United States", "United Kingdom", "United Arab Emirates", "Singapore", "Australia"].map(
+                        (c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </FieldShell>
+                  <FieldShell id="pincode" label="PIN code" error={errors.pincode}>
+                    <input
+                      id="pincode"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      placeholder="6-digit PIN"
+                      maxLength={6}
+                      value={pincode}
+                      onChange={(e) => setPincode(e.target.value.replace(/[^\d]/g, ""))}
+                      aria-invalid={!!errors.pincode}
+                      className={inputClass}
+                    />
+                  </FieldShell>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={processing}
+                  className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[#111111] text-[15px] font-semibold text-white transition-colors hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#105EF6] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {processing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Processing…
+                    </>
+                  ) : (
+                    ctaLabel
+                  )}
+                </button>
+
+                <p className="mt-4 text-center text-[11px] leading-relaxed text-[#9CA3AF]">
+                  {isFreeTrial
+                    ? "Start now — no charge today. We’ll remind you before your trial ends."
+                    : `By subscribing, you authorise Doloyal to charge you in INR at the displayed exchange rate at the time of billing, according to the terms until you cancel.`}
+                </p>
+                <p className="mt-4 flex items-center justify-center gap-2 text-center text-[11px] text-[#9CA3AF]">
+                  Powered by Razorpay
+                  <span aria-hidden>|</span>
+                  <Link href="/terms" className="hover:text-[#111111]">
+                    Terms
+                  </Link>
+                  <span aria-hidden>|</span>
+                  <Link href="/privacy" className="hover:text-[#111111]">
+                    Privacy
+                  </Link>
+                </p>
+              </form>
+            </>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
 
 /* ── Sub-components ────────────────────────────────────────────────────── */
+
+function CurrencyChip({
+  selected,
+  onClick,
+  flag,
+  label,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  flag: string;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onClick}
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-full text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+        selected
+          ? "bg-white text-[#111111] shadow-sm"
+          : "bg-white/10 text-white hover:bg-white/15"
+      }`}
+    >
+      <span aria-hidden className="text-base leading-none">
+        {flag}
+      </span>
+      {label}
+    </button>
+  );
+}
 
 function CenteredState({
   icon,
@@ -800,59 +843,20 @@ function CenteredState({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 text-center font-[family-name:var(--font-inter)]">
       <div className="flex h-14 w-14 items-center justify-center rounded-full border border-black/10 bg-gray-50">
         {icon}
       </div>
-      <h1 className="mt-5 text-xl font-bold tracking-tight text-[#282628]">{title}</h1>
+      <h1 className="mt-5 text-xl font-bold tracking-tight text-[#111111]">{title}</h1>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">{body}</p>
       {children && <div className="mt-7">{children}</div>}
       <Link
-        href="/pricing"
-        className="mt-6 text-xs font-medium text-gray-400 underline underline-offset-4 transition-colors hover:text-[#2563EB]"
+        href="/#hero"
+        className="mt-7 inline-flex h-11 items-center justify-center rounded-lg bg-[#111111] px-8 text-sm font-semibold text-white transition-colors hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#105EF6] focus-visible:ring-offset-2"
       >
-        ← Back to pricing
+        Back to home
       </Link>
     </div>
-  );
-}
-
-function CycleOption({
-  selected,
-  onClick,
-  title,
-  subtitle,
-  badge,
-  inputProps,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  title: string;
-  subtitle: string;
-  badge?: string;
-  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-      className={`relative rounded-xl border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] ${
-        selected
-          ? "border-[#2563EB] bg-[#2563EB]/[0.04] ring-1 ring-[#2563EB]"
-          : "border-black/10 bg-white hover:border-black/25"
-      }`}
-    >
-      <span className="block text-sm font-semibold">{title}</span>
-      <span className="mt-0.5 block text-xs text-gray-500">{subtitle}</span>
-      {badge && (
-        <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-          {badge}
-        </span>
-      )}
-      <input type="radio" name="cycle" checked={selected} onChange={onClick} className="sr-only" {...inputProps} />
-    </button>
   );
 }
 
@@ -861,18 +865,24 @@ function ExpressButton({
   label,
   onClick,
   disabled,
+  tone,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  tone: "dark" | "green";
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-sm font-semibold text-[#282628] shadow-sm transition-all hover:border-[#2563EB] hover:text-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] disabled:cursor-not-allowed disabled:opacity-60"
+      className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] text-[14px] font-semibold transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#105EF6] disabled:cursor-not-allowed disabled:opacity-60 ${
+        tone === "dark"
+          ? "bg-[#111111] text-white hover:bg-black"
+          : "bg-[#00D66F] text-white hover:bg-[#00C265]"
+      }`}
     >
       {icon}
       {label}
@@ -880,43 +890,21 @@ function ExpressButton({
   );
 }
 
-function SuccessScreen({ result, email, isTrial }: { result: SuccessResult; email: string; isTrial: boolean }) {
+function OpeningDashboard() {
+  React.useEffect(() => {
+    window.location.replace("/app/dashboard");
+  }, []);
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 py-16 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-        <BadgeCheck className="h-8 w-8 text-emerald-600" aria-hidden />
-      </div>
-      <h1 className="mt-6 text-2xl font-extrabold tracking-tight text-[#282628]">{result.title}</h1>
-      <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-500">
-        Your {result.planName} subscription is now active.
+    <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 py-16 text-center font-[family-name:var(--font-inter)]">
+      <Loader2 className="h-6 w-6 animate-spin text-[#105EF6]" aria-hidden />
+      <h1 className="mt-5 text-xl font-bold tracking-tight text-[#111111]">Opening your dashboard…</h1>
+      <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
+        Payment is complete. You can continue if this page does not move automatically.
       </p>
-
-      <dl className="mt-8 w-full max-w-sm divide-y divide-black/5 rounded-2xl border border-black/10 px-6 text-left text-sm">
-        <div className="flex items-center justify-between py-3.5">
-          <dt className="text-gray-500">Plan</dt>
-          <dd className="font-semibold">{result.planName}</dd>
-        </div>
-        <div className="flex items-center justify-between py-3.5">
-          <dt className="text-gray-500">Status</dt>
-          <dd className="font-semibold capitalize">{result.status.toLowerCase()}</dd>
-        </div>
-        {result.transactionId && (
-          <div className="flex items-center justify-between gap-4 py-3.5">
-            <dt className="shrink-0 text-gray-500">Transaction</dt>
-            <dd className="truncate font-mono text-xs font-medium text-gray-700">
-              {result.transactionId}
-            </dd>
-          </div>
-        )}
-        <div className="flex items-center justify-between py-3.5">
-          <dt className="text-gray-500">{isTrial ? "Trial ends" : "Next billing date"}</dt>
-          <dd className="font-semibold">{fmtDate(result.nextBillingDate)}</dd>
-        </div>
-      </dl>
-
       <Link
         href="/app/dashboard"
-        className="mt-8 inline-flex h-12 items-center justify-center rounded-full bg-[#232529] px-10 text-sm font-semibold text-white shadow-md transition-colors hover:bg-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2"
+        className="mt-8 inline-flex h-12 items-center justify-center rounded-lg bg-[#111111] px-10 text-sm font-semibold text-white transition-colors hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#105EF6] focus-visible:ring-offset-2"
       >
         Go to Dashboard
       </Link>

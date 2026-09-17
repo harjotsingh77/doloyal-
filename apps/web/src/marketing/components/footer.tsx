@@ -8,7 +8,7 @@ const COLUMNS = [
     title: "PRODUCT",
     links: [
       { label: "Features", href: "/features" },
-      { label: "Pricing", href: "/pricing" },
+      { label: "Pricing", href: "/#pricing" },
       { label: "Integrations", href: "/integrations" },
     ],
   },
@@ -90,12 +90,21 @@ export function SiteFooter() {
                 <ul className="space-y-3">
                   {col.links.map((l) => (
                     <li key={l.label}>
-                      <Link
-                        href={l.href}
-                        className="text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
-                      >
-                        {l.label}
-                      </Link>
+                      {l.href.includes("#") ? (
+                        <a
+                          href={l.href}
+                          className="text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
+                        >
+                          {l.label}
+                        </a>
+                      ) : (
+                        <Link
+                          href={l.href}
+                          className="text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
+                        >
+                          {l.label}
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>

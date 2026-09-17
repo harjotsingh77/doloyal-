@@ -13,6 +13,9 @@ import {
   Puzzle,
   SunMoon,
   AlertTriangle,
+  Palette,
+  Clock,
+  MapPin,
   type LucideIcon,
 } from "lucide-react";
 
@@ -177,6 +180,43 @@ export const SETTINGS_NAV: SettingsNavGroup[] = [
 
 export const SETTINGS_FLAT_NAV = SETTINGS_NAV.flatMap((g) => g.items);
 
+/** Indexed by search only — these deep-link into Business Profile tabs. */
+const SETTINGS_SEARCH_ALIASES: SettingsSearchResult[] = [
+  {
+    id: "business-profile-branding",
+    label: "Branding",
+    href: "/app/settings/business-profile?tab=branding",
+    icon: Palette,
+    description: "Logo, brand name, colors and preview",
+    group: "Workspace",
+    keywords: [
+      "logo", "brand", "color", "primary", "secondary", "accent", "font", "favicon",
+      "preview", "theme color", "cover", "banner",
+    ],
+  },
+  {
+    id: "business-profile-hours",
+    label: "Business Hours",
+    href: "/app/settings/business-profile?tab=hours",
+    icon: Clock,
+    description: "Weekly opening hours and breaks",
+    group: "Workspace",
+    keywords: ["opening", "closing", "break", "weekly off", "schedule", "timing", "open hours"],
+  },
+  {
+    id: "business-profile-location",
+    label: "Business Location",
+    href: "/app/settings/business-profile?tab=location",
+    icon: MapPin,
+    description: "Address, maps, currency and region",
+    group: "Workspace",
+    keywords: [
+      "address", "maps", "city", "state", "zip", "country", "google", "review", "place id",
+      "currency", "language", "timezone", "date format", "time format", "region", "locale",
+    ],
+  },
+];
+
 export interface SettingsSearchResult extends SettingsNavItem {
   group: string;
 }
@@ -188,24 +228,26 @@ export function searchSettings(query: string): SettingsSearchResult[] {
   const terms = q.split(/\s+/);
 
   const scored: { item: SettingsSearchResult; score: number }[] = [];
-  for (const group of SETTINGS_NAV) {
-    for (const item of group.items) {
-      const haystackLabel = item.label.toLowerCase();
-      const haystackDesc = item.description.toLowerCase();
-      const haystackKeywords = (item.keywords ?? []).join(" ").toLowerCase();
-      let score = 0;
+  const catalog: { group: string; item: SettingsNavItem }[] = [
+    ...SETTINGS_NAV.flatMap((group) => group.items.map((item) => ({ group: group.section, item }))),
+    ...SETTINGS_SEARCH_ALIASES.map((item) => ({ group: item.group, item })),
+  ];
+  for (const { group, item } of catalog) {
+    const haystackLabel = item.label.toLowerCase();
+    const haystackDesc = item.description.toLowerCase();
+    const haystackKeywords = (item.keywords ?? []).join(" ").toLowerCase();
+    let score = 0;
 
-      for (const term of terms) {
-        if (haystackLabel === term) score += 6;
-        else if (haystackLabel.startsWith(term)) score += 4;
-        else if (haystackLabel.includes(term)) score += 3;
-        else if (haystackKeywords.includes(term)) score += 2;
-        else if (haystackDesc.includes(term)) score += 1;
-      }
+    for (const term of terms) {
+      if (haystackLabel === term) score += 6;
+      else if (haystackLabel.startsWith(term)) score += 4;
+      else if (haystackLabel.includes(term)) score += 3;
+      else if (haystackKeywords.includes(term)) score += 2;
+      else if (haystackDesc.includes(term)) score += 1;
+    }
 
-      if (score > 0) {
-        scored.push({ item: { ...item, group: group.section }, score });
-      }
+    if (score > 0) {
+      scored.push({ item: { ...item, group }, score });
     }
   }
   return scored.sort((a, b) => b.score - a.score).map((s) => s.item);

@@ -21,7 +21,7 @@ const TOPICS = [
   { icon: Search, title: "Booking & no-shows", desc: "Booking links, reminders, deposits, and calendars.", href: "/booking" },
   { icon: Search, title: "Websites", desc: "Templates, blocks, domains, and SEO settings.", href: "/website-builder" },
   { icon: FileText, title: "Campaigns & AI", desc: "Win-backs, birthdays, and the retention engine.", href: "/ai-retention" },
-  { icon: Search, title: "Billing & plans", desc: "Invoices, upgrades, downgrades, and refunds.", href: "/pricing" },
+  { icon: Search, title: "Billing & plans", desc: "Invoices, upgrades, downgrades, and refunds.", href: "/#pricing" },
 ];
 
 const QUICK_ANSWERS = [

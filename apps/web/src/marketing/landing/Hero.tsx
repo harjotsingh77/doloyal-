@@ -162,7 +162,7 @@ export function HeroContent() {
   const dashboardScale = useTransform(scrollYProgress, [0, 0.5], [0.98, 1]);
 
   return (
-    <div ref={containerRef} className="relative isolate pt-24 pb-10 sm:pt-28 sm:pb-14 lg:pb-16 w-full bg-[#FAFAFC] overflow-hidden">
+    <div id="hero" ref={containerRef} className="relative isolate scroll-mt-24 pt-24 pb-10 sm:pt-28 sm:pb-14 lg:pb-16 w-full bg-white overflow-hidden">
       {/* Top Ambient Blue Glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-0 flex justify-center">
         <div className="h-[520px] w-[860px] rounded-full bg-gradient-to-r from-[#2563EB]/14 via-[#3B82F6]/12 to-[#06B6D4]/14 blur-3xl" />
@@ -178,12 +178,12 @@ export function HeroContent() {
         }}
       />
 
-      {/* Smooth radial fade blending into #FAFAFC at edges */}
+      {/* Smooth radial fade blending into white at edges */}
       <div
         className="absolute inset-0 z-[1] pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse 90% 80% at 50% 35%, transparent 35%, #FAFAFC 98%)',
+            'radial-gradient(ellipse 90% 80% at 50% 35%, transparent 35%, #FFFFFF 98%)',
         }}
       />
 

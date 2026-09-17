@@ -59,6 +59,7 @@ export interface ClientSignInBranding {
   buttonLabel?: string | null;
   showGoogle?: boolean;
   showForgotPassword?: boolean;
+  showGuestLogin?: boolean;
   showLogo?: boolean;
   heroImageUrl?: string | null;
 }
@@ -82,6 +83,7 @@ export interface ClientSignInPublicConfig {
   buttonLabel: string;
   showGoogle: boolean;
   showForgotPassword: boolean;
+  showGuestLogin: boolean;
   showLogo: boolean;
   heroImageUrl: string | null;
 }

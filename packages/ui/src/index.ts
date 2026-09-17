@@ -96,6 +96,7 @@ export {
 
 // Composite
 export { KpiCard, type KpiCardProps } from "./components/kpi-card";
+export { CardHoverHint } from "./components/card-hover-hint";
 export { StatChart, type StatChartProps, type SeriesConfig } from "./components/stat-chart";
 export { EmptyState, ComingSoon, type EmptyStateProps } from "./components/empty-state";
 export { Logo, LogoMark, type LogoProps } from "./components/logo";

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Serif, Sora } from "next/font/google";
 import { SiteHeader } from "@/marketing/components/header";
 import { SiteFooter } from "@/marketing/components/footer";
-import { WaitlistProvider } from "@/marketing/components/waitlist-modal";
+import { HashScroll } from "@/marketing/components/hash-scroll";
 import { site } from "@/marketing/lib/site";
 import { buildMetadata } from "@/marketing/lib/seo";
 
@@ -25,8 +25,9 @@ export const metadata: Metadata = buildMetadata({});
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <WaitlistProvider>
+    <>
       <SiteHeader />
+      <HashScroll />
       <main className={`${instrument.variable} ${sora.variable} font-[family-name:var(--font-sora)]`}>
         {children}
       </main>
@@ -46,6 +47,6 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           }),
         }}
       />
-    </WaitlistProvider>
+    </>
   );
 }

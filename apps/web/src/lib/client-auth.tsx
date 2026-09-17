@@ -118,9 +118,10 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
         needsPhone: result.needsPhone ?? result.user.needsPhone,
       };
       setSession(result.token, next);
+      void refreshPortal();
       return next;
     },
-    [setSession],
+    [setSession, refreshPortal],
   );
 
   const login = React.useCallback(

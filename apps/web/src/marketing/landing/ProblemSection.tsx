@@ -1,366 +1,480 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
 import {
-  Store,
-  Users,
-  Calendar,
-  Award,
-  Megaphone,
-  BarChart3,
-  Clock,
-  TrendingDown,
-  ArrowDown,
-  UserX,
-  Gift,
-  Sparkles,
-  Mail,
-} from "lucide-react";
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  useScroll,
+  useTransform,
+  useSpring,
+  useMotionValueEvent,
+  type MotionValue,
+} from "framer-motion";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Container, Eyebrow, Reveal, Stagger, StaggerItem, EASE } from "./ui";
 
-const gridStyle: React.CSSProperties = {
-  backgroundImage:
-    "linear-gradient(to right, rgba(37, 99, 235, 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(37, 99, 235, 0.06) 1px, transparent 1px)",
-  backgroundSize: "56px 56px",
-};
+const PROBLEMS_DATA = [
+  {
+    id: 0,
+    tag: "Problem 01",
+    title: "Silent Customer Drop-off",
+    desc: "You know when someone visits, but not who’s slipping away or when they should come back.",
+  },
+  {
+    id: 1,
+    tag: "Problem 02",
+    title: "Disconnected Systems",
+    desc: "Customer data sits across bookings, loyalty, and marketing tools—never turning into an actionable decision.",
+  },
+  {
+    id: 2,
+    tag: "Problem 03",
+    title: "Forgotten Follow-ups",
+    desc: "Staff remember some customers, forget others, and act only after they’ve already gone inactive.",
+  },
+  {
+    id: 3,
+    tag: "Problem 04",
+    title: "Untapped Customer Value",
+    desc: "No system to grow each customer’s value through rebooking, upgrades, memberships, or relevant offers.",
+  },
+] as const;
 
-const NODES: {
-  name: string;
-  icon: React.ReactNode;
-  tint: string;
-  left: string;
-  top: string;
-  chip?: { label: string; left: string; top: string; hideOnMobile?: boolean };
-}[] = [
+const AVATARS = [
   {
-    name: "Customers",
-    icon: <Users className="h-3.5 w-3.5 text-white" />,
-    tint: "#2563EB",
-    left: "21%",
-    top: "6%",
-    chip: { label: "Customer data", left: "21%", top: "32%" },
+    id: 0,
+    src: "/problem/avatar-lower-left.png",
+    alt: "Customer slipping away unnoticed",
+    baseAngle: 132,
   },
   {
-    name: "Booking",
-    icon: <Calendar className="h-3.5 w-3.5 text-white" />,
-    tint: "#3B82F6",
-    left: "79%",
-    top: "6%",
-    chip: { label: "Booking data", left: "79%", top: "32%" },
+    id: 1,
+    src: "/problem/avatar-left.png",
+    alt: "Customer whose systems stay disconnected",
+    baseAngle: 222,
   },
   {
-    name: "Marketing",
-    icon: <Megaphone className="h-3.5 w-3.5 text-white" />,
-    tint: "#0284C7",
-    left: "50%",
-    top: "4%",
-    chip: { label: "Campaigns", left: "50%", top: "80%", hideOnMobile: true },
+    id: 2,
+    src: "/problem/avatar-upper-right.png",
+    alt: "Customer who was forgotten until too late",
+    baseAngle: 312,
   },
   {
-    name: "Loyalty",
-    icon: <Award className="h-3.5 w-3.5 text-white" />,
-    tint: "#1D4ED8",
-    left: "18%",
-    top: "82%",
-    chip: { label: "Revenue", left: "82%", top: "72%", hideOnMobile: true },
+    id: 3,
+    src: "/problem/avatar-center-right.png",
+    alt: "Customer with untapped lifetime value",
+    baseAngle: 42,
+  },
+] as const;
+
+// Must match the orbit-track ellipse in StationaryRings (rx / ry of the SVG viewport)
+const ORBIT_RX = 32;
+const ORBIT_RY = 42;
+
+const STICKERS = [
+  {
+    src: "/problem/calendar.png",
+    className: "-left-5 -top-5 sm:-left-7 sm:-top-7 w-12 sm:w-16 lg:w-20",
+    rotate: "-rotate-12",
+    float: "problem-float",
   },
   {
-    name: "Analytics",
-    icon: <BarChart3 className="h-3.5 w-3.5 text-white" />,
-    tint: "#2563EB",
-    left: "82%",
-    top: "82%",
+    src: "/problem/cake.png",
+    className: "right-16 -top-8 sm:right-24 sm:-top-10 w-12 sm:w-16 lg:w-20",
+    rotate: "rotate-6",
+    float: "problem-float-slow",
+  },
+  {
+    src: "/problem/popper.png",
+    className: "-right-6 -bottom-6 sm:-right-8 sm:-bottom-8 w-14 sm:w-20 lg:w-24",
+    rotate: "rotate-12",
+    float: "problem-float-tilt",
   },
 ];
 
-/* -------------------------------------------------------------------------- */
-/*                        main disconnected-system diagram                    */
-/* -------------------------------------------------------------------------- */
-
-function DisconnectedDiagram() {
+function StationaryRings({
+  scale = 1,
+  opacity = 1,
+}: {
+  scale?: MotionValue<number> | number;
+  opacity?: MotionValue<number> | number;
+}) {
   return (
-    <div className="group relative overflow-hidden rounded-[1.9rem] border border-[#E5E7EB] bg-[linear-gradient(180deg,#EEF4FF_0%,#F8FAFC_100%)] p-6 sm:p-8">
-      <div className="pointer-events-none absolute -top-28 left-1/2 h-60 w-[28rem] -translate-x-1/2 rounded-full bg-[#2563EB]/10 blur-3xl" />
-      <div className="pointer-events-none absolute inset-0" style={gridStyle} />
-
-      <div className="relative mx-auto h-[300px] max-w-[680px] sm:h-[340px]">
-        <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          fill="none"
-          aria-hidden
-        >
-          {/* connected dashed lines */}
-          <path d="M22 18 Q 30 30 39 42" stroke="rgba(37,99,235,0.45)" strokeWidth="1.4" strokeDasharray="3 4" strokeLinecap="round" />
-          <path d="M78 20 Q 68 32 61 40" stroke="rgba(37,99,235,0.45)" strokeWidth="1.4" strokeDasharray="3 4" strokeLinecap="round" />
-          <path d="M18 82 Q 26 68 39 54" stroke="rgba(37,99,235,0.45)" strokeWidth="1.4" strokeDasharray="3 4" strokeLinecap="round" />
-          {/* broken lines that stop short of the centre */}
-          <path d="M50 14 L 50 34" stroke="rgba(244,63,94,0.55)" strokeWidth="1.4" strokeDasharray="3 4" strokeLinecap="round" />
-          <path d="M80 76 Q 74 62 63 56" stroke="rgba(244,63,94,0.55)" strokeWidth="1.4" strokeDasharray="3 4" strokeLinecap="round" />
-          {/* break markers */}
-          <g>
-            <circle cx="50" cy="36.5" r="2.4" fill="#F43F5E" />
-            <path d="M48.8 35.8 L51.2 37.2 M48.8 37.2 L51.2 35.8" stroke="#fff" strokeWidth="0.9" strokeLinecap="round" />
-          </g>
-          <g>
-            <circle cx="60.5" cy="58" r="2.4" fill="#F43F5E" />
-            <path d="M59.2 57.3 L61.8 58.7 M59.2 58.7 L61.8 57.3" stroke="#fff" strokeWidth="0.9" strokeLinecap="round" />
-          </g>
-        </svg>
-
-        {/* centre card — Your Business */}
-        <div className="absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2">
-          <div className="pointer-events-none absolute -inset-3 rounded-3xl bg-[#2563EB]/15 blur-xl" />
-          <div className="relative flex items-center gap-2.5 rounded-2xl border border-[#E5E7EB] bg-white py-3 pl-3.5 pr-5 shadow-[0_18px_44px_-16px_rgba(37,99,235,0.45)]">
-            <span className="pulse-ring relative flex h-9 w-9 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-[0_6px_16px_-4px_rgba(37,99,235,0.6)]">
-              <Store className="h-[17px] w-[17px]" />
-            </span>
-            <span className="leading-tight">
-              <span className="block text-[15px] font-extrabold tracking-tight text-[#111827]">Your Business</span>
-              <span className="block text-[10px] font-medium text-[#64748B]">but everything lives apart</span>
-            </span>
-          </div>
-        </div>
-
-        {/* scattered mini cards */}
-        {NODES.map((n) => (
-          <div
-            key={n.name}
-            className="absolute z-20 -translate-x-1/2 transition-transform duration-300 group-hover:-translate-y-0.5"
-            style={{ left: n.left, top: n.top }}
-          >
-            <div className="flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#E5E7EB] bg-white px-2.5 py-1.5 shadow-[0_8px_20px_-10px_rgba(37,99,235,0.35)]">
-              <span className="flex h-5 w-5 items-center justify-center rounded-lg" style={{ background: n.tint }}>
-                {n.icon}
-              </span>
-              <span className="text-[11px] font-semibold text-[#111827]">{n.name}</span>
-            </div>
-          </div>
-        ))}
-
-        {/* small data indicator chips */}
-        {NODES.filter((n) => n.chip).map((n) => (
-          <div
-            key={`chip-${n.name}`}
-            className={cn(
-              "absolute z-10 -translate-x-1/2 items-center rounded-full border border-dashed border-[#2563EB]/25 bg-white/80 px-2.5 py-1 text-[9.5px] font-semibold tracking-wide text-[#64748B] backdrop-blur-sm",
-              n.chip?.hideOnMobile ? "hidden sm:flex" : "flex",
-            )}
-            style={{ left: n.chip?.left, top: n.chip?.top }}
-          >
-            {n.name === "Marketing" && <Sparkles className="mr-1 h-2.5 w-2.5 text-[#2563EB]" />}
-            {n.name === "Loyalty" && <TrendingDown className="mr-1 h-2.5 w-2.5 text-[#F43F5E]" />}
-            {n.chip?.label}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          card 1 — Lost Customers                           */
-/* -------------------------------------------------------------------------- */
-
-function LostCustomersVisual() {
-  const avatars = [
-    { init: "RA", c: "#FDA4AF" },
-    { init: "KV", c: "#F87171" },
-    { init: "MS", c: "#F43F5E" },
-  ];
-  return (
-    <div className="relative flex h-full items-center gap-3 overflow-hidden px-5">
-      <div className="flex shrink-0 flex-col items-center gap-1.5">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#2563EB]/15 bg-[#2563EB]/10 text-[#2563EB]">
-          <Store className="h-5 w-5" />
-        </span>
-        <span className="text-[10px] font-semibold text-[#64748B]">Business</span>
-      </div>
-
-      <div className="absolute left-[54px] top-1/2 h-px w-[calc(100%-86px)] border-t border-dashed border-[#F43F5E]/40" />
-
-      <div className="relative z-10 flex items-center gap-2">
-        {avatars.map((a, i) => (
-          <motion.span
-            key={a.init}
-            initial={{ x: 0, opacity: 1 }}
-            whileInView={{ x: 8 + i * 9, opacity: 1 - i * 0.22 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.9, ease: EASE, delay: 0.12 * i }}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 text-[10px] font-bold text-white shadow-[0_8px_18px_-6px_rgba(244,63,94,0.5)]"
-            style={{ background: a.c }}
-          >
-            {a.init}
-          </motion.span>
-        ))}
-        <span className="-ml-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-[#F43F5E]/50 text-[#F43F5E]">
-          <UserX className="h-3.5 w-3.5" />
-        </span>
-      </div>
-
-      {/* downward retention line */}
-      <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-11 w-full" viewBox="0 0 220 36" preserveAspectRatio="none" fill="none" aria-hidden>
-        <path d="M4 6 Q 80 10 132 20 T 216 34" stroke="rgba(244,63,94,0.5)" strokeWidth="1.5" strokeDasharray="3 5" strokeLinecap="round" />
-        <circle cx="216" cy="34" r="2.6" fill="#F43F5E" />
-        <path d="M213 31.8 L215 34.5 M213 35.4 L215 33" stroke="#fff" strokeWidth="0.7" strokeLinecap="round" />
+    <motion.div
+      style={{ scale, opacity }}
+      className="pointer-events-none absolute inset-0 select-none"
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 1000 560" className="h-full w-full overflow-visible" fill="none" preserveAspectRatio="none">
+        <ellipse cx="50%" cy="50%" rx="21%" ry="28%" stroke="#7EA8E5" strokeOpacity="0.42" strokeWidth="1.35" vectorEffect="non-scaling-stroke" />
+        <ellipse cx="50%" cy="50%" rx={`${ORBIT_RX}%`} ry={`${ORBIT_RY}%`} stroke="#7EA8E5" strokeOpacity="0.34" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+        <ellipse cx="50%" cy="50%" rx="42%" ry="55%" stroke="#7EA8E5" strokeOpacity="0.24" strokeWidth="1.35" vectorEffect="non-scaling-stroke" />
+        <ellipse cx="50%" cy="50%" rx="52.5%" ry="69%" stroke="#7EA8E5" strokeOpacity="0.16" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
       </svg>
-      <span className="absolute bottom-7 right-4 flex items-center gap-1 text-[9.5px] font-bold tracking-wide text-[#F43F5E]">
-        <TrendingDown className="h-3 w-3" /> retention
-      </span>
+      <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2563EB]/[0.05] blur-3xl" />
+    </motion.div>
+  );
+}
+
+function Heading() {
+  return (
+    <div className="text-center">
+      <h2 className="text-[48px] sm:text-[64px] lg:text-[80px] font-bold tracking-[-0.04em] leading-[0.95] text-[#0F172A]">
+        <span className="font-serif italic font-normal text-[#1E293B] mr-2.5 sm:mr-3.5">The</span>
+        Problem
+      </h2>
     </div>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                         card 2 — Too Many Tools                            */
-/* -------------------------------------------------------------------------- */
-
-const TOOLS = [
-  { name: "Booking", tint: "#2563EB", Icon: Calendar },
-  { name: "CRM", tint: "#3B82F6", Icon: Users },
-  { name: "Marketing", tint: "#0284C7", Icon: Megaphone },
-  { name: "Loyalty", tint: "#1D4ED8", Icon: Award },
-  { name: "Analytics", tint: "#2563EB", Icon: BarChart3 },
-];
-
-function TooManyToolsVisual() {
+/**
+ * The blue speech bubble card with the bottom-left pointy tail.
+ */
+function BubbleShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex h-full items-center justify-center pt-3">
-      {/* disconnected stub lines */}
-      <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" fill="none" aria-hidden>
-        <path d="M26 22 L 36 20" stroke="rgba(37,99,235,0.4)" strokeWidth="1.2" strokeDasharray="2 3" />
-        <circle cx="38.5" cy="19.6" r="1.7" fill="#F43F5E" />
-        <path d="M52 14 L 60 16" stroke="rgba(244,63,94,0.4)" strokeWidth="1.2" strokeDasharray="2 3" />
-        <path d="M68 18 L 74 18" stroke="rgba(37,99,235,0.35)" strokeWidth="1.2" strokeDasharray="2 3" />
-        <circle cx="72" cy="62" r="1.7" fill="#F43F5E" />
-        <path d="M20 62 L 34 58" stroke="rgba(37,99,235,0.35)" strokeWidth="1.2" strokeDasharray="2 3" />
+    <div className="relative w-full">
+      <svg
+        viewBox="0 0 442 290"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="pointer-events-none absolute -left-[2.5%] -top-[3.5%] h-[118%] w-[105%] drop-shadow-[0_24px_48px_rgba(37,99,235,0.28)]"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="problemBubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="60%" stopColor="#2563EB" />
+            <stop offset="100%" stopColor="#1D4ED8" />
+          </linearGradient>
+          <linearGradient id="problemBubbleSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
+            <stop offset="40%" stopColor="#ffffff" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Main bubble shape with the bottom-left tail */}
+        <path
+          fill="url(#problemBubbleGrad)"
+          d="M38 12H404C426 12 436 24 436 46V196C436 218 426 230 404 230H124L70 284C88 248 84 230 52 230H38C16 230 6 218 6 196V46C6 24 16 12 38 12Z"
+        />
+        {/* Subtle glossy sheen on upper card */}
+        <path
+          fill="url(#problemBubbleSheen)"
+          d="M38 12H404C426 12 436 24 436 46V196C436 218 426 230 404 230H124L70 284C88 248 84 230 52 230H38C16 230 6 218 6 196V46C6 24 16 12 38 12Z"
+        />
       </svg>
-
-      <div className="mx-auto grid w-full max-w-[300px] grid-cols-3 gap-3">
-        {TOOLS.map((t, i) => (
-          <motion.div
-            key={t.name}
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, ease: EASE, delay: 0.1 + i * 0.08 }}
-            className={cn("flex flex-col items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-2 py-3 shadow-[0_8px_20px_-12px_rgba(37,99,235,0.35)]", i === 4 && "col-start-2")}
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg text-white" style={{ background: t.tint }}>
-              <t.Icon className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-[9px] font-bold tracking-wide text-[#64748B]">{t.name}</span>
-          </motion.div>
-        ))}
+      <div className="relative z-10 flex min-h-[148px] sm:min-h-[156px] lg:min-h-[164px] flex-col justify-center px-6 py-6 sm:px-8 sm:py-7 lg:px-9 lg:py-8">
+        {children}
       </div>
     </div>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                       card 3 — Manual Follow-Ups                           */
-/* -------------------------------------------------------------------------- */
+/**
+ * An individual avatar orbiting the ellipse.
+ * Fixed directly on the circle path (ORBIT_RX, ORBIT_RY) and revolves smoothly to the tail when active.
+ */
+function OrbitingAvatar({
+  avatar,
+  smoothAngle,
+  currentSpeakerIndex,
+  onClick,
+}: {
+  avatar: (typeof AVATARS)[number];
+  smoothAngle: MotionValue<number>;
+  currentSpeakerIndex: number;
+  onClick?: () => void;
+}) {
+  const isSpotlight = currentSpeakerIndex === avatar.id;
 
-const FLOW = [
-  { label: "Customer inactive", Icon: UserX, tone: "#64748B", pending: false },
-  { label: "Reminder", Icon: Clock, tone: "#F59E0B", pending: true },
-  { label: "Offer", Icon: Gift, tone: "#3B82F6", pending: false },
-  { label: "Follow-up", Icon: Mail, tone: "#2563EB", pending: false },
-];
+  // Exact parametric position on the orbit ellipse
+  const left = useTransform(smoothAngle, (deg) => {
+    const rad = ((avatar.baseAngle + deg) * Math.PI) / 180;
+    return `${50 + ORBIT_RX * Math.cos(rad)}%`;
+  });
 
-function ManualFollowupsVisual() {
+  const top = useTransform(smoothAngle, (deg) => {
+    const rad = ((avatar.baseAngle + deg) * Math.PI) / 180;
+    return `${50 + ORBIT_RY * Math.sin(rad)}%`;
+  });
+
   return (
-    <div className="relative h-full overflow-hidden px-5 pt-9">
-      <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-[9px] font-bold text-[#B45309]">
-        <Clock className="h-2.5 w-2.5" /> Pending
-      </span>
-
-      <div className="mx-auto mt-1 flex max-w-[210px] flex-col">
-        {FLOW.map((f, i) => (
-          <div key={f.label}>
-            <div className="flex items-center gap-2.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-[0_6px_16px_-10px_rgba(17,17,17,0.25)]">
-              <span className="flex h-5 w-5 items-center justify-center rounded-lg text-white" style={{ background: f.tone }}>
-                <f.Icon className="h-2.5 w-2.5" />
-              </span>
-              <span className="text-[11px] font-bold text-[#111827]">{f.label}</span>
-              {f.pending ? (
-                <span className="ml-auto rounded-full bg-[#FEF3C7] px-1.5 py-0.5 text-[8px] font-bold text-[#B45309]">pending</span>
-              ) : (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full" style={{ background: `${f.tone}55` }} />
-              )}
-            </div>
-            {i < FLOW.length - 1 && (
-              <div className="flex justify-center py-[7px]">
-                <ArrowDown className="h-3 w-3 text-[#CBD5E1]" />
-              </div>
-            )}
-          </div>
-        ))}
+    <motion.div
+      style={{
+        left,
+        top,
+        zIndex: isSpotlight ? 35 : 25,
+      }}
+      className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
+      onClick={onClick}
+    >
+      <div
+        className={cn(
+          "relative cursor-pointer rounded-full border-[3px] border-white bg-white transition-all duration-500 ease-out",
+          isSpotlight
+            ? "h-[58px] w-[58px] sm:h-[68px] sm:w-[68px] lg:h-[76px] lg:w-[76px] shadow-[0_12px_28px_-4px_rgba(37,99,235,0.45)]"
+            : "h-[44px] w-[44px] sm:h-[52px] sm:w-[52px] lg:h-[60px] lg:w-[60px] shadow-[0_8px_20px_-4px_rgba(16,28,22,0.22)] opacity-90 hover:scale-105 hover:opacity-100"
+        )}
+      >
+        <img
+          src={avatar.src}
+          alt={avatar.alt}
+          className="h-full w-full select-none rounded-full object-cover"
+          draggable={false}
+        />
       </div>
-    </div>
+    </motion.div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                   section                                   */
-/* -------------------------------------------------------------------------- */
-
-const PROBLEM_CARDS = [
-  { title: "Lost Customers", desc: "Customers visit once, then disappear.", visual: <LostCustomersVisual />, index: "01" },
-  { title: "Too Many Tools", desc: "Bookings, loyalty, marketing and data live in different places.", visual: <TooManyToolsVisual />, index: "02" },
-  { title: "Manual Follow-Ups", desc: "You shouldn't have to chase customers to bring them back.", visual: <ManualFollowupsVisual />, index: "03" },
-];
 
 export function ProblemSection() {
-  return (
-    <section className="relative overflow-hidden bg-[#F8FAFC] py-20 sm:py-28">
-      {/* faint grid, mostly visible near the edges */}
-      <div className="pointer-events-none absolute inset-0" style={{ ...gridStyle, backgroundSize: "64px 64px" }} />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 70% at 50% 42%, rgba(248,250,252,0.98) 38%, rgba(248,250,252,0.6) 72%, rgba(248,250,252,0) 100%)",
-        }}
-      />
+  const reduce = useReducedMotion();
+  const ref = React.useRef<HTMLDivElement>(null);
 
-      <Container className="relative">
-        <Reveal className="mx-auto max-w-3xl text-center">
-          <Eyebrow>THE PROBLEM</Eyebrow>
-          <h2 className="mt-6 text-balance text-[2.5rem] font-bold leading-[1.05] tracking-[-0.035em] text-[#111827] sm:text-[3.4rem]">
-            Your customers are leaving.
-            <br />
-            <span className="gradient-text">Your tools aren&apos;t helping.</span>
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-pretty text-[17px] leading-relaxed text-[#64748B] sm:text-[18px]">
-            Most local businesses lose customers between visits, bookings, and follow-ups.
-          </p>
-        </Reveal>
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end end"],
+  });
 
-        <Reveal delay={0.1} y={24} className="relative z-10 mx-auto mt-12 max-w-[900px] sm:mt-16">
-          <DisconnectedDiagram />
-        </Reveal>
+  // Entrance animations: fully crisp and visible almost immediately upon pinning
+  const ringsOpacity = useTransform(scrollYProgress, [0, 0.04], [0.6, 1]);
+  const ringsScale = useTransform(scrollYProgress, [0, 0.04], [0.97, 1]);
 
-        <Stagger className="relative z-10 mt-8 grid grid-cols-1 gap-5 sm:mt-10 md:grid-cols-3 lg:gap-6">
-          {PROBLEM_CARDS.map((c) => (
-            <StaggerItem key={c.title} className="h-full">
-              <div className="group flex h-full flex-col rounded-[1.9rem] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_2px_rgba(17,17,17,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#BFDBFE] hover:shadow-[0_26px_60px_-26px_rgba(37,99,235,0.3)] sm:p-6">
-                <div className="relative h-[190px] overflow-hidden rounded-2xl border border-[#E5E7EB]/60 bg-[linear-gradient(180deg,#FAFCFF_0%,#F5F8FC_100%)]">
-                  <span className="pointer-events-none absolute right-3 top-2 text-[22px] font-extrabold tracking-tight text-[#E2E8F0]">
-                    {c.index}
+  const cardOpacity = useTransform(scrollYProgress, [0, 0.03], [0.85, 1]);
+  const cardY = useTransform(scrollYProgress, [0, 0.03], [10, 0]);
+  const cardScale = useTransform(scrollYProgress, [0, 0.03], [0.98, 1]);
+
+  // Orbit rotation mapped across the section scroll:
+  // Problem 01: generous initial rest from 0.00 to 0.26 so it doesn't scroll past right after hero!
+  // Transition 1 -> 2: 0.26 to 0.38 (rotates 0deg to -90deg)
+  // Problem 02: rests from 0.38 to 0.52 (-90deg)
+  // Transition 2 -> 3: 0.52 to 0.64 (rotates -90deg to -180deg)
+  // Problem 03: rests from 0.64 to 0.78 (-180deg)
+  // Transition 3 -> 4: 0.78 to 0.90 (rotates -180deg to -270deg)
+  // Problem 04: rests from 0.90 to 1.00 (-270deg)
+  const orbitAngle = useTransform(
+    scrollYProgress,
+    [0, 0.26, 0.38, 0.52, 0.64, 0.78, 0.90, 1.0],
+    [0, 0, -90, -90, -180, -180, -270, -270]
+  );
+
+  // Physical spring to make rotation feel effortless, smooth, and deliberate
+  const smoothAngle = useSpring(orbitAngle, {
+    stiffness: 90,
+    damping: 24,
+    mass: 0.6,
+  });
+
+  const [activeProblem, setActiveProblem] = React.useState(0);
+
+  useMotionValueEvent(scrollYProgress, "change", (v) => {
+    if (v < 0.32) setActiveProblem(0);
+    else if (v < 0.58) setActiveProblem(1);
+    else if (v < 0.84) setActiveProblem(2);
+    else setActiveProblem(3);
+  });
+
+  // Smooth click navigation to any problem (targets center of each rest window)
+  const scrollToProblem = (index: number) => {
+    if (!ref.current) return;
+    const targets = [0.13, 0.45, 0.71, 0.95];
+    const sectionTop = ref.current.offsetTop;
+    const sectionHeight = ref.current.offsetHeight;
+    const vh = window.innerHeight;
+    const scrollTarget = sectionTop + (sectionHeight - vh) * targets[index];
+    window.scrollTo({ top: scrollTarget, behavior: "smooth" });
+  };
+
+  const handleNext = () => {
+    const next = (activeProblem + 1) % PROBLEMS_DATA.length;
+    scrollToProblem(next);
+  };
+
+  const handlePrev = () => {
+    const prev = (activeProblem - 1 + PROBLEMS_DATA.length) % PROBLEMS_DATA.length;
+    scrollToProblem(prev);
+  };
+
+  if (reduce) {
+    return (
+      <section id="the-problem" className="relative w-full overflow-hidden bg-white py-14 sm:py-18 lg:py-[84px]">
+        <ProblemBackdrop />
+        <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
+          <Heading />
+          <div className="relative mx-auto mt-6 flex h-[390px] w-full max-w-[1080px] items-center justify-center sm:mt-8 sm:h-[460px] lg:mt-10 lg:h-[520px]">
+            <StationaryRings />
+            <div className="relative w-[88%] max-w-[320px] sm:w-[72%] sm:max-w-[420px] lg:max-w-[480px]">
+              <BubbleShell>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-[18px] sm:text-[20.5px] font-bold text-white tracking-tight leading-snug">
+                    {PROBLEMS_DATA[0].title}
+                  </h3>
+                  <span className="shrink-0 font-mono text-[12px] sm:text-[13px] font-semibold tracking-wider text-white/80">
+                    01 / 0{PROBLEMS_DATA.length}
                   </span>
-                  {c.visual}
                 </div>
-                <h3 className="mt-5 text-[19px] font-bold tracking-tight text-[#111827]">{c.title}</h3>
-                <p className="mt-1.5 text-[15px] leading-relaxed text-[#64748B]">{c.desc}</p>
+                <p className="mt-2.5 sm:mt-3 text-[13.5px] sm:text-[14.5px] lg:text-[15px] font-normal leading-[1.58] text-white/95">
+                  {PROBLEMS_DATA[0].desc}
+                </p>
+              </BubbleShell>
+            </div>
+          </div>
+          <ol className="mx-auto mt-10 max-w-2xl space-y-4 px-2">
+            {PROBLEMS_DATA.map((item, i) => (
+              <li key={i} className="rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 text-[15px] leading-relaxed text-[#475569]">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="block text-[12px] font-bold tracking-wide text-[#2563EB]">
+                    {item.tag}
+                  </span>
+                  <span className="text-[12px] font-semibold text-[#111]">
+                    {item.title}
+                  </span>
+                </div>
+                {item.desc}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section ref={ref} id="the-problem" className="relative h-[600vh] bg-white">
+      {/* Native GPU-accelerated sticky pinning — zero latency, instant locking upon scrolling into view */}
+      <div className="sticky top-0 flex h-[100svh] w-full items-start justify-center overflow-hidden bg-white pt-16 sm:pt-[4.5rem]">
+        <ProblemBackdrop />
+
+        <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
+          <Heading />
+
+          {/* Orbit Stage Container */}
+          <div className="relative mx-auto mt-4 flex h-[390px] w-full max-w-[1080px] items-center justify-center sm:mt-6 sm:h-[460px] lg:h-[520px]">
+            {/* Stationary background rings */}
+            <StationaryRings scale={ringsScale} opacity={ringsOpacity} />
+
+            {/* Orbiting Avatars on the 2nd ellipse track */}
+            <div className="pointer-events-none absolute inset-0 z-20">
+              {AVATARS.map((avatar) => (
+                <OrbitingAvatar
+                  key={avatar.id}
+                  avatar={avatar}
+                  smoothAngle={smoothAngle}
+                  currentSpeakerIndex={activeProblem}
+                  onClick={() => scrollToProblem(avatar.id)}
+                />
+              ))}
+            </div>
+
+            {/* Central Speech Bubble Card */}
+            <motion.div
+              className="relative z-20 w-[88%] max-w-[320px] sm:w-[74%] sm:max-w-[430px] lg:max-w-[480px]"
+              style={{ opacity: cardOpacity, y: cardY, scale: cardScale }}
+            >
+              <div className="origin-center" style={{ transform: "rotate(4.2deg)" }}>
+                <BubbleShell>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={activeProblem}
+                      initial={{ opacity: 0, y: 8, filter: "blur(3px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, y: -8, filter: "blur(3px)" }}
+                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                      className="flex flex-col justify-center"
+                    >
+                      {/* Top row: Title and 0X / 04 counter */}
+                      <div className="flex items-baseline justify-between gap-3">
+                        <h3 className="text-[17.5px] sm:text-[20px] lg:text-[21.5px] font-bold text-white tracking-tight leading-snug">
+                          {PROBLEMS_DATA[activeProblem].title}
+                        </h3>
+                        <span className="shrink-0 font-mono text-[12px] sm:text-[13px] font-semibold tracking-wider text-white/80">
+                          0{activeProblem + 1} / 0{PROBLEMS_DATA.length}
+                        </span>
+                      </div>
+
+                      {/* Problem Description with clean, uniform line spacing */}
+                      <p className="mt-2.5 sm:mt-3 text-[13.5px] sm:text-[14.5px] lg:text-[15px] font-normal leading-[1.58] text-white/95">
+                        {PROBLEMS_DATA[activeProblem].desc}
+                      </p>
+                    </motion.div>
+                  </AnimatePresence>
+                </BubbleShell>
               </div>
-            </StaggerItem>
-          ))}
-        </Stagger>
-      </Container>
+
+              {/* Stickers anchored to the card */}
+              {STICKERS.map((item) => (
+                <div
+                  key={item.src}
+                  className={`pointer-events-none absolute z-30 select-none ${item.className}`}
+                  aria-hidden="true"
+                >
+                  <div className={`${item.rotate} ${item.float}`}>
+                    <img
+                      src={item.src}
+                      alt=""
+                      className="h-auto w-full object-contain drop-shadow-[0_12px_18px_rgba(20,30,24,0.16)]"
+                    />
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          </div>
+
+          {/* Interactive Navigation Controls: Prev, Dots, Next */}
+          <div className="pointer-events-auto mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={handlePrev}
+              aria-label="Previous problem"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#475569] shadow-sm transition hover:bg-[#F1F5F9] hover:text-[#2563EB] cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              {PROBLEMS_DATA.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => scrollToProblem(i)}
+                  aria-label={`Jump to ${PROBLEMS_DATA[i].tag}`}
+                  className={cn(
+                    "h-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]",
+                    i === activeProblem
+                      ? "w-7 bg-[#2563EB]"
+                      : "w-2 bg-[#2563EB]/25 hover:bg-[#2563EB]/45"
+                  )}
+                />
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNext}
+              aria-label="Next problem"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#475569] shadow-sm transition hover:bg-[#F1F5F9] hover:text-[#2563EB] cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
+  );
+}
+
+function ProblemBackdrop() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-0 opacity-50"
+      style={{
+        backgroundImage: "radial-gradient(rgba(37, 99, 235, 0.07) 1px, transparent 1px)",
+        backgroundSize: "22px 22px",
+        maskImage: "radial-gradient(ellipse 78% 72% at 50% 46%, black 58%, transparent 100%)",
+        WebkitMaskImage: "radial-gradient(ellipse 78% 72% at 50% 46%, black 58%, transparent 100%)",
+      }}
+    />
   );
 }

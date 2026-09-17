@@ -21,6 +21,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
+  CardHoverHint,
   EmptyState,
   Badge,
   Table,
@@ -35,18 +36,10 @@ import {
   relativeTime,
 } from "@doloyal/shared";
 import type { DashboardMetricDetail, DashboardMetricId, DashboardOverview } from "@doloyal/shared";
-import { comparePercentagePoints, compareValues } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { useAppSync } from "@/lib/data-sync";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
-
-function kpiDelta(change: ReturnType<typeof compareValues>) {
-  return {
-    delta: change.percentChange ?? 0,
-    deltaLabel: change.percentChangeLabel,
-  };
-}
 
 const toYMD = (d: Date | string) => {
   const date = new Date(d);
@@ -255,9 +248,7 @@ export default function DashboardPage() {
       periodMembershipSales: data.kpis?.membershipSales30d ?? 0,
       periodGrowthPct: data.kpis?.monthlyGrowthPct ?? null,
       orderCount: data.kpis?.orderCount ?? 0,
-      orderRevenue: data.kpis?.orderRevenue ?? 0,
       approvedReviews: data.kpis?.approvedReviews ?? 0,
-      averageRating: data.kpis?.averageRating ?? 0,
     };
   }, [data, fromDate, toDate]);
 
@@ -304,31 +295,13 @@ export default function DashboardPage() {
     periodGrowthPct,
     diffDays,
     orderCount,
-    orderRevenue,
     approvedReviews,
-    averageRating,
   } = dynamicMetrics;
 
   const periodRepeatRate =
     periodRepeatCustomers + periodNewCustomers > 0
       ? Math.round((periodRepeatCustomers / Math.max(periodRepeatCustomers + periodNewCustomers, 1)) * 100)
       : 0;
-  const prevRepeatCustomers = kpis.previousRepeatCustomers ?? 0;
-  const prevNewCustomers = kpis.previousNewCustomers ?? 0;
-  const prevRepeatRate =
-    prevRepeatCustomers + prevNewCustomers > 0
-      ? Math.round((prevRepeatCustomers / Math.max(prevRepeatCustomers + prevNewCustomers, 1)) * 100)
-      : 0;
-  const revenueChange = compareValues(periodRevenue, kpis.previousPeriodRevenue ?? 0);
-  const customersChange = compareValues(periodCustomers, kpis.previousTotalCustomers ?? 0);
-  const repeatChange = comparePercentagePoints(periodRepeatRate, prevRepeatRate);
-  const newCustomersChange = compareValues(periodNewCustomers, prevNewCustomers);
-  const inactiveChange = compareValues(kpis.inactiveCustomers, kpis.previousInactiveCustomers ?? 0);
-  const pointsChange = compareValues(periodPointsRedeemed, kpis.previousPointsRedeemed ?? 0);
-  const ordersChange = compareValues(orderCount, kpis.previousOrderCount ?? 0);
-  const reviewsChange = compareValues(approvedReviews, kpis.previousApprovedReviews ?? 0);
-  const appointmentsChange = compareValues(periodAppointments, kpis.previousAppointmentsInPeriod ?? 0);
-  const membershipsChange = compareValues(periodMembershipSales, kpis.previousMembershipSales ?? 0);
   const growthLabel =
     periodGrowthPct === null ? "—" : formatPercent(periodGrowthPct);
 
@@ -382,10 +355,6 @@ export default function DashboardPage() {
               ? `Revenue is trending up ${formatPercent(periodGrowthPct)} over this ${diffDays}-day period (${fromDate} to ${toDate}). Total revenue of ${fmt(periodRevenue)} is driven by ${periodCustomers} customers.`
               : `Revenue declined ${Math.abs(periodGrowthPct).toFixed(1)}% in this period. Consider launching a win-back campaign to re-engage inactive customers.`}
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[rgb(var(--color-border))] pt-2.5 text-[11px] text-[rgb(var(--color-muted-foreground))]">
-            <span>Period revenue {fmt(periodRevenue)}</span>
-            <span>Growth {growthLabel}</span>
-          </div>
         </InsightCard>
 
         <InsightCard
@@ -399,80 +368,71 @@ export default function DashboardPage() {
               ? `Repeat rate is ${periodRepeatRate}% with ${periodRepeatCustomers} returning customers in this period. ${periodNewCustomers} new customers joined.`
               : `Only ${periodRepeatRate}% of customers in this period are repeat visitors. Target them with a loyalty re-engagement offer.`}
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[rgb(var(--color-border))] pt-2.5 text-[11px] text-[rgb(var(--color-muted-foreground))]">
-            <span>Repeat {periodRepeatCustomers}</span>
-            <span>New {periodNewCustomers}</span>
-          </div>
         </InsightCard>
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
+          compact
           label={`Revenue (${diffDays}d)`}
           value={periodRevenue}
           format={(v) => fmt(v)}
-          {...kpiDelta(revenueChange)}
           onClick={() => setOpenMetric("revenue")}
         />
         <KpiCard
+          compact
           label="Total Customers"
           value={periodCustomers}
-          hint={`${periodNewCustomers} new in this period`}
-          {...kpiDelta(customersChange)}
           onClick={() => setOpenMetric("customers")}
         />
         <KpiCard
+          compact
           label="Repeat Rate"
           value={periodRepeatRate}
           format={(v) => `${v}%`}
-          hint={`${periodRepeatCustomers} customers with 2+ purchases`}
-          {...kpiDelta(repeatChange)}
           onClick={() => setOpenMetric("repeat_rate")}
         />
         <KpiCard
+          compact
           label="New Customers"
           value={periodNewCustomers}
-          {...kpiDelta(newCustomersChange)}
           onClick={() => setOpenMetric("new_customers")}
         />
         <KpiCard
+          compact
           label="Inactive Customers"
           value={kpis.inactiveCustomers}
-          {...kpiDelta(inactiveChange)}
-          deltaInvert
           onClick={() => setOpenMetric("inactive")}
         />
         <KpiCard
+          compact
           label={`Points Redeemed (${diffDays}d)`}
           value={periodPointsRedeemed}
           format={(v) => v.toLocaleString("en-IN")}
-          {...kpiDelta(pointsChange)}
           onClick={() => setOpenMetric("points")}
         />
         <KpiCard
+          compact
           label={`Orders (${diffDays}d)`}
           value={orderCount}
-          hint={orderRevenue ? fmt(orderRevenue) : "No order revenue yet"}
-          {...kpiDelta(ordersChange)}
           onClick={() => setOpenMetric("orders")}
         />
         <KpiCard
+          compact
           label="Reviews"
           value={approvedReviews}
-          hint={approvedReviews ? `${averageRating.toFixed(1)} avg · ${kpis.pendingReviews} pending` : `${kpis.pendingReviews} pending`}
-          {...kpiDelta(reviewsChange)}
           onClick={() => setOpenMetric("reviews")}
         />
         <KpiCard
+          compact
           label={`Appointments (${diffDays}d)`}
           value={periodAppointments}
-          {...kpiDelta(appointmentsChange)}
           onClick={() => setOpenMetric("appointments")}
         />
         <KpiCard
+          compact
           label={`Memberships (${diffDays}d)`}
           value={periodMembershipSales}
-          {...kpiDelta(membershipsChange)}
           onClick={() => setOpenMetric("memberships")}
         />
       </div>
@@ -506,6 +466,7 @@ export default function DashboardPage() {
           type="area"
           height={220}
           valueFormat={(v) => fmtCompact(v)}
+          onClick={() => setOpenMetric("revenue")}
         />
         <StatChart
           title="Customer Trend"
@@ -515,6 +476,7 @@ export default function DashboardPage() {
           xKey="date"
           type="bar"
           height={220}
+          onClick={() => setOpenMetric("customers")}
         />
       </div>
 
@@ -849,12 +811,14 @@ function InsightCard({
             }
           : undefined
       }
-      className={`rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 ${
+      className={`relative rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 ${
         onClick
           ? "cursor-pointer transition-all hover:border-[rgb(var(--color-primary)/0.28)] hover:shadow-sm"
           : ""
       }`}
+      aria-label={onClick ? `${title} details` : undefined}
     >
+      {onClick ? <CardHoverHint /> : null}
       <div className="flex items-center justify-between gap-3">
         <span className="text-[13px] font-semibold">{title}</span>
         <Badge variant={badgeVariant} className="text-[0.6rem] uppercase tracking-wider">
@@ -862,9 +826,6 @@ function InsightCard({
         </Badge>
       </div>
       <div className="mt-2">{children}</div>
-      {onClick ? (
-        <p className="mt-2 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">View details</p>
-      ) : null}
     </div>
   );
 }

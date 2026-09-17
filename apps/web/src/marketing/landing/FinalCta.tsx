@@ -17,15 +17,15 @@ export function FinalCta({
 }: FinalCtaProps) {
 
   return (
-    <section className="relative py-20 sm:py-24 overflow-hidden bg-[#FAFAFC]">
+    <section className="relative py-20 sm:py-24 overflow-hidden bg-white">
       {/* Background grid lines pattern with mask gradient fade */}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(17,24,39,0.07)_1px,transparent_1px),linear-gradient(to_bottom,rgba(17,24,39,0.07)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,transparent_0%,black_25%,black_75%,transparent_100%)]" />
 
       {/* Smooth top gradient fade overlay for seamless blending with upper section */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#FAFAFC] via-[#FAFAFC]/80 to-transparent z-10" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white via-white/80 to-transparent z-10" />
 
       {/* Smooth bottom gradient fade overlay for seamless blending with footer */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#FAFAFC] via-[#FAFAFC]/80 to-transparent z-10" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white via-white/80 to-transparent z-10" />
 
       <Container className="relative z-10">
         <div className="mx-auto max-w-4xl text-center py-4">
