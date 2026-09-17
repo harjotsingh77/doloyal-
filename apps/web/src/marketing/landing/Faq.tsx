@@ -32,40 +32,40 @@ export function Faq() {
   const [open, setOpen] = React.useState<number | null>(0);
 
   return (
-    <section id="faq" className="relative scroll-mt-24 py-20 sm:py-28 bg-white">
+    <section id="faq" className="relative scroll-mt-24 py-16 sm:py-28 bg-white">
       <Container>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start">
           {/* Left Column: Heading & Subtitle */}
           <Reveal className="lg:col-span-5">
-            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#111111] leading-[1.15]">
+            <h2 className="text-3xl xs:text-4xl sm:text-5xl font-extrabold tracking-tight text-[#111111] leading-[1.15]">
               Frequently Asked Questions
             </h2>
-            <p className="text-slate-500 text-[15.5px] sm:text-[16.5px] leading-relaxed mt-4 font-normal">
+            <p className="text-slate-500 text-[14.5px] sm:text-[16.5px] leading-relaxed mt-3 sm:mt-4 font-normal">
               Discover the solutions to all your inquiries right here, where clarity and assistance await you!
             </p>
           </Reveal>
 
           {/* Right Column: Accordions */}
           <Reveal delay={0.1} className="lg:col-span-7">
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {FAQS.map((item, i) => {
                 const isOpen = open === i;
                 return (
                   <div
                     key={item.q}
-                    className={`overflow-hidden rounded-2xl border transition-all duration-300 ${
+                    className={`overflow-hidden rounded-xl sm:rounded-2xl border transition-all duration-300 ${
                       isOpen
-                        ? "border-slate-200/90 bg-[#F6F6F8] p-6 shadow-sm"
-                        : "border-slate-200/60 bg-white p-6 shadow-xs hover:border-slate-300"
+                        ? "border-slate-200/90 bg-[#F6F6F8] p-4 sm:p-6 shadow-sm"
+                        : "border-slate-200/60 bg-white p-4 sm:p-6 shadow-xs hover:border-slate-300"
                     }`}
                   >
                     <button
                       onClick={() => setOpen(isOpen ? null : i)}
-                      className="flex w-full items-center justify-between gap-4 text-left font-bold text-[#111111] text-[16px] sm:text-[17px] tracking-tight cursor-pointer"
+                      className="flex w-full items-center justify-between gap-3 sm:gap-4 text-left font-bold text-[#111111] text-[15px] sm:text-[17px] tracking-tight cursor-pointer active:opacity-80"
                     >
                       <span>{item.q}</span>
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-800">
-                        {isOpen ? <Minus className="h-5 w-5 stroke-[2.5]" /> : <Plus className="h-5 w-5 stroke-[2.5]" />}
+                        {isOpen ? <Minus className="h-4 w-4 sm:h-5 sm:w-5 stroke-[2.5]" /> : <Plus className="h-4 w-4 sm:h-5 sm:w-5 stroke-[2.5]" />}
                       </span>
                     </button>
                     <AnimatePresence initial={false}>
@@ -76,7 +76,7 @@ export function Faq() {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.3, ease: EASE }}
                         >
-                          <p className="mt-3 text-[14.5px] leading-relaxed text-slate-600 font-normal">
+                          <p className="mt-2.5 sm:mt-3 text-[13.5px] sm:text-[14.5px] leading-relaxed text-slate-600 font-normal">
                             {item.a}
                           </p>
                         </motion.div>

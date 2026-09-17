@@ -48,7 +48,7 @@ function DonutChart() {
   let offset = 0;
 
   return (
-    <div className="flex items-center gap-6">
+    <div className="flex flex-col xs:flex-row items-center justify-center xs:justify-start gap-4 sm:gap-6">
       <div className="relative flex-shrink-0">
         <svg width="140" height="140" viewBox="0 0 140 140">
           {data.map((d, i) => {
@@ -74,15 +74,17 @@ function DonutChart() {
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg font-extrabold text-[#111827]">₹7,93,981</span>
+          <span className="text-base sm:text-lg font-extrabold text-[#111827]">₹7,93,981</span>
           <span className="text-[10px] text-gray-500">Total Revenue</span>
         </div>
       </div>
-      <div className="space-y-2.5">
+      <div className="space-y-2 sm:space-y-2.5 w-full xs:w-auto">
         {data.map((d) => (
-          <div key={d.label} className="flex items-center gap-2 text-xs">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
-            <span className="font-semibold text-gray-700 min-w-[90px]">{d.label}</span>
+          <div key={d.label} className="flex items-center justify-between xs:justify-start gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+              <span className="font-semibold text-gray-700 min-w-[85px] sm:min-w-[90px]">{d.label}</span>
+            </div>
             <span className="font-bold text-gray-900">{d.pct}%</span>
           </div>
         ))}
@@ -187,7 +189,7 @@ export function HeroContent() {
         }}
       />
 
-      <div className="relative z-10 mx-auto max-w-[1240px] px-6 sm:px-10">
+      <div className="relative z-10 mx-auto max-w-[1240px] px-4 sm:px-8 lg:px-10">
         {/* Top Rating Badge */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -195,13 +197,13 @@ export function HeroContent() {
           transition={{ duration: 0.6 }}
           className="flex justify-center"
         >
-          <div className="inline-flex items-center gap-2.5 rounded-full border border-black/5 bg-white/90 px-4 py-1.5 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.06)] backdrop-blur-md">
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-black/5 bg-white/90 px-3.5 py-1.5 sm:px-4 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.06)] backdrop-blur-md">
             <div className="flex -space-x-1.5">
               <img className="h-5 w-5 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="User avatar" />
               <img className="h-5 w-5 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" alt="User avatar" />
               <img className="h-5 w-5 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=120&q=80" alt="User avatar" />
             </div>
-            <span className="text-[12.5px] font-semibold text-[#282628]">3600+ 5_Stars Reviews</span>
+            <span className="text-[12px] sm:text-[12.5px] font-semibold text-[#282628]">3600+ 5_Stars Reviews</span>
           </div>
         </motion.div>
 
@@ -210,9 +212,9 @@ export function HeroContent() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
-          className="mt-6 sm:mt-7 text-center max-w-4xl mx-auto px-2 sm:px-0"
+          className="mt-6 sm:mt-7 text-center max-w-4xl mx-auto px-1 sm:px-0"
         >
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#111111] xs:text-4xl sm:text-6xl lg:text-[4.75rem] leading-[1.15] sm:leading-[1.08]">
+          <h1 className="text-[1.95rem] xs:text-[2.35rem] font-extrabold tracking-tight text-[#111111] sm:text-6xl lg:text-[4.75rem] leading-[1.14] sm:leading-[1.08]">
             Turn First-Time Visitors
             <br className="hidden sm:inline" />
             {" "}Into Loyal Customers.
@@ -234,7 +236,7 @@ export function HeroContent() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.3 }}
-          className="mt-8 sm:mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 w-full max-w-xs sm:max-w-none mx-auto"
+          className="mt-7 sm:mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 w-full max-w-sm sm:max-w-none mx-auto"
         >
           <Link
             href="/checkout?plan=free-trial"
@@ -263,8 +265,8 @@ export function HeroContent() {
           {/* Dashboard Card */}
           <div className="relative rounded-[2rem] border border-gray-200/90 bg-white shadow-[0_40px_80px_-20px_rgba(0,0,0,0.14)] overflow-hidden">
             {/* ── Top Header Bar ── */}
-            <div className="flex items-center justify-between border-b border-gray-100 bg-white px-5 sm:px-7 py-3.5">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between border-b border-gray-100 bg-white px-3.5 sm:px-7 py-3 sm:py-3.5">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <Menu className="h-5 w-5 text-gray-400 hidden sm:block" />
                 <div className="flex items-center gap-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#2563EB] text-white">
@@ -279,13 +281,13 @@ export function HeroContent() {
                 <span>Help Center</span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <div className="relative">
                   <Bell className="h-4 w-4 text-gray-500" />
                   <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
                 </div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
-                  <img className="h-7 w-7 rounded-full object-cover ring-2 ring-gray-100" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80" alt="User" />
+                <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-semibold text-gray-700">
+                  <img className="h-6 w-6 sm:h-7 sm:w-7 rounded-full object-cover ring-2 ring-gray-100" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80" alt="User" />
                   <div className="hidden sm:block leading-tight">
                     <span className="block text-[11px] font-bold text-gray-800">Prof. Arjuna</span>
                     <span className="block text-[9px] text-gray-400 font-normal">arjun.aprof@gmail.com</span>
@@ -296,12 +298,12 @@ export function HeroContent() {
             </div>
 
             {/* ── Dashboard Body ── */}
-            <div className="bg-[#FBFBFD] px-5 sm:px-7 py-5 sm:py-6 space-y-5">
+            <div className="bg-[#FBFBFD] px-3 sm:px-7 py-4 sm:py-6 space-y-4 sm:space-y-5">
               {/* Title Row */}
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-[#111827]">Dashboard</h3>
-                  <p className="text-[11px] text-gray-500">Welcome back! Here&apos;s what&apos;s happening with your business.</p>
+                  <h3 className="text-sm sm:text-lg font-bold text-[#111827]">Dashboard</h3>
+                  <p className="text-[10px] sm:text-[11px] text-gray-500">Welcome back! Here&apos;s what&apos;s happening with your business.</p>
                 </div>
                 <div className="hidden sm:flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-600 shadow-sm">
                   <Calendar className="h-3 w-3 text-gray-400" />
@@ -311,30 +313,30 @@ export function HeroContent() {
               </div>
 
               {/* 4 Stat Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                 {[
                   { label: "Total Revenue", value: "₹7,93,981", change: "+22.0%", sub: "vs last 31 days", color: "#8B5CF6", pts: [2, 3, 2.5, 4, 3.5, 5, 4.2, 6, 5.5, 7, 6.8, 8] },
                   { label: "New Customers", value: "88", change: "+18.6%", sub: "vs last 31 days", color: "#10B981", pts: [3, 3.5, 4, 3.8, 4.2, 4.5, 5, 4.8, 5.2, 5.5, 5.8, 6.2] },
                   { label: "Appointments", value: "164", change: "+15.2%", sub: "vs last 31 days", color: "#3B82F6", pts: [4, 3, 4.5, 3.5, 5, 4, 5.5, 4.5, 5, 5.5, 5, 6] },
                   { label: "Invoices", value: "132", change: "+11.8%", sub: "vs last 31 days", color: "#F59E0B", pts: [2, 2.5, 3, 2.8, 3.2, 3.5, 4, 3.8, 4.5, 5, 5.5, 6.5] },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-sm">
+                  <div key={s.label} className="min-w-0 rounded-xl sm:rounded-2xl border border-gray-200/80 bg-white p-2.5 xs:p-3 sm:p-4 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] sm:text-[11px] font-medium text-gray-500">{s.label}</span>
+                      <span className="truncate text-[9.5px] xs:text-[10px] sm:text-[11px] font-medium text-gray-500">{s.label}</span>
                       <StatIcon color={s.color}>
-                        <div className="h-3.5 w-3.5 rounded-md" style={{ background: s.color, opacity: 0.7 }} />
+                        <div className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-md" style={{ background: s.color, opacity: 0.7 }} />
                       </StatIcon>
                     </div>
-                    <div className="mt-1.5">
-                      <span className="text-xl sm:text-2xl font-extrabold text-[#111827]">{s.value}</span>
+                    <div className="mt-1 sm:mt-1.5">
+                      <span className="block truncate text-sm xs:text-base sm:text-2xl font-extrabold text-[#111827]">{s.value}</span>
                     </div>
-                    <div className="mt-1 flex items-center gap-1">
-                      <span className="flex items-center text-[10px] font-bold text-emerald-600">
+                    <div className="mt-0.5 sm:mt-1 flex items-center gap-1 overflow-hidden">
+                      <span className="flex shrink-0 items-center text-[9px] xs:text-[10px] font-bold text-emerald-600">
                         <ArrowUpRight className="h-2.5 w-2.5" /> {s.change}
                       </span>
-                      <span className="text-[9px] text-gray-400">{s.sub}</span>
+                      <span className="hidden xs:inline truncate text-[8px] xs:text-[9px] text-gray-400">{s.sub}</span>
                     </div>
-                    <div className="mt-2 h-9">
+                    <div className="mt-1.5 sm:mt-2 h-7 sm:h-9">
                       <Sparkline color={s.color} points={s.pts} />
                     </div>
                   </div>
@@ -342,12 +344,12 @@ export function HeroContent() {
               </div>
 
               {/* Bottom Row: Revenue Overview + Donut */}
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-2.5 sm:gap-3">
                 {/* Revenue Overview — 3/5 */}
-                <div className="lg:col-span-3 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold text-[#111827]">Revenue Overview</h4>
-                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600">
+                <div className="lg:col-span-3 rounded-xl sm:rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2 sm:mb-3">
+                    <h4 className="text-xs sm:text-sm font-bold text-[#111827]">Revenue Overview</h4>
+                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-semibold text-gray-600">
                       <span>This Month</span>
                       <ChevronDown className="h-3 w-3 text-gray-400" />
                     </div>
@@ -356,10 +358,10 @@ export function HeroContent() {
                 </div>
 
                 {/* Revenue by Source — 2/5 */}
-                <div className="lg:col-span-2 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-sm font-bold text-[#111827]">Revenue by Source</h4>
-                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600">
+                <div className="lg:col-span-2 rounded-xl sm:rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3 sm:mb-4">
+                    <h4 className="text-xs sm:text-sm font-bold text-[#111827]">Revenue by Source</h4>
+                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-semibold text-gray-600">
                       <span>This Month</span>
                       <ChevronDown className="h-3 w-3 text-gray-400" />
                     </div>

@@ -77,8 +77,8 @@ export function SiteHeader() {
       >
         <div
           className={cn(
-            "mx-auto flex max-w-[1240px] items-center justify-between px-6 transition-all duration-300 sm:px-10",
-            scrolled ? "h-16" : "h-20",
+            "mx-auto flex max-w-[1240px] items-center justify-between px-4 transition-all duration-300 sm:px-8 lg:px-10",
+            scrolled ? "h-16" : "h-18 sm:h-20",
           )}
         >
           {/* Doloyal Full Logo */}
@@ -197,27 +197,27 @@ export function SiteHeader() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden border-b border-black/10 bg-white/95 backdrop-blur-xl md:hidden shadow-xl"
+              className="overflow-hidden border-b border-black/10 bg-white/95 backdrop-blur-xl md:hidden shadow-xl rounded-b-2xl sm:rounded-b-[28px]"
             >
-              <nav className="flex flex-col gap-1 px-5 py-4 max-h-[calc(100vh-80px)] overflow-y-auto">
+              <nav className="flex flex-col gap-1 px-4 py-3 sm:px-5 sm:py-4 max-h-[calc(100svh-5rem)] overflow-y-auto overscroll-contain">
                 <Link
                   href="/"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Homepage
                 </Link>
                 <Link
                   href="/about"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   About
                 </Link>
                 <Link
                   href="/features"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Features
                 </Link>
@@ -227,35 +227,35 @@ export function SiteHeader() {
                     goToHash("/#pricing", event);
                     setOpen(false);
                   }}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Pricing
                 </Link>
                 <Link
                   href="/blog"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Blog
                 </Link>
                 <Link
                   href="/contact"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Contact
                 </Link>
                 <Link
                   href="/book-demo"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Book a Demo
                 </Link>
                 <Link
                   href="/integrations"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3.5 py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl px-3.5 py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors active:scale-[0.99]"
                 >
                   Integrations
                 </Link>
@@ -263,14 +263,14 @@ export function SiteHeader() {
                 <Link
                   href="/sign-in"
                   onClick={() => setOpen(false)}
-                  className="flex w-full items-center justify-center rounded-xl py-3 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors"
+                  className="flex min-h-[44px] w-full items-center justify-center rounded-xl py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors"
                 >
                   Log in
                 </Link>
                 <Link
                   href="/sign-up"
                   onClick={() => setOpen(false)}
-                  className="group flex w-full items-center justify-between rounded-full bg-[#1F242B] px-6 py-3 text-base font-semibold text-white shadow-md active:scale-[0.98] transition-all"
+                  className="group flex min-h-[48px] w-full items-center justify-between rounded-full bg-[#1F242B] px-6 py-3 text-base font-semibold text-white shadow-md active:scale-[0.98] transition-all"
                 >
                   <TextRoll>Get Started</TextRoll>
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#1F242B]">

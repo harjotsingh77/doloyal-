@@ -91,25 +91,25 @@ export default function FeaturesPage() {
   return (
     <div className="overflow-hidden bg-[#FCFBFA] font-[family-name:var(--font-sora)] text-[#282628]">
       {/* Hero Section */}
-      <section className="relative pt-36 pb-20 sm:pt-44 sm:pb-28">
-        <div className="mx-auto max-w-[1200px] px-5 sm:px-8 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#2563EB]/20 bg-[#2563EB]/5 px-4 py-1.5 text-[13px] font-semibold text-[#2563EB]">
+      <section className="relative pt-28 pb-12 sm:pt-44 sm:pb-28">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-8 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#2563EB]/20 bg-[#2563EB]/5 px-3.5 py-1.5 sm:px-4 text-[12.5px] sm:text-[13px] font-semibold text-[#2563EB]">
             <Sparkles className="h-3.5 w-3.5" />
             <span>Doloyal Features</span>
           </div>
 
-          <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-[#282628] sm:text-6xl lg:text-[4.5rem] lg:leading-[1.1] max-w-4xl mx-auto">
+          <h1 className="mt-5 sm:mt-6 text-3xl xs:text-4xl font-extrabold tracking-tight text-[#282628] sm:text-6xl lg:text-[4.5rem] lg:leading-[1.1] max-w-4xl mx-auto">
             Everything You Need to Keep Customers Coming Back
           </h1>
 
-          <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-gray-600 font-normal">
+          <p className="mx-auto mt-4 sm:mt-6 max-w-2xl text-[15px] sm:text-lg leading-relaxed text-gray-600 font-normal">
             Manage customer relationships, loyalty, bookings, rewards, memberships, campaigns, and retention from one simple platform.
           </p>
 
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
+          <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 w-full max-w-sm sm:max-w-none mx-auto">
             <Link
               href="/checkout?plan=free-trial"
-              className="group flex items-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5"
+              className="group flex w-full sm:w-auto items-center justify-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 py-3 text-[14.5px] sm:text-[15px] font-semibold text-white shadow-xl transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_20px_40px_-10px_rgba(37,99,235,0.45)] hover:-translate-y-0.5 active:scale-95"
             >
               <TextRoll>Start 1 Month Free</TextRoll>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#232529] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:rotate-45 group-hover:translate-x-0.5">
@@ -119,7 +119,7 @@ export default function FeaturesPage() {
 
             <Link
               href="/book-demo"
-              className="group flex items-center gap-2 px-3 py-3 text-[15px] font-semibold text-[#1F242B] hover:text-[#2563EB] transition-colors"
+              className="group flex items-center justify-center gap-2 px-3 py-3 text-[14.5px] sm:text-[15px] font-semibold text-[#1F242B] hover:text-[#2563EB] transition-colors"
             >
               <TextRoll>Book a Demo</TextRoll>
               <ArrowRight className="h-4 w-4 stroke-[2.5] transition-transform duration-300 group-hover:translate-x-1" />
@@ -129,15 +129,15 @@ export default function FeaturesPage() {
       </section>
 
       {/* 10 Feature Categories Grid */}
-      <section className="pb-24 sm:pb-32">
-        <div className="mx-auto max-w-[1200px] px-5 sm:px-8">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="pb-20 sm:pb-32">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-8">
+          <div className="grid gap-5 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURE_CATEGORIES.map((feat, idx) => {
               const Icon = feat.icon;
               return (
                 <div
                   key={idx}
-                  className="group rounded-3xl border border-black/5 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl flex flex-col justify-between"
+                  className="group rounded-3xl border border-black/5 bg-white p-6 sm:p-8 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl flex flex-col justify-between"
                 >
                   <div>
                     <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${feat.color}`}>

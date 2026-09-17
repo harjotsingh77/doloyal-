@@ -176,7 +176,7 @@ function TravelingDoloyalIcon({
       aria-hidden="true"
     >
       {/* Pure icon squircle without text label */}
-      <div className="h-[52px] w-[52px] sm:h-[62px] sm:w-[62px] lg:h-[68px] lg:w-[68px]">
+      <div className="h-[38px] w-[38px] xs:h-[46px] xs:w-[46px] sm:h-[58px] sm:w-[58px] lg:h-[68px] lg:w-[68px]">
         {item.node}
       </div>
     </motion.div>
@@ -184,21 +184,19 @@ function TravelingDoloyalIcon({
 }
 
 const STAGE_POS =
-  "absolute bottom-[6%] right-[3%] flex items-end gap-3.5 sm:bottom-[7%] sm:right-[5%] sm:gap-5 lg:bottom-[8%] lg:right-[6%] lg:gap-6";
+  "absolute bottom-[5%] left-1/2 -translate-x-1/2 lg:left-auto lg:translate-x-0 lg:right-[6%] flex items-end gap-2 xs:gap-3 sm:gap-5 lg:bottom-[8%] lg:gap-6";
 
-const BAR_WIDTH = 136;
+const BAR_CLASS = "w-[80px] xs:w-[96px] sm:w-[120px] lg:w-[136px] shrink-0 flex flex-col items-center";
+const PLACEHOLDER_CLASS = "w-[80px] xs:w-[96px] sm:w-[120px] lg:w-[136px] shrink-0 pointer-events-none";
 
 function Bar1x() {
   return (
-    <div
-      style={{ width: BAR_WIDTH, minWidth: BAR_WIDTH, maxWidth: BAR_WIDTH }}
-      className="flex shrink-0 flex-col items-center"
-    >
-      <span className="mb-2 text-[20px] font-semibold tracking-tight text-[#94A3B8] sm:mb-2.5 sm:text-[26px]">
+    <div className={BAR_CLASS}>
+      <span className="mb-1.5 xs:mb-2 text-[16px] xs:text-[18px] font-semibold tracking-tight text-[#94A3B8] sm:mb-2.5 sm:text-[26px]">
         1×
       </span>
-      <div className="h-[44px] w-full rounded-2xl bg-gradient-to-b from-[#E7EEF8]/95 to-[#D9E6F6]/95 border border-white/80 shadow-[0_4px_16px_rgba(148,163,184,0.12)] sm:h-[52px]" />
-      <span className="mt-3 h-5 whitespace-nowrap text-[12px] font-medium text-[#94A3B8] sm:text-[13.5px]">
+      <div className="h-[36px] xs:h-[44px] w-full rounded-xl sm:rounded-2xl bg-gradient-to-b from-[#E7EEF8]/95 to-[#D9E6F6]/95 border border-white/80 shadow-[0_4px_16px_rgba(148,163,184,0.12)] sm:h-[52px]" />
+      <span className="mt-2 sm:mt-3 h-5 whitespace-nowrap text-[10px] xs:text-[11px] font-medium text-[#94A3B8] sm:text-[13.5px]">
         Manual Tools
       </span>
     </div>
@@ -207,15 +205,12 @@ function Bar1x() {
 
 function Bar4x() {
   return (
-    <div
-      style={{ width: BAR_WIDTH, minWidth: BAR_WIDTH, maxWidth: BAR_WIDTH }}
-      className="flex shrink-0 flex-col items-center"
-    >
-      <span className="mb-2 text-[20px] font-semibold tracking-tight text-[#94A3B8] sm:mb-2.5 sm:text-[26px]">
+    <div className={BAR_CLASS}>
+      <span className="mb-1.5 xs:mb-2 text-[16px] xs:text-[18px] font-semibold tracking-tight text-[#94A3B8] sm:mb-2.5 sm:text-[26px]">
         4×
       </span>
-      <div className="h-[175px] w-full rounded-2xl bg-gradient-to-b from-[#D4E3F6] to-[#BED6F0] border border-white/70 shadow-[0_8px_24px_rgba(37,99,235,0.08)] sm:h-[235px] lg:h-[255px]" />
-      <span className="mt-3 h-5 whitespace-nowrap text-[12px] font-medium text-[#94A3B8] sm:text-[13.5px]">
+      <div className="h-[140px] xs:h-[175px] w-full rounded-xl sm:rounded-2xl bg-gradient-to-b from-[#D4E3F6] to-[#BED6F0] border border-white/70 shadow-[0_8px_24px_rgba(37,99,235,0.08)] sm:h-[235px] lg:h-[255px]" />
+      <span className="mt-2 sm:mt-3 h-5 whitespace-nowrap text-[10px] xs:text-[11px] font-medium text-[#94A3B8] sm:text-[13.5px]">
         Basic CRM
       </span>
     </div>
@@ -224,19 +219,16 @@ function Bar4x() {
 
 function Bar10x() {
   return (
-    <div
-      style={{ width: BAR_WIDTH, minWidth: BAR_WIDTH, maxWidth: BAR_WIDTH }}
-      className="flex shrink-0 flex-col items-center"
-    >
-      <div className="mb-2 text-center sm:mb-3">
-        <div className="text-[36px] font-extrabold leading-none tracking-tight text-[#0F172A] sm:text-[48px] lg:text-[54px]">
+    <div className={BAR_CLASS}>
+      <div className="mb-1.5 xs:mb-2 text-center sm:mb-3">
+        <div className="text-[28px] xs:text-[34px] font-extrabold leading-none tracking-tight text-[#0F172A] sm:text-[48px] lg:text-[54px]">
           10×
         </div>
-        <div className="mt-1 text-[7.5px] font-semibold uppercase tracking-[0.16em] text-[#94A3B8] sm:mt-1.5 sm:text-[8.5px] sm:tracking-[0.18em]">
+        <div className="mt-0.5 xs:mt-1 text-[6.5px] xs:text-[7.5px] font-semibold uppercase tracking-[0.14em] text-[#94A3B8] sm:mt-1.5 sm:text-[8.5px] sm:tracking-[0.18em]">
           YOUR RETENTION
         </div>
       </div>
-      <div className="relative h-[410px] w-full overflow-hidden rounded-[24px] shadow-[0_24px_54px_rgba(37,99,235,0.24)] ring-1 ring-black/[0.05] sm:h-[490px] sm:rounded-[28px] lg:h-[530px] lg:rounded-[30px]">
+      <div className="relative h-[330px] xs:h-[395px] w-full overflow-hidden rounded-[18px] xs:rounded-[22px] shadow-[0_24px_54px_rgba(37,99,235,0.24)] ring-1 ring-black/[0.05] sm:h-[490px] sm:rounded-[28px] lg:h-[530px] lg:rounded-[30px]">
         <img
           src="/multiplier/sky-bar.png"
           alt=""
@@ -247,11 +239,11 @@ function Bar10x() {
           <img
             src="/multiplier/doloyal-white.png"
             alt="Doloyal"
-            className="h-11 w-auto sm:h-13 drop-shadow-[0_8px_24px_rgba(0,0,0,0.28)] select-none pointer-events-none"
+            className="h-8 w-auto xs:h-9 sm:h-12 lg:h-13 drop-shadow-[0_8px_24px_rgba(0,0,0,0.28)] select-none pointer-events-none"
           />
         </div>
       </div>
-      <span className="mt-3 h-5 whitespace-nowrap text-[12px] font-semibold text-[#475569] sm:text-[13.5px]">
+      <span className="mt-2 sm:mt-3 h-5 whitespace-nowrap text-[10px] xs:text-[11px] font-semibold text-[#475569] sm:text-[13.5px]">
         With Doloyal
       </span>
     </div>
@@ -320,38 +312,35 @@ export function MultiplierSection() {
       />
 
       {/* Section Container with responsive height */}
-      <div className="relative z-40 mx-auto w-full max-w-[1400px] px-6 pt-12 sm:px-10 sm:pt-16 lg:h-[840px] lg:px-12 lg:pt-0">
+      <div className="relative z-40 mx-auto w-full max-w-[1400px] px-4 pt-7 xs:pt-8 sm:px-10 sm:pt-16 lg:h-[840px] lg:px-12 lg:pt-0">
           {/* Left Hero Content */}
           <div className="max-w-[560px] lg:absolute lg:left-[64px] lg:top-[20%] xl:left-[88px] xl:top-[22%]">
             <h2
               id="multiplier-heading"
-              className="text-[40px] font-extrabold tracking-[-0.04em] leading-[1.06] text-[#0F172A] sm:text-[56px] lg:text-[66px]"
+              className="text-[32px] xs:text-[40px] font-extrabold tracking-[-0.04em] leading-[1.06] text-[#0F172A] sm:text-[56px] lg:text-[66px]"
             >
               Not just another
               <br />
               CRM
             </h2>
-            <p className="mt-5 max-w-[420px] text-[16px] leading-[1.6] text-[#64748B] sm:text-[18px] lg:text-[19px]">
+            <p className="mt-3 sm:mt-5 max-w-[420px] text-[15px] sm:text-[18px] lg:text-[19px] leading-[1.6] text-[#64748B]">
               CRMs only collect data. Doloyal multiplies your revenue.
             </p>
           </div>
         </div>
 
         {/* Dynamic Graphic Stage: 1x, 4x, Traveling Doloyal Icons, 10x */}
-        <div className="relative z-20 h-[560px] sm:h-[720px] lg:absolute lg:inset-0 lg:h-auto">
+        <div className="relative z-20 h-[480px] xs:h-[560px] sm:h-[720px] lg:absolute lg:inset-0 lg:h-auto">
           {/* Layer 1: 1x and 4x Bars (behind icons) */}
           <div className={`${STAGE_POS} z-10 pointer-events-none`}>
             <Bar1x />
             <Bar4x />
             {/* Transparent placeholder matching Bar10x width to align perfectly */}
-            <div
-              style={{ width: BAR_WIDTH, minWidth: BAR_WIDTH, maxWidth: BAR_WIDTH }}
-              className="shrink-0 pointer-events-none"
-            />
+            <div className={PLACEHOLDER_CLASS} />
           </div>
 
-          {/* Layer 2: Traveling Doloyal Icons (clean, no labels, no overlay line) */}
-          <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
+          {/* Layer 2: Traveling Doloyal Icons (clean, no labels, no overlay line) — hidden on mobile */}
+          <div className="hidden md:block absolute inset-0 z-20 pointer-events-none overflow-hidden">
             {TRACK_ICONS.map((item, i) => (
               <TravelingDoloyalIcon
                 key={`doloyal-icon-${item.id}-${i}`}
@@ -366,14 +355,8 @@ export function MultiplierSection() {
           {/* Layer 3: 10x Bar (in front of icons so icons pass cleanly behind it) */}
           <div className={`${STAGE_POS} z-30 pointer-events-none`}>
             {/* Transparent placeholders matching Bar1x and Bar4x widths */}
-            <div
-              style={{ width: BAR_WIDTH, minWidth: BAR_WIDTH, maxWidth: BAR_WIDTH }}
-              className="shrink-0 pointer-events-none"
-            />
-            <div
-              style={{ width: BAR_WIDTH, minWidth: BAR_WIDTH, maxWidth: BAR_WIDTH }}
-              className="shrink-0 pointer-events-none"
-            />
+            <div className={PLACEHOLDER_CLASS} />
+            <div className={PLACEHOLDER_CLASS} />
             <Bar10x />
           </div>
         </div>

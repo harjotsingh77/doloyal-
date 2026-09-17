@@ -21,12 +21,12 @@ export function IndustryHero({ industry }: { industry: Industry }) {
         <ButtonPrimary href="/sign-up">Start Free Trial</ButtonPrimary>
         <ButtonGhost href="/book-demo">See it live</ButtonGhost>
       </div>
-      <div className="mt-8 flex items-center gap-3 rounded-full border border-[rgb(var(--color-border))] bg-white px-5 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <span className="text-[13px] font-semibold text-[rgb(var(--color-subtle))]">Businesses using Doloyal see</span>
-        <span className={cn("bg-gradient-to-r bg-clip-text text-xl font-bold tracking-tight text-transparent", industry.gradient)}>
+      <div className="mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full border border-[rgb(var(--color-border))] bg-white px-4 py-2 sm:px-5 sm:py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <span className="text-xs sm:text-[13px] font-semibold text-[rgb(var(--color-subtle))]">Businesses using Doloyal see</span>
+        <span className={cn("bg-gradient-to-r bg-clip-text text-lg sm:text-xl font-bold tracking-tight text-transparent", industry.gradient)}>
           {industry.heroStat.value}
         </span>
-        <span className="hidden text-[13px] font-medium text-[rgb(var(--color-subtle))] sm:inline">{industry.heroStat.label}</span>
+        <span className="text-xs sm:text-[13px] font-medium text-[rgb(var(--color-subtle))]">{industry.heroStat.label}</span>
       </div>
     </PageHero>
   );
@@ -34,8 +34,8 @@ export function IndustryHero({ industry }: { industry: Industry }) {
 
 export function IndustryFeatures({ industry }: { industry: Industry }) {
   return (
-    <section className="py-16 sm:py-20">
-      <div className="mx-auto max-w-[1200px] px-5 sm:px-8">
+    <section className="py-14 sm:py-20">
+      <div className="mx-auto max-w-[1200px] px-4 sm:px-8">
         <SectionHeading
           eyebrow={`Built for ${industry.name.toLowerCase()}`}
           title="Everything you need, nothing you don't"

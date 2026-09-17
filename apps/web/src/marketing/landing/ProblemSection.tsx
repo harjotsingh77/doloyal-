@@ -3,7 +3,9 @@
 import * as React from "react";
 import {
   AnimatePresence,
+  animate,
   motion,
+  useMotionValue,
   useReducedMotion,
   useScroll,
   useTransform,
@@ -75,19 +77,19 @@ const ORBIT_RY = 42;
 const STICKERS = [
   {
     src: "/problem/calendar.png",
-    className: "-left-5 -top-5 sm:-left-7 sm:-top-7 w-12 sm:w-16 lg:w-20",
+    className: "-left-3 -top-3 sm:-left-7 sm:-top-7 w-10 xs:w-12 sm:w-16 lg:w-20",
     rotate: "-rotate-12",
     float: "problem-float",
   },
   {
     src: "/problem/cake.png",
-    className: "right-16 -top-8 sm:right-24 sm:-top-10 w-12 sm:w-16 lg:w-20",
+    className: "right-8 -top-6 sm:right-24 sm:-top-10 w-10 xs:w-12 sm:w-16 lg:w-20",
     rotate: "rotate-6",
     float: "problem-float-slow",
   },
   {
     src: "/problem/popper.png",
-    className: "-right-6 -bottom-6 sm:-right-8 sm:-bottom-8 w-14 sm:w-20 lg:w-24",
+    className: "-right-3 -bottom-4 sm:-right-8 sm:-bottom-8 w-11 xs:w-13 sm:w-20 lg:w-24",
     rotate: "rotate-12",
     float: "problem-float-tilt",
   },
@@ -120,8 +122,8 @@ function StationaryRings({
 function Heading() {
   return (
     <div className="text-center">
-      <h2 className="text-[48px] sm:text-[64px] lg:text-[80px] font-bold tracking-[-0.04em] leading-[0.95] text-[#0F172A]">
-        <span className="font-serif italic font-normal text-[#1E293B] mr-2.5 sm:mr-3.5">The</span>
+      <h2 className="text-[34px] xs:text-[42px] sm:text-[64px] lg:text-[80px] font-bold tracking-[-0.04em] leading-[0.95] text-[#0F172A]">
+        <span className="font-serif italic font-normal text-[#1E293B] mr-2 sm:mr-3.5">The</span>
         Problem
       </h2>
     </div>
@@ -268,15 +270,25 @@ export function ProblemSection() {
   });
 
   const [activeProblem, setActiveProblem] = React.useState(0);
+  const [isMobile, setIsMobile] = React.useState(false);
+  const mobileAngle = useMotionValue(0);
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useMotionValueEvent(scrollYProgress, "change", (v) => {
+    if (isMobile) return;
     if (v < 0.32) setActiveProblem(0);
     else if (v < 0.58) setActiveProblem(1);
     else if (v < 0.84) setActiveProblem(2);
     else setActiveProblem(3);
   });
 
-  // Smooth click navigation to any problem (targets center of each rest window)
+  // Smooth click navigation to any problem (targets center of each rest window on desktop)
   const scrollToProblem = (index: number) => {
     if (!ref.current) return;
     const targets = [0.13, 0.45, 0.71, 0.95];
@@ -287,14 +299,48 @@ export function ProblemSection() {
     window.scrollTo({ top: scrollTarget, behavior: "smooth" });
   };
 
+  const goToProblem = (index: number) => {
+    setActiveProblem(index);
+    if (isMobile) {
+      animate(mobileAngle, index * -90, {
+        type: "spring",
+        stiffness: 95,
+        damping: 22,
+      });
+    } else {
+      scrollToProblem(index);
+    }
+  };
+
   const handleNext = () => {
     const next = (activeProblem + 1) % PROBLEMS_DATA.length;
-    scrollToProblem(next);
+    goToProblem(next);
   };
 
   const handlePrev = () => {
     const prev = (activeProblem - 1 + PROBLEMS_DATA.length) % PROBLEMS_DATA.length;
-    scrollToProblem(prev);
+    goToProblem(prev);
+  };
+
+  const effectiveAngle = isMobile ? mobileAngle : smoothAngle;
+  const effectiveCardOpacity = isMobile ? 1 : cardOpacity;
+  const effectiveCardY = isMobile ? 0 : cardY;
+  const effectiveCardScale = isMobile ? 1 : cardScale;
+  const effectiveRingsScale = isMobile ? 1 : ringsScale;
+  const effectiveRingsOpacity = isMobile ? 1 : ringsOpacity;
+
+  const touchStartX = React.useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0) handleNext();
+      else handlePrev();
+    }
+    touchStartX.current = null;
   };
 
   if (reduce) {
@@ -342,18 +388,22 @@ export function ProblemSection() {
   }
 
   return (
-    <section ref={ref} id="the-problem" className="relative h-[600vh] bg-white">
-      {/* Native GPU-accelerated sticky pinning — zero latency, instant locking upon scrolling into view */}
-      <div className="sticky top-0 flex h-[100svh] w-full items-start justify-center overflow-hidden bg-white pt-16 sm:pt-[4.5rem]">
+    <section ref={ref} id="the-problem" className="relative h-auto md:h-[600vh] bg-white">
+      {/* Native GPU-accelerated sticky pinning on desktop, clean compact flow on mobile */}
+      <div className="relative md:sticky md:top-0 flex w-full flex-col items-center justify-center overflow-hidden bg-white pt-8 pb-6 sm:pt-14 sm:pb-8 md:h-[100svh] md:pt-[4.5rem] md:pb-0">
         <ProblemBackdrop />
 
-        <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div
+          className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <Heading />
 
           {/* Orbit Stage Container */}
-          <div className="relative mx-auto mt-4 flex h-[390px] w-full max-w-[1080px] items-center justify-center sm:mt-6 sm:h-[460px] lg:h-[520px]">
+          <div className="relative mx-auto mt-2 xs:mt-4 flex h-[310px] xs:h-[340px] sm:h-[460px] lg:h-[520px] w-full max-w-[1080px] items-center justify-center">
             {/* Stationary background rings */}
-            <StationaryRings scale={ringsScale} opacity={ringsOpacity} />
+            <StationaryRings scale={effectiveRingsScale} opacity={effectiveRingsOpacity} />
 
             {/* Orbiting Avatars on the 2nd ellipse track */}
             <div className="pointer-events-none absolute inset-0 z-20">
@@ -361,17 +411,17 @@ export function ProblemSection() {
                 <OrbitingAvatar
                   key={avatar.id}
                   avatar={avatar}
-                  smoothAngle={smoothAngle}
+                  smoothAngle={effectiveAngle}
                   currentSpeakerIndex={activeProblem}
-                  onClick={() => scrollToProblem(avatar.id)}
+                  onClick={() => goToProblem(avatar.id)}
                 />
               ))}
             </div>
 
             {/* Central Speech Bubble Card */}
             <motion.div
-              className="relative z-20 w-[88%] max-w-[320px] sm:w-[74%] sm:max-w-[430px] lg:max-w-[480px]"
-              style={{ opacity: cardOpacity, y: cardY, scale: cardScale }}
+              className="relative z-20 w-[90%] max-w-[310px] xs:max-w-[330px] sm:w-[74%] sm:max-w-[430px] lg:max-w-[480px]"
+              style={{ opacity: effectiveCardOpacity, y: effectiveCardY, scale: effectiveCardScale }}
             >
               <div className="origin-center" style={{ transform: "rotate(4.2deg)" }}>
                 <BubbleShell>
@@ -386,16 +436,16 @@ export function ProblemSection() {
                     >
                       {/* Top row: Title and 0X / 04 counter */}
                       <div className="flex items-baseline justify-between gap-3">
-                        <h3 className="text-[17.5px] sm:text-[20px] lg:text-[21.5px] font-bold text-white tracking-tight leading-snug">
+                        <h3 className="text-[16px] xs:text-[17.5px] sm:text-[20px] lg:text-[21.5px] font-bold text-white tracking-tight leading-snug">
                           {PROBLEMS_DATA[activeProblem].title}
                         </h3>
-                        <span className="shrink-0 font-mono text-[12px] sm:text-[13px] font-semibold tracking-wider text-white/80">
+                        <span className="shrink-0 font-mono text-[11px] sm:text-[13px] font-semibold tracking-wider text-white/80">
                           0{activeProblem + 1} / 0{PROBLEMS_DATA.length}
                         </span>
                       </div>
 
                       {/* Problem Description with clean, uniform line spacing */}
-                      <p className="mt-2.5 sm:mt-3 text-[13.5px] sm:text-[14.5px] lg:text-[15px] font-normal leading-[1.58] text-white/95">
+                      <p className="mt-2 sm:mt-3 text-[12.5px] xs:text-[13.5px] sm:text-[14.5px] lg:text-[15px] font-normal leading-[1.54] sm:leading-[1.58] text-white/95">
                         {PROBLEMS_DATA[activeProblem].desc}
                       </p>
                     </motion.div>
@@ -423,12 +473,12 @@ export function ProblemSection() {
           </div>
 
           {/* Interactive Navigation Controls: Prev, Dots, Next */}
-          <div className="pointer-events-auto mt-4 flex items-center justify-center gap-3">
+          <div className="pointer-events-auto mt-2 sm:mt-4 flex items-center justify-center gap-3">
             <button
               type="button"
               onClick={handlePrev}
               aria-label="Previous problem"
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#475569] shadow-sm transition hover:bg-[#F1F5F9] hover:text-[#2563EB] cursor-pointer"
+              className="flex h-8 w-8 sm:h-7 sm:w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#475569] shadow-sm transition hover:bg-[#F1F5F9] hover:text-[#2563EB] cursor-pointer active:scale-95"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -438,13 +488,13 @@ export function ProblemSection() {
                 <button
                   key={i}
                   type="button"
-                  onClick={() => scrollToProblem(i)}
+                  onClick={() => goToProblem(i)}
                   aria-label={`Jump to ${PROBLEMS_DATA[i].tag}`}
                   className={cn(
-                    "h-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]",
+                    "h-2.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]",
                     i === activeProblem
                       ? "w-7 bg-[#2563EB]"
-                      : "w-2 bg-[#2563EB]/25 hover:bg-[#2563EB]/45"
+                      : "w-2.5 sm:w-2 bg-[#2563EB]/25 hover:bg-[#2563EB]/45"
                   )}
                 />
               ))}
@@ -454,7 +504,7 @@ export function ProblemSection() {
               type="button"
               onClick={handleNext}
               aria-label="Next problem"
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#475569] shadow-sm transition hover:bg-[#F1F5F9] hover:text-[#2563EB] cursor-pointer"
+              className="flex h-8 w-8 sm:h-7 sm:w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#475569] shadow-sm transition hover:bg-[#F1F5F9] hover:text-[#2563EB] cursor-pointer active:scale-95"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

@@ -35,7 +35,7 @@ export function FinalCta({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: EASE }}
-            className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold tracking-tight text-[#1F242B] leading-[1.12]"
+            className="text-[1.85rem] xs:text-3xl sm:text-5xl lg:text-[3.5rem] font-extrabold tracking-tight text-[#1F242B] leading-[1.14] sm:leading-[1.12]"
           >
             {title}
           </motion.h2>
@@ -46,7 +46,7 @@ export function FinalCta({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: EASE, delay: 0.1 }}
-            className="mx-auto mt-5 max-w-2xl text-base sm:text-lg leading-relaxed text-slate-600 font-normal"
+            className="mx-auto mt-4 sm:mt-5 max-w-2xl text-[14.5px] sm:text-lg leading-relaxed text-slate-600 font-normal px-2 sm:px-0"
           >
             {lead}
           </motion.p>
@@ -57,14 +57,14 @@ export function FinalCta({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: EASE, delay: 0.2 }}
-            className="relative mt-10 inline-block"
+            className="relative mt-8 sm:mt-10 inline-block w-full sm:w-auto max-w-xs sm:max-w-none"
           >
             {/* Soft Ambient Blue/Cyan Glow matching Hero Dashboard Preview */}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] sm:w-[500px] h-28 bg-gradient-to-r from-[#2563EB] via-[#3B82F6] to-[#06B6D4] opacity-35 blur-3xl rounded-full" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[85vw] max-w-[500px] h-28 bg-gradient-to-r from-[#2563EB] via-[#3B82F6] to-[#06B6D4] opacity-35 blur-3xl rounded-full" />
 
             <Link
               href="/checkout?plan=free-trial"
-              className="group relative z-10 inline-flex items-center gap-3.5 rounded-full bg-[#232529] pl-7 pr-2.5 py-3 text-[15px] font-semibold text-white shadow-[0_16px_40px_-12px_rgba(37,99,235,0.45)] transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_22px_48px_-10px_rgba(37,99,235,0.65)] hover:-translate-y-0.5"
+              className="group relative z-10 flex w-full sm:inline-flex items-center justify-center gap-3.5 rounded-full bg-[#232529] pl-6 pr-2.5 sm:pl-7 py-3 text-[14.5px] sm:text-[15px] font-semibold text-white shadow-[0_16px_40px_-12px_rgba(37,99,235,0.45)] transition-all duration-300 hover:bg-[#2563EB] hover:shadow-[0_22px_48px_-10px_rgba(37,99,235,0.65)] hover:-translate-y-0.5 active:scale-95"
             >
               <TextRoll>Start 1 Month Free</TextRoll>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#232529] group-hover:text-[#2563EB] shadow-sm transition-transform duration-300 group-hover:rotate-45 group-hover:translate-x-0.5">

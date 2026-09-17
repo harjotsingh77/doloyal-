@@ -84,19 +84,19 @@ const TRACK = [...HALF, ...HALF];
 export function IntegrationStrip() {
   return (
     <section aria-label="Partner logos" className="relative w-full bg-white pt-1 pb-1 sm:pt-2 sm:pb-2 overflow-hidden">
-      <div className="mx-auto max-w-[1280px] px-6">
+      <div className="mx-auto max-w-[1280px] px-4 sm:px-6">
         {/* Moving logo track */}
         <div className="ww-marquee relative overflow-hidden">
           {/* Subtle gradient fades on edges */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white to-transparent sm:w-28" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent sm:w-28" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 sm:w-24 lg:w-28 bg-gradient-to-r from-white to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 sm:w-24 lg:w-28 bg-gradient-to-l from-white to-transparent" />
 
           <div className="ww-track flex w-max items-center">
             {TRACK.map((brand, i) => (
               <div
                 key={`${brand.name}-${i}`}
                 aria-hidden={i >= HALF.length || undefined}
-                className="flex shrink-0 items-center px-8 sm:px-14 opacity-90 transition-all duration-200 hover:opacity-100 hover:scale-105 cursor-default select-none"
+                className="flex shrink-0 items-center px-5 sm:px-10 lg:px-14 opacity-90 transition-all duration-200 hover:opacity-100 hover:scale-105 cursor-default select-none"
               >
                 {brand.element}
               </div>

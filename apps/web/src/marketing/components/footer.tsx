@@ -66,41 +66,41 @@ const SOCIALS = [
 
 export function SiteFooter() {
   return (
-    <footer className="bg-white border-t border-slate-100 py-12 sm:py-16 font-[family-name:var(--font-sora)]">
-      <div className="mx-auto max-w-[1200px] px-6 sm:px-8">
+    <footer className="bg-white border-t border-slate-100 py-10 sm:py-16 font-[family-name:var(--font-sora)]">
+      <div className="mx-auto max-w-[1200px] px-4 sm:px-8">
         {/* Top Grid Portion */}
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-5 lg:gap-12">
+        <div className="grid grid-cols-1 gap-8 sm:gap-10 md:grid-cols-5 lg:gap-12">
           {/* Left Brand Area */}
           <div className="md:col-span-2">
             <Link href="/" className="inline-block" aria-label="Doloyal home">
               <Logo size={36} />
             </Link>
-            <p className="mt-4 max-w-sm text-[14px] leading-relaxed text-slate-500 font-normal">
+            <p className="mt-3.5 sm:mt-4 max-w-sm text-[13.5px] sm:text-[14px] leading-relaxed text-slate-500 font-normal">
               Doloyal helps local businesses build stronger customer relationships, increase repeat visits, and manage customer retention from one simple platform.
             </p>
           </div>
 
           {/* Right Link Columns */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 md:col-span-3">
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 sm:gap-8 md:col-span-3">
             {COLUMNS.map((col) => (
               <div key={col.title}>
-                <h4 className="mb-4 text-[12px] font-semibold text-slate-400 tracking-wider uppercase">
+                <h4 className="mb-3 sm:mb-4 text-[11.5px] sm:text-[12px] font-semibold text-slate-400 tracking-wider uppercase">
                   {col.title}
                 </h4>
-                <ul className="space-y-3">
+                <ul className="space-y-2.5 sm:space-y-3">
                   {col.links.map((l) => (
                     <li key={l.label}>
                       {l.href.includes("#") ? (
                         <a
                           href={l.href}
-                          className="text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
+                          className="inline-block py-1 sm:py-0 text-[13.5px] sm:text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
                         >
                           {l.label}
                         </a>
                       ) : (
                         <Link
                           href={l.href}
-                          className="text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
+                          className="inline-block py-1 sm:py-0 text-[13.5px] sm:text-[14px] font-medium text-slate-700 hover:text-[#2563EB] transition-colors"
                         >
                           {l.label}
                         </Link>
@@ -114,8 +114,8 @@ export function SiteFooter() {
         </div>
 
         {/* Bottom Portion: Divider + Copyright & Brand Hover Social Buttons */}
-        <div className="mt-14 pt-8 border-t border-slate-200/60 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <p className="text-[13px] font-medium text-slate-500">
+        <div className="mt-10 sm:mt-14 pt-6 sm:pt-8 border-t border-slate-200/60 flex flex-col-reverse sm:flex-row items-center justify-between gap-5 sm:gap-6 text-center sm:text-left">
+          <p className="text-[12.5px] sm:text-[13px] font-medium text-slate-500">
             © 2026 Doloyal. All rights reserved.
           </p>
           <div className="flex items-center gap-3">

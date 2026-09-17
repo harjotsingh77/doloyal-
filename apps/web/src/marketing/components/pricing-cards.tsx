@@ -106,14 +106,14 @@ export function PricingCards() {
             >
               <div
                 className={cn(
-                  "relative flex h-full flex-col rounded-3xl border p-7 sm:p-8 transition-all duration-300",
+                  "relative flex h-full flex-col rounded-3xl border p-5 xs:p-6 sm:p-8 transition-all duration-300",
                   plan.highlighted
                     ? "border-transparent bg-[#2563EB] text-white shadow-2xl shadow-blue-500/30"
                     : "border-black/10 bg-white text-[#282628] shadow-sm hover:shadow-xl",
                 )}
               >
                 {plan.highlighted && (
-                  <span className="absolute right-6 top-6 flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold backdrop-blur text-white">
+                  <span className="absolute right-4 top-4 sm:right-6 sm:top-6 flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10.5px] sm:text-[11px] font-bold backdrop-blur text-white">
                     <Zap className="h-3 w-3" /> Most popular
                   </span>
                 )}
@@ -123,8 +123,8 @@ export function PricingCards() {
                   {plan.tagline}
                 </p>
 
-                <div className="mt-6 flex items-baseline gap-1.5">
-                  <span className="text-4xl font-extrabold tracking-tight">
+                <div className="mt-5 sm:mt-6 flex items-baseline gap-1.5">
+                  <span className="text-3xl sm:text-4xl font-extrabold tracking-tight">
                     ₹{price.toLocaleString("en-IN")}
                   </span>
                   <span className={cn("text-xs font-semibold", plan.highlighted ? "text-white/70" : "text-gray-500")}>

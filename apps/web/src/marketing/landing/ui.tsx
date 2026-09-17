@@ -107,17 +107,17 @@ export function SectionHead({
   return (
     <Reveal
       className={cn(
-        "mb-14 flex flex-col gap-5 sm:mb-20",
+        "mb-10 flex flex-col gap-4 sm:mb-16 sm:gap-5 lg:mb-20",
         align === "center" ? "mx-auto max-w-3xl items-center text-center" : "items-start",
         className,
       )}
     >
       {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
-      <h2 className="text-balance text-[2.1rem] font-bold leading-[1.06] tracking-[-0.035em] text-[#111111] sm:text-[2.9rem] sm:leading-[1.04]">
+      <h2 className="text-balance text-[1.85rem] xs:text-[2.1rem] font-bold leading-[1.12] sm:leading-[1.04] tracking-[-0.035em] text-[#111111] sm:text-[2.9rem]">
         {title}
       </h2>
       {lead ? (
-        <p className="max-w-2xl text-pretty text-[17px] leading-relaxed text-[rgb(var(--color-muted-foreground))] sm:text-[18px]">
+        <p className="max-w-2xl text-pretty text-[15px] sm:text-[17px] leading-relaxed text-[rgb(var(--color-muted-foreground))] lg:text-[18px]">
           {lead}
         </p>
       ) : null}
@@ -135,14 +135,14 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn("relative py-24 sm:py-32", className)}>
+    <section id={id} className={cn("relative py-16 sm:py-24 lg:py-32", className)}>
       {children}
     </section>
   );
 }
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("mx-auto max-w-[1200px] px-5 sm:px-8", className)}>{children}</div>;
+  return <div className={cn("mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8", className)}>{children}</div>;
 }
 
 /* ---------------------------------------------------------------- buttons */

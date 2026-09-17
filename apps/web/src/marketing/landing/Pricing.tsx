@@ -97,7 +97,7 @@ export function Pricing() {
   const [yearly, setYearly] = React.useState(true);
 
   return (
-    <Section id="pricing" className="scroll-mt-24 pt-10 pb-24 sm:pt-14 sm:pb-32">
+    <Section id="pricing" className="scroll-mt-24 pt-8 pb-16 sm:pt-14 sm:pb-32">
       <Container>
         <SectionHead
           eyebrow="Pricing"
@@ -110,7 +110,7 @@ export function Pricing() {
         />
 
         {/* Billing Toggle */}
-        <Reveal className="mb-12 flex justify-center">
+        <Reveal className="mb-8 sm:mb-12 flex justify-center">
           <div className="relative flex items-center gap-1 rounded-full border border-black/[0.06] bg-white p-1.5 shadow-[0_1px_2px_rgba(17,17,17,0.04)]">
             {["Monthly", "Yearly"].map((label, i) => {
               const isYearly = i === 1;
@@ -120,7 +120,7 @@ export function Pricing() {
                   key={label}
                   onClick={() => setYearly(isYearly)}
                   className={cn(
-                    "relative rounded-full px-5 py-2.5 text-[13.5px] font-semibold transition-colors duration-300",
+                    "relative rounded-full px-4 py-2 sm:px-5 sm:py-2.5 text-[13px] sm:text-[13.5px] font-semibold transition-colors duration-300",
                     active ? "text-white" : "text-[#666]",
                   )}
                 >
@@ -134,7 +134,7 @@ export function Pricing() {
                   <span className="relative z-10 flex items-center gap-1.5">
                     {label}
                     {isYearly && (
-                      <span className={cn("rounded-full px-1.5 py-0.5 text-[9.5px] font-bold", active ? "bg-white/20 text-white" : "bg-[#1761FD]/10 text-[#1761FD]")}>
+                      <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] sm:text-[9.5px] font-bold", active ? "bg-white/20 text-white" : "bg-[#1761FD]/10 text-[#1761FD]")}>
                         -20%
                       </span>
                     )}
@@ -154,49 +154,49 @@ export function Pricing() {
                   whileHover={{ y: -8 }}
                   transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                   className={cn(
-                    "relative flex h-full flex-col rounded-[1.8rem] p-8",
+                    "relative flex h-full flex-col rounded-[1.6rem] sm:rounded-[1.8rem] p-5 xs:p-6 sm:p-8",
                     plan.highlight
                       ? "border border-transparent bg-gradient-to-br from-[#1761FD] via-[#1551F0] to-[#0E4BD8] text-white shadow-[0_40px_90px_-40px_rgba(14,75,216,0.9)]"
-                      : "border border-black/[0.06] bg-white",
+                      : "border border-black/[0.06] bg-white shadow-sm",
                   )}
                 >
                   {plan.highlight && (
                     <>
                       <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-                      <span className="absolute right-6 top-6 flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold backdrop-blur">
+                      <span className="absolute right-4 top-4 sm:right-6 sm:top-6 flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-bold backdrop-blur">
                         <Zap className="h-3 w-3" /> Most popular
                       </span>
                     </>
                   )}
 
-                  <h3 className={cn("text-[20px] font-bold", plan.highlight ? "text-white" : "text-[#111]")}>
+                  <h3 className={cn("text-[18px] sm:text-[20px] font-bold", plan.highlight ? "text-white" : "text-[#111]")}>
                     {plan.name}
                   </h3>
-                  <p className={cn("mt-1.5 text-[13.5px] leading-relaxed", plan.highlight ? "text-white/80" : "text-[#666]")}>
+                  <p className={cn("mt-1.5 text-[13px] sm:text-[13.5px] leading-relaxed", plan.highlight ? "text-white/80" : "text-[#666]")}>
                     {plan.tagline}
                   </p>
 
-                  <div className="mt-6 flex items-baseline gap-1.5">
+                  <div className="mt-5 sm:mt-6 flex items-baseline gap-1.5">
                     <motion.span
                       key={`${plan.name}-${yearly}`}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.35, ease: EASE }}
-                      className={cn("text-[42px] font-extrabold tracking-[-0.03em]", plan.highlight ? "text-white" : "text-[#111]")}
+                      className={cn("text-3xl sm:text-[42px] font-extrabold tracking-[-0.03em]", plan.highlight ? "text-white" : "text-[#111]")}
                     >
                       {plan.isFree ? "₹0" : `₹${price.toLocaleString("en-IN")}`}
                     </motion.span>
                     {!plan.isFree && (
-                      <span className={cn("text-[14px]", plan.highlight ? "text-white/70" : "text-[#666]")}>
+                      <span className={cn("text-[13px] sm:text-[14px]", plan.highlight ? "text-white/70" : "text-[#666]")}>
                         /month
                       </span>
                     )}
                   </div>
-                  <p className={cn("mt-0.5 text-[12px] font-medium", plan.highlight ? "text-white/60" : "text-[#999]")}>
+                  <p className={cn("mt-0.5 text-[11.5px] sm:text-[12px] font-medium", plan.highlight ? "text-white/60" : "text-[#999]")}>
                     {plan.isFree ? "1 Month Free Trial" : yearly ? "billed yearly" : "billed monthly"}
                   </p>
 
-                  <ul className="mt-7 flex-1 space-y-3">
+                  <ul className="mt-6 sm:mt-7 flex-1 space-y-2.5 sm:space-y-3">
                     {plan.features.map((f) => (
                       <li key={f} className="flex items-start gap-2.5">
                         <span
@@ -207,7 +207,7 @@ export function Pricing() {
                         >
                           <Check className="h-3 w-3 stroke-[2.5]" />
                         </span>
-                        <span className={cn("text-[13.5px] font-medium leading-relaxed", plan.highlight ? "text-white/90" : "text-[#444]")}>
+                        <span className={cn("text-[13px] sm:text-[13.5px] font-medium leading-relaxed", plan.highlight ? "text-white/90" : "text-[#444]")}>
                           {f}
                         </span>
                       </li>
@@ -217,7 +217,7 @@ export function Pricing() {
                   <Link
                     href={`/checkout?plan=${plan.id}&cycle=${yearly ? "yearly" : "monthly"}`}
                     className={cn(
-                      "group mt-8 flex h-12 w-full items-center justify-center rounded-full text-[14.5px] font-semibold transition-all duration-300 hover:-translate-y-0.5 shadow-md",
+                      "group mt-7 sm:mt-8 flex min-h-[48px] h-12 w-full items-center justify-center rounded-full text-[14px] sm:text-[14.5px] font-semibold transition-all duration-300 hover:-translate-y-0.5 shadow-md active:scale-98",
                       plan.highlight
                         ? "bg-white text-[#0E4BD8] hover:bg-slate-50 shadow-[0_16px_32px_-12px_rgba(0,0,0,0.4)]"
                         : "gradient-bg text-white shadow-[0_12px_28px_-10px_rgba(23,97,253,0.6)]",
