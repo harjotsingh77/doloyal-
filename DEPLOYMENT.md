@@ -99,8 +99,11 @@ existing frontend project's root directory.
 3. Set **Root Directory** to `apps/api`.
    Enable **Include source files outside of the Root Directory** so the
    `@doloyal/shared` workspace package and root pnpm lockfile are available.
-4. Leave Framework Preset on auto-detect. Vercel recognizes NestJS from
-   `src/main.ts` and deploys it as one Fluid Compute function.
+4. Leave Framework Preset as **Other**. `apps/api/vercel.json` disables
+   auto-detect and deploys `api/index.ts` as a single Node serverless
+   function that wraps the compiled Nest/Fastify app. Do **not** point
+   `functions` at `src/main.ts` — that file is the local `app.listen()`
+   entry and is not a Vercel Function.
 5. Add every variable in the “Vercel API project” table below to Production
    (and Preview if preview APIs should work).
 6. Deploy, then confirm:

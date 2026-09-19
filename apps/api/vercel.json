@@ -1,8 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@doloyal/api...",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
   "functions": {
-    "src/main.ts": {
-      "maxDuration": 300
+    "api/index.ts": {
+      "maxDuration": 300,
+      "includeFiles": "prisma/**"
     }
   }
 }
