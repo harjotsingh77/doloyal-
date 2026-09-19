@@ -17,7 +17,7 @@ import { IntegrationsModule } from '../integrations/integrations.module';
     WorkflowSchedulerService,
     WorkflowValidationService,
   ],
-  exports: [WorkflowService, WorkflowEngineService],
+  exports: [WorkflowService, WorkflowEngineService, WorkflowSchedulerService],
 })
 export class WorkflowsModule implements OnModuleInit {
   constructor(private readonly workflows: WorkflowService) {}

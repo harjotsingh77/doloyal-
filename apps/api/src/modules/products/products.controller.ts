@@ -95,6 +95,31 @@ class ListProductsQuery {
   limit?: number;
 }
 
+class ProductImageUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  mime: string;
+
+  @IsString()
+  @IsNotEmpty()
+  filename: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  size: number;
+}
+
+class CompleteProductImageUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  key: string;
+
+  @IsString()
+  @IsNotEmpty()
+  mime: string;
+}
+
 class CreateCategoryDto {
   @IsString()
   @IsNotEmpty()
@@ -363,6 +388,26 @@ export class ProductsController {
       file.mimetype,
       file.filename,
     );
+  }
+
+  @Post('products/:id/image/upload-url')
+  @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  createImageUploadUrl(
+    @CurrentUser() user: { activeTenantId: string },
+    @Param('id') id: string,
+    @Body() body: ProductImageUploadDto,
+  ) {
+    return this.products.createImageUpload(user.activeTenantId, id, body);
+  }
+
+  @Post('products/:id/image/complete')
+  @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  completeImageUpload(
+    @CurrentUser() user: { activeTenantId: string },
+    @Param('id') id: string,
+    @Body() body: CompleteProductImageUploadDto,
+  ) {
+    return this.products.completeImageUpload(user.activeTenantId, id, body);
   }
 
   @Delete('products/:id/image')

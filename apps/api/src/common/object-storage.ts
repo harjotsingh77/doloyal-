@@ -27,6 +27,10 @@ function bucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET || DEFAULT_BUCKET;
 }
 
+export function storageBucketName(): string {
+  return bucketName();
+}
+
 /** Remote storage is used in production only — see the note above. */
 export function isRemoteStorageEnabled(): boolean {
   return process.env.NODE_ENV === 'production';
@@ -75,6 +79,34 @@ export async function putObject(
     .upload(key, body, { contentType, upsert: true });
 
   if (error) throw new Error(`Media upload failed: ${error.message}`);
+}
+
+export async function createSignedUpload(
+  key: string,
+): Promise<{ path: string; token: string }> {
+  const { data, error } = await requireClient()
+    .storage.from(bucketName())
+    .createSignedUploadUrl(key, { upsert: true });
+  if (error || !data) {
+    throw new Error(`Could not authorize media upload: ${error?.message || 'Unknown error'}`);
+  }
+  return { path: data.path, token: data.token };
+}
+
+export async function getObjectSize(key: string): Promise<number | null> {
+  const c = client();
+  if (!c) return null;
+  const slash = key.lastIndexOf('/');
+  const folder = slash >= 0 ? key.slice(0, slash) : '';
+  const name = slash >= 0 ? key.slice(slash + 1) : key;
+  const { data, error } = await c.storage.from(bucketName()).list(folder, {
+    search: name,
+    limit: 10,
+  });
+  if (error) return null;
+  const object = data?.find((row) => row.name === name);
+  const size = Number(object?.metadata?.size);
+  return Number.isFinite(size) ? size : null;
 }
 
 export async function getObject(key: string): Promise<Buffer | null> {

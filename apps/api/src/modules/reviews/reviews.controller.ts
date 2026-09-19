@@ -105,6 +105,14 @@ class SubmitReviewDto {
   @IsString()
   @IsOptional()
   thumbnailUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  videoStorageKey?: string;
+
+  @IsString()
+  @IsOptional()
+  videoMime?: string;
 }
 
 class CreateReviewDto {
@@ -144,6 +152,29 @@ class CreateReviewDto {
   @IsString()
   @IsOptional()
   customerId?: string;
+
+  @IsString()
+  @IsOptional()
+  videoStorageKey?: string;
+
+  @IsString()
+  @IsOptional()
+  videoMime?: string;
+}
+
+class VideoUploadUrlDto {
+  @IsString()
+  @IsNotEmpty()
+  mime: string;
+
+  @IsString()
+  @IsNotEmpty()
+  filename: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  size: number;
 }
 
 class RejectReviewDto {
@@ -250,6 +281,14 @@ export class ReviewsController {
       },
       { video: parsed.video },
     );
+  }
+
+  @Post('reviews/video/upload-url')
+  createVideoUploadUrl(
+    @CurrentUser() user: { activeTenantId: string },
+    @Body() dto: VideoUploadUrlDto,
+  ) {
+    return this.reviews.createVideoUpload(user.activeTenantId, dto);
   }
 
   @Get('reviews/:id')
@@ -377,5 +416,15 @@ export class ReviewsController {
       },
       { video: parsed.video, avatar: parsed.avatar },
     );
+  }
+
+  @Public()
+  @RateLimit(8, 3600)
+  @Post('public/reviews/:slug/video/upload-url')
+  createPublicVideoUploadUrl(
+    @Param('slug') slug: string,
+    @Body() dto: VideoUploadUrlDto,
+  ) {
+    return this.reviews.createPublicVideoUpload(slug, dto);
   }
 }

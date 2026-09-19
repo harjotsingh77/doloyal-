@@ -11,6 +11,6 @@ import { ReferralsJobsService } from './referrals-jobs.service';
     ReferralsRealtimeService,
     ReferralsJobsService,
   ],
-  exports: [ReferralsService, ReferralsRealtimeService],
+  exports: [ReferralsService, ReferralsRealtimeService, ReferralsJobsService],
 })
 export class ReferralsModule {}

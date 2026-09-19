@@ -96,20 +96,14 @@ export default function AdminWebsiteRequestDetailPage() {
 
   React.useEffect(() => {
     if (!projectId) return;
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeAdminWebsiteProjectEvents();
-      const refresh = () => {
-        void load();
-        window.dispatchEvent(new CustomEvent("admin-chat:refresh"));
-      };
-      ["project.status_changed", "project.assigned", "project.updated", "message.created", "file.uploaded"].forEach(
-        (ev) => es?.addEventListener(ev, refresh),
-      );
-    } catch {
-      /* polling fallback */
-    }
-    return () => es?.close();
+    const refresh = () => {
+      void load();
+      window.dispatchEvent(new CustomEvent("admin-chat:refresh"));
+    };
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 10_000);
+    return () => window.clearInterval(interval);
   }, [projectId, load]);
 
   if (loading) {

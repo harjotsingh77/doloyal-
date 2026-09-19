@@ -82,23 +82,17 @@ export default function WebsiteProjectPage() {
 
   React.useEffect(() => {
     if (!projectId) return;
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeWebsiteProjectEvents();
-      const refresh = () => {
-        void load();
-        window.dispatchEvent(new CustomEvent("website-chat:refresh"));
-      };
-      ["project.status_changed", "project.assigned", "project.updated", "message.created", "file.uploaded"].forEach(
-        (ev) => es?.addEventListener(ev, refresh),
-      );
-    } catch {
-      /* polling on tab focus below */
-    }
-    const onFocus = () => void load();
+    const refresh = () => {
+      void load();
+      window.dispatchEvent(new CustomEvent("website-chat:refresh"));
+    };
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 15_000);
+    const onFocus = refresh;
     window.addEventListener("focus", onFocus);
     return () => {
-      es?.close();
+      window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
   }, [projectId, load]);

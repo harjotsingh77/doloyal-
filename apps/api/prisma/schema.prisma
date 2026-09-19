@@ -8,6 +8,20 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Database-backed lease used by cron/scheduler jobs. Unlike PostgreSQL
+/// session advisory locks, this remains correct through Supabase's transaction
+/// pooler because ownership is persisted as data, not attached to a pooled
+/// server connection.
+model SchedulerLease {
+  key       String   @id
+  ownerId   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
 enum Role {
   OWNER
   MANAGER

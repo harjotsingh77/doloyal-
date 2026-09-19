@@ -104,30 +104,27 @@ export default function SupportTicketConversationPage() {
   const [text, setText] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const [sending, setSending] = React.useState(false);
-  const [pendingCount, setPendingCount] = React.useState(0);
   const endRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const [ticketRes, conv] = await Promise.all([
-          api.getSupportTicket(ticketId),
-          api.getSupportTicketMessages(ticketId),
-        ]);
-        if (!active) return;
-        setTicket(ticketRes);
-        setMessages(conv.messages);
-      } catch {
-        if (active) setError(true);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
+  const load = React.useCallback(async () => {
+    try {
+      const [ticketRes, conv] = await Promise.all([
+        api.getSupportTicket(ticketId),
+        api.getSupportTicketMessages(ticketId),
+      ]);
+      setTicket(ticketRes);
+      setMessages(conv.messages);
+      setError(false);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [ticketId]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   // Mark as read once loaded.
   React.useEffect(() => {
@@ -141,40 +138,18 @@ export default function SupportTicketConversationPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  // Realtime SSE.
+  // Serverless-safe near-realtime refresh. In-memory SSE publishers and
+  // subscribers can land on different Vercel instances.
   React.useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeSupportEvents();
-    } catch {
-      return;
-    }
-    const onMessage = (ev: MessageEvent<string>) => {
-      try {
-        const payload = JSON.parse(ev.data) as { type: string; ticketId: string; message?: Message };
-        if (!payload.ticketId || payload.ticketId !== ticketId) return;
-        if (payload.type === "message.created" && payload.message) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.message!.id)) return prev;
-            return [...prev, payload.message!];
-          });
-          setPendingCount((c) => c + 1);
-          void api.markSupportTicketRead(ticketId).catch(() => {});
-        } else if (payload.type === "ticket.status_changed" || payload.type === "ticket.updated") {
-          void api.getSupportTicket(ticketId).then(setTicket).catch(() => {});
-        }
-      } catch {
-        /* ignore malformed events */
-      }
-    };
-    es.addEventListener("message", onMessage);
-    es.addEventListener("support.event", onMessage);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void load();
+      void api.markSupportTicketRead(ticketId).catch(() => {});
+    }, 10_000);
     return () => {
-      es?.removeEventListener("message", onMessage);
-      es?.removeEventListener("support.event", onMessage);
-      es?.close();
+      window.clearInterval(interval);
     };
-  }, [ticketId]);
+  }, [ticketId, load]);
 
   const pickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -202,7 +177,6 @@ export default function SupportTicketConversationPage() {
       setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
       setText("");
       setFile(null);
-      setPendingCount(0);
       void api.markSupportTicketRead(ticketId).catch(() => {});
     } catch (err) {
       // Surface a console warning; keep input so the user doesn't lose their message.

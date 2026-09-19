@@ -8,6 +8,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter';
 import { LoggingInterceptor } from './common/logging.interceptor';
 import { TransformInterceptor } from './common/transform.interceptor';
 import { getAllowedOrigins } from './common/helpers';
+import { validateVercelProductionEnv } from './common/production-env';
 
 // @nestjs/platform-fastify mishandles handler errors thrown before the first
 // `await` when the request carries a parsed JSON body (the rejection escapes
@@ -27,6 +28,7 @@ async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (isProduction) {
+    if (process.env.VERCEL) validateVercelProductionEnv();
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret || jwtSecret === 'doloyal-jwt-secret-dev' || jwtSecret.length < 32) {
       throw new Error(

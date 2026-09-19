@@ -130,17 +130,10 @@ export default function AdminSupportPage() {
   }, [status, priority, category, debouncedSearch]);
 
   React.useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeAdminSupportEvents();
-      const refresh = () => void load();
-      ["ticket.created", "ticket.status_changed", "ticket.assigned", "message.created", "ticket.updated", "file.uploaded"].forEach(
-        (ev) => es?.addEventListener(ev, refresh),
-      );
-    } catch {
-      /* fallback: no realtime */
-    }
-    return () => es?.close();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => window.clearInterval(interval);
   }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

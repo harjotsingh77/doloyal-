@@ -11,7 +11,7 @@ Browser (https://doloyal.com)
 Vercel — Next.js web app  (apps/web)
    │  server-side proxy reads API_BASE_URL
    ▼
-Render — NestJS API  (apps/api)
+Vercel — NestJS API project  (apps/api)
    │  Prisma
    ▼
 Supabase — PostgreSQL
@@ -63,7 +63,7 @@ dev` needs no cloud setup.)
 3. No bucket policies are needed: the API uses the `service_role` key, which
    bypasses row-level security.
 
-If you name the bucket something else, set `SUPABASE_STORAGE_BUCKET` on Render
+If you name the bucket something else, set `SUPABASE_STORAGE_BUCKET` on the API Vercel project
 to match.
 
 ### Create the schema
@@ -89,23 +89,58 @@ pnpm --filter @doloyal/api exec prisma migrate status
 
 ---
 
-## Step 2 — Render (API)
+## Step 2 — Vercel (API)
 
-1. Render Dashboard → **New → Blueprint** → select this repository.
-   Render reads `render.yaml` at the repo root and creates the `doloyal-api`
-   service, prompting for each secret.
-2. Fill in the prompted values (the table below marks which).
-3. Deploy, then confirm:
+Create a **second Vercel project** from this same repository. Do not change the
+existing frontend project's root directory.
+
+1. Vercel Dashboard → **Add New → Project** → import this repository again.
+2. Name it `doloyal-api`.
+3. Set **Root Directory** to `apps/api`.
+   Enable **Include source files outside of the Root Directory** so the
+   `@doloyal/shared` workspace package and root pnpm lockfile are available.
+4. Leave Framework Preset on auto-detect. Vercel recognizes NestJS from
+   `src/main.ts` and deploys it as one Fluid Compute function.
+5. Add every variable in the “Vercel API project” table below to Production
+   (and Preview if preview APIs should work).
+6. Deploy, then confirm:
 
 ```bash
-curl https://<your-service>.onrender.com/health
-# {"status":"ok","service":"doloyal-api","database":"ok",...}
+curl https://<backend-project>.vercel.app/health
+# {"data":{"status":"ok","service":"doloyal-api","database":"ok",...}}
 ```
 
-`database` must read `ok`. If it reads `unavailable`, `DATABASE_URL` is wrong.
+`database` must read `ok`. The API intentionally refuses to boot on Vercel if
+`DATABASE_URL` is not the port-6543 transaction pooler URL with
+`pgbouncer=true&connection_limit=1`.
 
-> **Do not use Render's free plan.** It sleeps after 15 minutes idle, and the
-> ~50s cold start makes the dashboard look broken. `render.yaml` sets `starter`.
+### Scheduled jobs on the Hobby plan
+
+Hobby Vercel Cron only runs daily, while Doloyal needs minute/hour schedules.
+Use **Supabase Cron** (Database → Cron Jobs) to send authenticated GET requests
+to the API. Store the same `CRON_SECRET` in Supabase Vault as
+`doloyal_cron_secret`, then configure:
+
+| Schedule | API path |
+| --- | --- |
+| `* * * * *` | `/internal/cron/campaigns` |
+| `* * * * *` | `/internal/cron/workflows` |
+| `*/2 * * * *` | `/internal/cron/referrals/leaderboards` |
+| `*/3 * * * *` | `/internal/cron/referrals/pending-rewards` |
+| `*/5 * * * *` | `/internal/cron/referrals/expire-campaigns` |
+| `*/5 * * * *` | `/internal/cron/referrals/aggregate-sources` |
+| `*/10 * * * *` | `/internal/cron/referrals/expire-links` |
+| `*/15 * * * *` | `/internal/cron/referrals/fraud-scan` |
+| `0 * * * *` | `/internal/cron/appointments` |
+
+Each request must include:
+
+```text
+Authorization: Bearer <CRON_SECRET>
+```
+
+The API uses expiring database-backed scheduler leases, so overlapping calls are skipped
+instead of sending a campaign, reward, or reminder twice.
 
 ---
 
@@ -119,7 +154,7 @@ Production.
 
 | Variable | Value |
 | --- | --- |
-| `API_BASE_URL` | `https://<your-service>.onrender.com` (no trailing slash) |
+| `API_BASE_URL` | `https://<backend-project>.vercel.app` (no trailing slash) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `NEXT_PUBLIC_APP_URL` | `https://doloyal.com` |
@@ -156,28 +191,29 @@ registration. Because the canonical domain changed to apex, re-register:
 node scripts/register-resend-oauth.mjs --app-url https://doloyal.com
 ```
 
-Put the returned `client_id` in `RESEND_OAUTH_CLIENT_ID` on Render. There is no
+Put the returned `client_id` in `RESEND_OAUTH_CLIENT_ID` on the API Vercel project. There is no
 client secret.
 
 ---
 
 ## Environment variable reference
 
-### Render (API)
+### Vercel API project
 
 | Variable | Required | Without it |
 | --- | --- | --- |
-| `DATABASE_URL` | **Yes** | API starts but every request 500s |
+| `DATABASE_URL` | **Yes** | Supabase transaction pooler, port 6543, with `?pgbouncer=true&connection_limit=1`; API refuses to boot if wrong |
 | `DIRECT_URL` | **Yes** | Migrations fail |
 | `JWT_SECRET` | **Yes** | API refuses to boot (must be ≥32 chars) |
 | `ENCRYPTION_KEY` | **Yes** | Stored integration credentials cannot be decrypted |
+| `CRON_SECRET` | **Yes** | Supabase Cron requests are rejected; generate a separate random 32+ byte value |
 | `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Login fails — the API verifies Supabase tokens |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Login fails |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Product/review image uploads fail with a configuration error |
 | `SUPABASE_STORAGE_BUCKET` | No | Defaults to `doloyal-media` |
 | `APP_URL` | Yes | Links in emails/booking pages fall back to `https://doloyal.com` |
 | `CORS_ORIGIN` | No | Falls back to apex + www + localhost |
-| `PORT` | Auto | Injected by Render |
+| `NODE_ENV` | No | Vercel sets production automatically |
 | `OPENROUTER_API_KEY` | For AI | Doloyal AI returns a configuration error |
 | `WEBSITE_AI_API_KEY` | For website builder | Website generation disabled |
 | `RESEND_API_KEY` | For auth email | Password-reset and staff-invite emails **fail silently** — the API still returns success, so users see no error and never get the mail |
@@ -186,6 +222,21 @@ client secret.
 | `RAZORPAY_KEY_ID` / `_SECRET` | For payments (India) | Checkout unavailable |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | For payments (intl) | Checkout + webhooks unavailable |
 | `META_WEBHOOK_VERIFY_TOKEN` | For WhatsApp | Meta webhook handshake fails |
+
+Sources:
+
+- Supabase → **Connect**: `DATABASE_URL` (Transaction pooler) and
+  `DIRECT_URL` (Direct connection).
+- Supabase → **Project Settings → API**: project URL, anon key, and
+  service-role key.
+- Generate `JWT_SECRET`, `ENCRYPTION_KEY`, and `CRON_SECRET` separately with
+  `openssl rand -base64 48`; never reuse one secret for another purpose.
+- OpenRouter/OpenAI provider dashboard: AI key. NVIDIA Build: `WEBSITE_AI_API_KEY`.
+- Resend dashboard: platform `RESEND_API_KEY`; the OAuth registration script
+  returns `RESEND_OAUTH_CLIENT_ID`.
+- Google Cloud Console: Calendar OAuth client ID and secret.
+- Razorpay/Stripe dashboards: live keys and webhook signing secrets.
+- Meta Developer dashboard: WhatsApp webhook verify token.
 
 `ENCRYPTION_KEY` warning: rotating it orphans every already-encrypted
 integration credential. To rotate safely, move the old value into
@@ -222,7 +273,7 @@ Run locally exactly as before with `pnpm dev`.
 
 ```bash
 # 1. API is up and reaching the database
-curl https://<service>.onrender.com/health
+curl https://<backend-project>.vercel.app/health
 
 # 2. Vercel proxy reaches the API (this is the endpoint that was 503ing)
 curl https://doloyal.com/backend/health
@@ -233,3 +284,11 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://www.doloyal.com
 
 Step 2 returning the same JSON as step 1 means the original dashboard failure
 is resolved.
+
+Configure provider webhooks against the API project directly so signature
+verification receives the provider payload without an extra proxy hop:
+
+```text
+Stripe:   https://<backend-project>.vercel.app/integrations/webhook/stripe
+WhatsApp: https://<backend-project>.vercel.app/integrations/webhook/whatsapp
+```

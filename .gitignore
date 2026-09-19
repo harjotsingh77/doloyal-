@@ -27,6 +27,7 @@ apps/api/prisma/migrations/dev.db*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+.vercel/
 .claude/
 coverage/
 *.log

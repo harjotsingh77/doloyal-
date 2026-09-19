@@ -39,6 +39,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ProductsModule } from './modules/products/products.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { InternalCronModule } from './modules/internal-cron/internal-cron.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { OrdersModule } from './modules/orders/orders.module';
     ReviewsModule,
     ProductsModule,
     OrdersModule,
+    InternalCronModule,
   ],
   providers: [
     Reflector,

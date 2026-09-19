@@ -104,86 +104,53 @@ With the seed loaded, you'll land on a dashboard pre-populated with 90 days of r
 
 ## Production deployment
 
-The monorepo deploys as **three isolated applications**. Each Vercel project uses its own
-**Root Directory** so builds never pull unrelated workspaces into scope.
+The monorepo deploys as **two Vercel projects** from the same repository:
 
-| Application | Path            | Package          | Domain             | Host          |
-| ----------- | --------------- | ---------------- | ------------------ | ------------- |
-| Landing     | `apps/landing`  | `@doloyal/landing` | `doloyal.com`      | Vercel        |
-| SaaS app    | `apps/web`      | `@doloyal/web`   | `www.doloyal.com`  | Vercel        |
-| API         | `apps/api`      | `@doloyal/api`   | `api.<you>.com`    | Render        |
+| Application | Root directory | Domain | Runtime |
+| --- | --- | --- | --- |
+| SaaS + marketing | repository root (`apps/web` build) | `doloyal.com` | Next.js |
+| API | `apps/api` | `<project>.vercel.app` | NestJS Fluid Compute |
 
-### Vercel (landing + SaaS)
+The frontend browser uses same-origin `/backend/*`; Vercel's Next.js route
+proxies those requests to the server-only `API_BASE_URL`. Do not set
+`NEXT_PUBLIC_API_BASE_URL` in production.
 
-Each Vercel project reads its own `vercel.json` inside the app folder. No root-level
-`vercel.json` build is used, and `pnpm install --frozen-lockfile` resolves the whole
-workspace from the repo lockfile.
+### Vercel frontend
 
-- **Project settings** → set **Root Directory** to the app folder (`apps/landing` / `apps/web`).
-- Framework is auto-detected as Next.js; install/build commands come from the app's `vercel.json`.
-- Prisma Client is generated deterministically on install via the root `postinstall`
-  script (`prisma generate --schema=apps/api/prisma/schema.prisma`), so no deployment
-  ever needs schema auto-discovery — the `@prisma/client` schema warning cannot occur.
+The repository-root `vercel.json` builds `@doloyal/web`. Required variables:
 
-**Landing (`apps/landing/vercel.json`)**
-- Build: `pnpm turbo run build --filter=@doloyal/landing...`
-- Output: `.next`
-- No environment variables required (static marketing site).
+- `API_BASE_URL=https://<api-project>.vercel.app`
+- `NEXT_PUBLIC_APP_URL=https://doloyal.com`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-**SaaS (`apps/web/vercel.json`)**
-- Build: `pnpm turbo run build --filter=@doloyal/web...` (builds `@doloyal/shared` + `@doloyal/ui` first)
-- Output: `.next`
-- Required env vars (build-time — a missing value silently bakes a broken value into the bundle):
-  - `NEXT_PUBLIC_API_BASE_URL` → `https://<your-api-domain>` (the Render API URL)
-  - `NEXT_PUBLIC_APP_URL` → `https://www.doloyal.com`
-  - `NEXT_PUBLIC_SUPABASE_URL` → e.g. `https://tppkzjslmyoavvcyzhjg.supabase.co`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → the Supabase public anon key
+### Vercel API
 
-> **Why Google login was failing:** `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`
-> were unset, so the bundle referenced `https://placeholder.supabase.co` and Google OAuth
-> was never configured. **Why every API call failed:** `NEXT_PUBLIC_API_BASE_URL` was unset,
-> so the bundle called `http://localhost:4000`. Verify with
-> `https://www.doloyal.com/_next/static/...` — these env vars must be set **before** the
-> next production build.
+Import the repository a second time, set **Root Directory** to `apps/api`, and
+enable source files outside the root so `@doloyal/shared` is included. Vercel
+detects `src/main.ts` automatically; `apps/api/vercel.json` sets the Hobby
+function duration.
 
-### API (Render)
+The API uses Supabase's port-6543 transaction pooler at runtime, signed direct
+Storage uploads for media over Vercel's 4.5 MB payload limit, database-backed
+scheduler leases, and Supabase Cron instead of process timers. Request-bound AI
+streaming remains enabled; cross-instance UI updates use 10–15 second polling.
 
-The API is a long-running NestJS + Fastify server with SSE streaming and file uploads —
-it is **not** Vercel-serverless compatible. Deploy it as a container (Render, Railway,
-Fly.io, ECS, or any Docker host).
+Required variables and exact setup, including Hobby cron SQL, are documented in
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-**Render blueprint**
+Apply production migrations before testing:
 
-1. New → **Web Service** → connect the GitHub repo.
-2. **Root Directory:** `apps/api`
-3. **Build Command:** `pnpm install --frozen-lockfile && pnpm build`
-4. **Start Command:** `node dist/main.js`
-5. **Instance Type:** Starter (the AI streaming + SSE needs a persistent process).
-6. Required env vars (see `.env.example` for full list and comments):
-   - `NODE_ENV=production`
-   - `DATABASE_URL` → Postgres/Supabase connection string
-   - `DIRECT_URL` → Port 5432 direct URL (migrations only)
-   - `JWT_SECRET` → strong random string ≥ 32 chars (API refuses to boot otherwise)
-   - `CORS_ORIGIN` → `https://www.doloyal.com,http://localhost:3000`
-   - `AI_PROVIDER` → `openrouter` (recommended)
-   - `AI_MODEL` → `openai/gpt-4o-mini`
-   - `OPENROUTER_API_KEY` → provider key
-   - `SUPABASE_SERVICE_ROLE_KEY` → server-only Supabase key
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` → Google integration
-   - `RESEND_OAUTH_CLIENT_ID` → Resend OAuth client ID (see "Resend" setup below)
-7. Apply migrations once against the production DB (from a machine with the repo):
-   ```bash
-   pnpm db:deploy   # prisma migrate deploy (safe for production — never reset)
-   ```
-8. Set the web app's `NEXT_PUBLIC_API_BASE_URL` to the Render service URL
-   (`https://<service>.onrender.com`) and redeploy the Vercel project.
+```bash
+pnpm --filter @doloyal/api exec prisma migrate deploy
+```
 
 ### Supabase & Google Cloud (one-time setup)
 
 - **Supabase Dashboard** → Auth → Providers → enable **Google** with the OAuth client
   ID/secret, and add both callback URLs to **Redirect URLs**:
   - `http://localhost:3000/auth/callback`
-  - `https://www.doloyal.com/auth/callback`
+  - `https://doloyal.com/auth/callback`
 - **Google Cloud Console** → OAuth consent screen → add the same authorized redirect URIs.
 - Copy the project URL, anon key, and service-role key into the env vars above.
 
@@ -195,7 +162,7 @@ never holds a Resend API key. The flow is OAuth 2.1 with PKCE on a **public clie
 
 1. Register Doloyal as a Resend OAuth client (Dynamic Client Registration):
    ```bash
-   node scripts/register-resend-oauth.mjs --app-url https://www.doloyal.com   # prod
+   node scripts/register-resend-oauth.mjs --app-url https://doloyal.com   # prod
    node scripts/register-resend-oauth.mjs --app-url http://localhost:3000      # local
    ```
 2. Put the returned `client_id` in the API env as `RESEND_OAUTH_CLIENT_ID`.

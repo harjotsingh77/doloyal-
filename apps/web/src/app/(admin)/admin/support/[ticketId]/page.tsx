@@ -91,20 +91,14 @@ export default function AdminSupportTicketPage() {
 
   React.useEffect(() => {
     if (!ticketId) return;
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeAdminSupportEvents();
-      const refresh = () => {
-        void load();
-        window.dispatchEvent(new CustomEvent("admin-support:refresh"));
-      };
-      ["ticket.status_changed", "ticket.assigned", "ticket.updated", "message.created", "file.uploaded"].forEach(
-        (ev) => es?.addEventListener(ev, refresh),
-      );
-    } catch {
-      /* polling fallback */
-    }
-    return () => es?.close();
+    const refresh = () => {
+      void load();
+      window.dispatchEvent(new CustomEvent("admin-support:refresh"));
+    };
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 10_000);
+    return () => window.clearInterval(interval);
   }, [ticketId, load]);
 
   if (loading) {

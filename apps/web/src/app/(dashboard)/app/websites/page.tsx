@@ -110,13 +110,10 @@ export default function WebsiteBuilderPage() {
 
   React.useEffect(() => {
     void load();
-    const es = api.subscribeWebsiteProjectEvents();
-    const refresh = () => void load();
-    ["project.created", "project.status_changed", "project.assigned", "message.created", "project.updated"].forEach(
-      (ev) => es?.addEventListener(ev, refresh),
-    );
-    es?.addEventListener("error", () => {});
-    return () => es?.close();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => window.clearInterval(interval);
   }, [load]);
 
   React.useEffect(() => {

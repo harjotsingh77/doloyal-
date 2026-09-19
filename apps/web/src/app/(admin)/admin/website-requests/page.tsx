@@ -62,17 +62,10 @@ export default function AdminWebsiteRequestsPage() {
   }, [status, debouncedSearch]);
 
   React.useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeAdminWebsiteProjectEvents();
-      const refresh = () => void load();
-      ["project.created", "project.status_changed", "project.assigned", "message.created", "project.updated", "file.uploaded"].forEach(
-        (ev) => es?.addEventListener(ev, refresh),
-      );
-    } catch {
-      /* fallback: no realtime */
-    }
-    return () => es?.close();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => window.clearInterval(interval);
   }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

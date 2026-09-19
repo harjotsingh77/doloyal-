@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { SchedulerLockService } from '../../common/scheduler-lock.service';
 import { BookingNotificationsService } from '../booking-links/booking-notifications.service';
 
 /**
@@ -16,28 +17,35 @@ export class AppointmentReminderService implements OnModuleInit, OnModuleDestroy
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: BookingNotificationsService,
+    private readonly lock: SchedulerLockService,
   ) {}
 
   onModuleInit() {
-    this.timer = setInterval(() => void this.tick(), 60 * 60 * 1000);
-    setTimeout(() => void this.tick(), 30_000);
+    if (process.env.VERCEL) return;
+    this.timer = setInterval(() => void this.runOnce(), 60 * 60 * 1000);
+    setTimeout(() => void this.runOnce(), 30_000);
   }
 
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
   }
 
-  private async tick() {
-    if (this.running) return;
+  async runOnce(): Promise<{ sent: number; skipped: boolean }> {
+    if (this.running) return { sent: 0, skipped: true };
+    const lockKey = 'scheduler:appointments:reminders';
+    if (!(await this.lock.tryAcquire(lockKey))) return { sent: 0, skipped: true };
     this.running = true;
+    let sent = 0;
     try {
-      const sent = await this.processDueReminders();
+      sent = await this.processDueReminders();
       if (sent > 0) this.logger.log(`Appointment reminders sent: ${sent}`);
     } catch (err: any) {
       this.logger.warn(`Appointment reminder tick failed: ${err?.message}`);
     } finally {
       this.running = false;
+      await this.lock.release(lockKey);
     }
+    return { sent, skipped: false };
   }
 
   /** Find appointments starting within the 24h window and email reminders. */

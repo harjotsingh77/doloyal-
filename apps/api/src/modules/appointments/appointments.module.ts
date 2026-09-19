@@ -11,6 +11,6 @@ import { BookingLinksModule } from '../booking-links/booking-links.module';
   imports: [ReferralsModule, WorkflowsModule, IntegrationsModule, BookingLinksModule],
   controllers: [AppointmentsController],
   providers: [AppointmentsService, AppointmentReminderService],
-  exports: [AppointmentsService],
+  exports: [AppointmentsService, AppointmentReminderService],
 })
 export class AppointmentsModule {}

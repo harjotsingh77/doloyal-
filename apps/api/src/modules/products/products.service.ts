@@ -7,6 +7,13 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
+import { randomUUID } from 'crypto';
+import {
+  createSignedUpload,
+  deleteObject,
+  getObjectSize,
+  storageBucketName,
+} from '../../common/object-storage';
 import {
   copyProductImage,
   deleteProductImage,
@@ -443,6 +450,51 @@ export class ProductsService {
       await deleteProductImage(current.imageUrl);
     }
     return this.update(tenantId, id, { imageUrl: key });
+  }
+
+  async createImageUpload(
+    tenantId: string,
+    id: string,
+    input: { mime: string; filename: string; size: number },
+  ) {
+    const mime = (input.mime || '').toLowerCase();
+    if (!isProductImageMime(mime)) {
+      throw new BadRequestException('Unsupported image type. Use PNG, JPEG, WebP, GIF or AVIF.');
+    }
+    if (!Number.isFinite(input.size) || input.size < 1 || input.size > PRODUCT_IMAGE_MAX_BYTES) {
+      throw new BadRequestException('Image must be under 12MB');
+    }
+    const current = await this.prisma.product.findFirst({ where: { id, tenantId } });
+    if (!current) throw new NotFoundException('Product not found');
+
+    const key = `products/${tenantId}/${randomUUID()}${productImageExt(mime, input.filename)}`;
+    const signed = await createSignedUpload(key);
+    return { ...signed, key, bucket: storageBucketName() };
+  }
+
+  async completeImageUpload(
+    tenantId: string,
+    id: string,
+    input: { key: string; mime: string },
+  ) {
+    const expectedPrefix = `products/${tenantId}/`;
+    if (!input.key?.startsWith(expectedPrefix) || !isProductImageMime(input.mime || '')) {
+      throw new BadRequestException('Invalid product image upload.');
+    }
+    const size = await getObjectSize(input.key);
+    if (size === null || size < 1 || size > PRODUCT_IMAGE_MAX_BYTES) {
+      await deleteObject(input.key);
+      throw new BadRequestException('Uploaded image is missing or exceeds 12MB.');
+    }
+    const current = await this.prisma.product.findFirst({ where: { id, tenantId } });
+    if (!current) {
+      await deleteObject(input.key);
+      throw new NotFoundException('Product not found');
+    }
+    if (current.imageUrl && current.imageUrl !== input.key) {
+      await deleteProductImage(current.imageUrl);
+    }
+    return this.update(tenantId, id, { imageUrl: input.key });
   }
 
   async clearImage(tenantId: string, id: string) {

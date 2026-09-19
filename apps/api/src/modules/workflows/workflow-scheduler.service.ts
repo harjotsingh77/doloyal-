@@ -5,7 +5,7 @@ import { SchedulerLockService } from '../../common/scheduler-lock.service';
 /**
  * Drives the workflow scheduler: resumes due delays/retries and evaluates
  * scan-style triggers (inactive / birthday / membership expiring).
- * Runs server-side only — never in the browser. A Postgres advisory lock
+ * Runs server-side only — never in the browser. A database-backed lease
  * keeps exactly one dispatcher active across API replicas.
  */
 @Injectable()
@@ -20,21 +20,25 @@ export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.timer = setInterval(() => void this.tick(), 60_000);
-    setTimeout(() => void this.tick(), 10_000);
+    if (process.env.VERCEL) return;
+    this.timer = setInterval(() => void this.runOnce(), 60_000);
+    setTimeout(() => void this.runOnce(), 10_000);
   }
 
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
   }
 
-  private async tick() {
-    if (this.running) return;
+  async runOnce(): Promise<{ resumed: number; enqueued: number; skipped: boolean }> {
+    if (this.running) return { resumed: 0, enqueued: 0, skipped: true };
     const lockKey = 'scheduler:workflows:tick';
-    if (!(await this.lock.tryAcquire(lockKey))) return;
+    if (!(await this.lock.tryAcquire(lockKey))) {
+      return { resumed: 0, enqueued: 0, skipped: true };
+    }
     this.running = true;
+    let result = { resumed: 0, enqueued: 0 };
     try {
-      const result = await this.engine.processDueRuns();
+      result = await this.engine.processDueRuns();
       if (result.resumed > 0 || result.enqueued > 0) {
         this.logger.log(`Workflow scheduler: resumed ${result.resumed}, enqueued ${result.enqueued}`);
       }
@@ -44,5 +48,6 @@ export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
       this.running = false;
       await this.lock.release(lockKey);
     }
+    return { ...result, skipped: false };
   }
 }

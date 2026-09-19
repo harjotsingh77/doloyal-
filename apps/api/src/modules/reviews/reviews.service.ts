@@ -6,10 +6,18 @@ import {
 import { Prisma, ReviewStatus, ReviewType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { logActivity } from '../../common/customer-commerce';
+import { randomUUID } from 'crypto';
+import {
+  createSignedUpload,
+  deleteObject,
+  getObjectSize,
+  storageBucketName,
+} from '../../common/object-storage';
 import {
   VIDEO_MAX_BYTES,
   IMAGE_MAX_BYTES,
   deleteReviewMedia,
+  extForMime,
   isImageMime,
   isStoredMediaKey,
   isVideoMime,
@@ -391,6 +399,8 @@ export class ReviewsService {
       honeypot?: string;
       authorAvatarUrl?: string;
       thumbnailUrl?: string;
+      videoStorageKey?: string;
+      videoMime?: string;
     },
     files?: { video?: { buffer: Buffer; mime: string; filename: string }; avatar?: { buffer: Buffer; mime: string; filename: string } },
   ) {
@@ -401,7 +411,7 @@ export class ReviewsService {
       rating: dto.rating,
       body: dto.body,
       type: dto.type,
-      hasVideo: Boolean(files?.video),
+      hasVideo: Boolean(files?.video || dto.videoStorageKey),
     });
 
     const tenant = await this.resolveTenantFromSlug(slug);
@@ -431,6 +441,12 @@ export class ReviewsService {
         filename: files.video.filename,
       });
       videoUrl = saved.key;
+    } else if (dto.videoStorageKey) {
+      videoUrl = await this.validateStoredVideo(
+        tenant.id,
+        dto.videoStorageKey,
+        dto.videoMime || '',
+      );
     }
 
     if (files?.avatar) {
@@ -476,6 +492,46 @@ export class ReviewsService {
     };
   }
 
+  async createVideoUpload(
+    tenantId: string,
+    input: { mime: string; filename: string; size: number },
+  ) {
+    const mime = (input.mime || '').toLowerCase();
+    if (!isVideoMime(mime)) {
+      throw new BadRequestException('Upload an MP4 or WebM video.');
+    }
+    if (!Number.isFinite(input.size) || input.size < 1 || input.size > VIDEO_MAX_BYTES) {
+      throw new BadRequestException('Video must be under 40MB.');
+    }
+    const key = `reviews/${tenantId}/${randomUUID()}${extForMime(mime, input.filename)}`;
+    const signed = await createSignedUpload(key);
+    return { ...signed, key, bucket: storageBucketName() };
+  }
+
+  async createPublicVideoUpload(
+    slug: string,
+    input: { mime: string; filename: string; size: number },
+  ) {
+    const tenant = await this.resolveTenantFromSlug(slug);
+    return this.createVideoUpload(tenant.id, input);
+  }
+
+  private async validateStoredVideo(
+    tenantId: string,
+    key: string,
+    mime: string,
+  ): Promise<string> {
+    if (!key.startsWith(`reviews/${tenantId}/`) || !isVideoMime(mime)) {
+      throw new BadRequestException('Invalid review video upload.');
+    }
+    const size = await getObjectSize(key);
+    if (size === null || size < 1 || size > VIDEO_MAX_BYTES) {
+      await deleteObject(key);
+      throw new BadRequestException('Uploaded video is missing or exceeds 40MB.');
+    }
+    return key;
+  }
+
   async createOwner(
     tenantId: string,
     userId: string,
@@ -488,6 +544,8 @@ export class ReviewsService {
       authorAvatarUrl?: string;
       thumbnailUrl?: string;
       customerId?: string;
+      videoStorageKey?: string;
+      videoMime?: string;
     },
     files?: { video?: { buffer: Buffer; mime: string; filename: string } },
   ) {
@@ -496,9 +554,9 @@ export class ReviewsService {
       rating: dto.rating,
       body: dto.body,
       type: dto.type,
-      hasVideo: Boolean(files?.video) || dto.type === 'VIDEO',
+      hasVideo: Boolean(files?.video || dto.videoStorageKey) || dto.type === 'VIDEO',
     });
-    if (parsed.type === 'VIDEO' && !files?.video) {
+    if (parsed.type === 'VIDEO' && !files?.video && !dto.videoStorageKey) {
       throw new BadRequestException('Upload a short video to continue.');
     }
 
@@ -517,6 +575,12 @@ export class ReviewsService {
         filename: files.video.filename,
       });
       videoUrl = saved.key;
+    } else if (dto.videoStorageKey) {
+      videoUrl = await this.validateStoredVideo(
+        tenantId,
+        dto.videoStorageKey,
+        dto.videoMime || '',
+      );
     }
 
     const status: ReviewStatus = dto.status === 'PENDING' ? 'PENDING' : 'APPROVED';

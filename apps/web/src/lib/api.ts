@@ -28,6 +28,7 @@ import type { ApiResponse, Paginated } from "@doloyal/shared";
 import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
+import { supabase } from "./supabase";
 
 function apiBase(): string {
   return getApiBaseUrl();
@@ -141,6 +142,46 @@ async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mo
   }
 }
 
+async function uploadToSignedStorage(
+  endpoint: string,
+  file: File,
+): Promise<{ key: string }> {
+  const signed = await request<{
+    path: string;
+    token: string;
+    key: string;
+    bucket: string;
+  }>(endpoint, {
+    method: "POST",
+    body: JSON.stringify({
+      mime: file.type || "application/octet-stream",
+      filename: file.name || "upload",
+      size: file.size,
+    }),
+  });
+  const { error } = await supabase.storage
+    .from(signed.bucket)
+    .uploadToSignedUrl(signed.path, signed.token, file, {
+      contentType: file.type || "application/octet-stream",
+    });
+  if (error) throw new ApiError(502, "UPLOAD_FAILED", error.message);
+  return { key: signed.key };
+}
+
+function formString(form: FormData, key: string): string | undefined {
+  const value = form.get(key);
+  return typeof value === "string" && value.length ? value : undefined;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export const api = {
   getMe: () => withFallback(() => request<AuthUser>("/auth/me"), "getMe"),
 
@@ -246,6 +287,17 @@ export const api = {
     request<ProductCategory>("/products/categories", { method: "POST", body: JSON.stringify(data) }),
 
   uploadProductImage: async (id: string, file: File) => {
+    if (process.env.NODE_ENV === "production") {
+      const signed = await uploadToSignedStorage(
+        `/products/${encodeURIComponent(id)}/image/upload-url`,
+        file,
+      );
+      return request<CatalogProduct>(`/products/${encodeURIComponent(id)}/image/complete`, {
+        method: "POST",
+        body: JSON.stringify({ key: signed.key, mime: file.type }),
+      });
+    }
+
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const form = new FormData();
@@ -1604,6 +1656,29 @@ export const api = {
     request<Review>("/reviews", { method: "POST", body: JSON.stringify(data) }),
 
   createVideoReview: async (form: FormData) => {
+    if (process.env.NODE_ENV === "production") {
+      const file = form.get("file");
+      if (!(file instanceof File)) {
+        throw new ApiError(400, "UPLOAD_REQUIRED", "Choose a video to continue.");
+      }
+      const signed = await uploadToSignedStorage("/reviews/video/upload-url", file);
+      return request<Review>("/reviews", {
+        method: "POST",
+        body: JSON.stringify({
+          name: formString(form, "name"),
+          rating: Number(formString(form, "rating")),
+          body: formString(form, "body"),
+          type: "VIDEO",
+          status: formString(form, "status"),
+          authorAvatarUrl: formString(form, "authorAvatarUrl"),
+          thumbnailUrl: formString(form, "thumbnailUrl"),
+          customerId: formString(form, "customerId"),
+          videoStorageKey: signed.key,
+          videoMime: file.type,
+        }),
+      });
+    }
+
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const headers: Record<string, string> = {};
@@ -1663,6 +1738,41 @@ export const api = {
     }),
 
   submitPublicVideoReview: async (slug: string, form: FormData) => {
+    if (process.env.NODE_ENV === "production") {
+      const file = form.get("file");
+      if (!(file instanceof File)) {
+        throw new ApiError(400, "UPLOAD_REQUIRED", "Choose a video to continue.");
+      }
+      const signed = await uploadToSignedStorage(
+        `/public/reviews/${encodeURIComponent(slug)}/video/upload-url`,
+        file,
+      );
+      const avatar = form.get("avatar");
+      const authorAvatarUrl =
+        avatar instanceof File
+          ? await fileToDataUrl(avatar)
+          : formString(form, "authorAvatarUrl") || formString(form, "avatar");
+      return request<{ message: string; review: Review }>(
+        `/public/reviews/${encodeURIComponent(slug)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: formString(form, "name"),
+            phone: formString(form, "phone"),
+            email: formString(form, "email"),
+            rating: Number(formString(form, "rating")),
+            body: formString(form, "body"),
+            type: "VIDEO",
+            honeypot: formString(form, "honeypot"),
+            authorAvatarUrl,
+            thumbnailUrl: formString(form, "thumbnailUrl"),
+            videoStorageKey: signed.key,
+            videoMime: file.type,
+          }),
+        },
+      );
+    }
+
     assertApiBaseUrlConfigured();
     const res = await fetch(`${apiBase()}/public/reviews/${encodeURIComponent(slug)}/video`, {
       method: "POST",

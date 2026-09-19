@@ -245,30 +245,11 @@ export default function ReferralsPage() {
 
   React.useEffect(() => {
     void load();
-    const t = setInterval(() => void load({ soft: true }), 20000);
-    let es: EventSource | null = null;
-    try {
-      es = api.subscribeReferralEvents();
-      const refresh = () => void load({ soft: true });
-      [
-        "LINK_CREATED",
-        "LINK_SHARED",
-        "LINK_OPENED",
-        "LANDING_VIEWED",
-        "REGISTRATION_COMPLETED",
-        "APPOINTMENT_BOOKED",
-        "REWARD_CREDITED",
-        "LEADERBOARD_UPDATED",
-        "CAMPAIGN_CREATED",
-        "CAMPAIGN_UPDATED",
-      ].forEach((ev) => es?.addEventListener(ev, refresh));
-      es.onmessage = refresh;
-    } catch {
-      /* polling remains */
-    }
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") void load({ soft: true });
+    }, 15000);
     return () => {
       clearInterval(t);
-      es?.close();
     };
   }, [load]);
 

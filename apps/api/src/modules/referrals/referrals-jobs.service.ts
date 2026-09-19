@@ -2,6 +2,15 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { PrismaService } from '../../common/prisma.service';
 import { ReferralsService } from './referrals.service';
 import { ReferralsRealtimeService } from './referrals-realtime.service';
+import { SchedulerLockService } from '../../common/scheduler-lock.service';
+
+export type ReferralJobName =
+  | 'expire-campaigns'
+  | 'expire-links'
+  | 'leaderboards'
+  | 'pending-rewards'
+  | 'aggregate-sources'
+  | 'fraud-scan';
 
 @Injectable()
 export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
@@ -12,32 +21,53 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly referrals: ReferralsService,
     private readonly realtime: ReferralsRealtimeService,
+    private readonly lock: SchedulerLockService,
   ) {}
 
   onModuleInit() {
+    if (process.env.VERCEL) return;
     // Campaign expiry — every 5 minutes
-    this.timers.push(setInterval(() => void this.expireCampaigns(), 5 * 60_000));
+    this.timers.push(setInterval(() => void this.runJob('expire-campaigns'), 5 * 60_000));
     // Link expiry — every 10 minutes
-    this.timers.push(setInterval(() => void this.expireLinks(), 10 * 60_000));
+    this.timers.push(setInterval(() => void this.runJob('expire-links'), 10 * 60_000));
     // Leaderboard recompute — every 2 minutes
-    this.timers.push(setInterval(() => void this.recomputeAllLeaderboards(), 2 * 60_000));
+    this.timers.push(setInterval(() => void this.runJob('leaderboards'), 2 * 60_000));
     // Pending reward sweep — every 3 minutes
-    this.timers.push(setInterval(() => void this.processPendingRewards(), 3 * 60_000));
+    this.timers.push(setInterval(() => void this.runJob('pending-rewards'), 3 * 60_000));
     // Source aggregation — every 5 minutes
-    this.timers.push(setInterval(() => void this.aggregateSources(), 5 * 60_000));
+    this.timers.push(setInterval(() => void this.runJob('aggregate-sources'), 5 * 60_000));
     // Fraud scan — every 15 minutes
-    this.timers.push(setInterval(() => void this.scanFraud(), 15 * 60_000));
+    this.timers.push(setInterval(() => void this.runJob('fraud-scan'), 15 * 60_000));
 
     // Kick once shortly after boot
     setTimeout(() => {
-      void this.expireCampaigns();
-      void this.recomputeAllLeaderboards();
+      void this.runJob('expire-campaigns');
+      void this.runJob('leaderboards');
     }, 15_000);
   }
 
   onModuleDestroy() {
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
+  }
+
+  async runJob(job: ReferralJobName): Promise<{ job: ReferralJobName; skipped: boolean }> {
+    const lockKey = `scheduler:referrals:${job}`;
+    if (!(await this.lock.tryAcquire(lockKey))) return { job, skipped: true };
+    try {
+      const handlers: Record<ReferralJobName, () => Promise<void>> = {
+        'expire-campaigns': () => this.expireCampaigns(),
+        'expire-links': () => this.expireLinks(),
+        leaderboards: () => this.recomputeAllLeaderboards(),
+        'pending-rewards': () => this.processPendingRewards(),
+        'aggregate-sources': () => this.aggregateSources(),
+        'fraud-scan': () => this.scanFraud(),
+      };
+      await handlers[job]();
+      return { job, skipped: false };
+    } finally {
+      await this.lock.release(lockKey);
+    }
   }
 
   async expireCampaigns() {

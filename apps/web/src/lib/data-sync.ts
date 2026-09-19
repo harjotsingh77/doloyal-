@@ -1,5 +1,4 @@
 import * as React from "react";
-import { getApiBaseUrl } from "./api-base";
 
 export type AppDataScope =
   | "dashboard"
@@ -135,36 +134,35 @@ export function useCommerceLive(
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const base = getApiBaseUrl();
-    const token = window.localStorage.getItem("doloyal_token");
-    const liveToken = token && token !== "mock-token" && token !== "demo-token" ? token : "";
-    const url = slug
-      ? `${base}/public/book/${encodeURIComponent(slug)}/events`
-      : liveToken
-        ? `${base}/commerce/events?access_token=${encodeURIComponent(liveToken)}`
-        : `${base}/commerce/events`;
-    const source = new EventSource(url);
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const wanted = new Set(scopes);
-    const onMessage = (event: MessageEvent) => {
-      let scope = "";
-      try {
-        const payload = JSON.parse(event.data) as { scope?: string };
-        scope = payload.scope || "";
-      } catch {
-        return;
-      }
-      if (!scope || (!wanted.has(scope as AppDataScope) && !wanted.has("all"))) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => reloadRef.current(), 120);
+    // Cross-request in-memory event buses are not reliable on serverless:
+    // the mutation and EventSource connection can land on different function
+    // instances. Poll only while visible; local mutation/cross-tab updates are
+    // still immediate through useAppSync above.
+    const poll = () => {
+      if (document.visibilityState === "visible") reloadRef.current();
     };
-    source.onmessage = onMessage;
-    source.onerror = () => {
-      // Auth/network drops are expected; the next successful connection refreshes.
-    };
+    const interval = window.setInterval(poll, slug ? 10_000 : 15_000);
     return () => {
-      if (timer) clearTimeout(timer);
-      source.close();
+      window.clearInterval(interval);
     };
   }, [scopesKey, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/** Reliable near-realtime refresh for Vercel Functions. */
+export function useServerlessPolling(
+  reload: () => void,
+  intervalMs = 15_000,
+  enabled = true,
+) {
+  const reloadRef = React.useRef(reload);
+  reloadRef.current = reload;
+
+  React.useEffect(() => {
+    if (!enabled || typeof window === "undefined") return;
+    const poll = () => {
+      if (document.visibilityState === "visible") reloadRef.current();
+    };
+    const interval = window.setInterval(poll, intervalMs);
+    return () => window.clearInterval(interval);
+  }, [enabled, intervalMs]);
 }
