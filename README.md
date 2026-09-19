@@ -129,7 +129,7 @@ The repository-root `vercel.json` builds `@doloyal/web`. Required variables:
 Import the repository a second time, set **Root Directory** to `apps/api`, and
 enable source files outside the root so `@doloyal/shared` is included.
 `apps/api/vercel.json` builds the TypeScript API first, then packages
-`api/index.ts` as the `@vercel/node` handler (`src/main.ts` remains the
+`api/index.js` as the `@vercel/node` handler (`src/main.ts` remains the
 local `pnpm dev` listen entry).
 
 The API uses Supabase's port-6543 transaction pooler at runtime, signed direct

@@ -22,7 +22,7 @@ async function bootstrap() {
 
   // Managed hosts inject the port to bind as `PORT`. `API_PORT` stays
   // supported for local `pnpm dev`. The Vercel path never reaches here —
-  // `api/index.ts` uses init() instead of listen().
+  // `api/index.js` uses init() instead of listen().
   const port = parseInt(process.env.PORT || process.env.API_PORT || '4000', 10);
   await app.listen(port, '0.0.0.0');
   console.log(`Doloyal API listening on 0.0.0.0:${port}`);
