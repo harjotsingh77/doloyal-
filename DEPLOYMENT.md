@@ -96,7 +96,10 @@ existing frontend project's root directory.
 
 1. Vercel Dashboard → **Add New → Project** → import this repository again.
 2. Name it `doloyal-api`.
-3. Set **Root Directory** to `apps/api`.
+3. Set **Production Branch** to `main`. Do not leave it on
+   `vercel-backend-migration` — that branch is frozen at `541ba18` and still
+   contains the invalid `functions.src/main.ts` glob.
+4. Set **Root Directory** to `apps/api`.
    Enable **Include source files outside of the Root Directory** so the
    `@doloyal/shared` workspace package and root pnpm lockfile are available.
 4. Leave Framework Preset as **Other**. `apps/api/vercel.json` disables

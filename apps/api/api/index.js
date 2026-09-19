@@ -10,4 +10,6 @@ require('reflect-metadata');
  * this file forwards (req, res) to that handler. Local `pnpm dev` still
  * uses `src/main.ts` + `app.listen()` and never loads this file.
  */
-module.exports = require('../dist/vercel-handler.js').default;
+const handler = require('../dist/vercel-handler.js').default;
+handler.config = { maxDuration: 300 };
+module.exports = handler;
