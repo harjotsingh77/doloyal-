@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
 import {
-  businessStatus,
+  deriveBusinessStatus,
   lastActiveFor,
   paginate,
   planLabel,
@@ -59,11 +59,37 @@ export class AdminBusinessesService {
         { memberships: { some: { user: { email: { contains: search, mode: 'insensitive' as const } } } } },
       ];
     }
+    if (status === 'SUSPENDED') {
+      where.suspendedAt = { not: null };
+    } else if (status && status !== 'ALL') {
+      where.suspendedAt = null;
+      if (status === 'CANCELED') {
+        where.subscriptions = { some: { status: { in: ['CANCELED', 'EXPIRED'] } } };
+      } else if (status === 'PAUSED') {
+        where.subscriptions = { some: { status: 'PAST_DUE' } };
+      } else if (status === 'TRIAL') {
+        where.OR = [
+          ...(Array.isArray(where.OR) ? (where.OR as object[]) : []),
+          { subscriptions: { none: {} } },
+          { subscriptions: { some: { status: 'TRIALING' } } },
+          { subscriptions: { some: { trialEndsAt: { gt: new Date() } } } },
+        ];
+      } else if (status === 'ACTIVE') {
+        where.subscriptions = { some: { status: 'ACTIVE' } };
+      }
+    }
 
-    const [tenants] = await Promise.all([
+    const orderBy =
+      query.sort === 'name'
+        ? { name: 'asc' as const }
+        : query.sort === 'oldest'
+          ? { createdAt: 'asc' as const }
+          : { createdAt: 'desc' as const };
+
+    const [tenants, total] = await Promise.all([
       this.prisma.tenant.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
         select: {
@@ -77,12 +103,14 @@ export class AdminBusinessesService {
           logoUrl: true,
           createdAt: true,
           updatedAt: true,
+          suspendedAt: true,
           subscriptions: {
             select: { plan: true, status: true, trialEndsAt: true },
             take: 1,
             orderBy: { createdAt: 'desc' },
           },
           memberships: {
+            where: { role: 'OWNER' },
             select: {
               user: { select: { firstName: true, lastName: true, email: true } },
               role: true,
@@ -92,48 +120,40 @@ export class AdminBusinessesService {
           _count: { select: { customers: true, branches: true } },
         },
       }),
+      this.prisma.tenant.count({ where }),
     ]);
 
-    const items = await Promise.all(
-      tenants.map(async (t) => {
-        const statusVal = await businessStatus(this.prisma, t.id);
-        const lastActive = await lastActiveFor(this.prisma, t.id);
-        const owner = t.memberships[0];
-        return {
-          id: t.id,
-          name: t.name,
-          slug: t.slug,
-          category: t.category,
-          city: t.city,
-          country: t.country,
-          currency: t.currency,
-          logoUrl: t.logoUrl,
-          plan: t.subscriptions[0]?.plan ?? 'free',
-          status: statusVal,
-          ownerName: owner?.user.firstName
-            ? `${owner.user.firstName} ${owner.user.lastName ?? ''}`.trim()
-            : null,
-          ownerEmail: owner?.user.email ?? null,
-          customerCount: t._count.customers,
-          branchCount: t._count.branches,
-          createdAt: t.createdAt.toISOString(),
-          updatedAt: t.updatedAt.toISOString(),
-          lastActive: lastActive?.toISOString() ?? null,
-        };
-      }),
-    );
-
-    // Status filter applied post-hoc because status is derived.
-    const filtered =
-      status && status !== 'ALL' ? items.filter((i) => i.status === status) : items;
-    const filteredTotal = filtered.length;
+    const items = tenants.map((t) => {
+      const owner = t.memberships[0];
+      return {
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        category: t.category,
+        city: t.city,
+        country: t.country,
+        currency: t.currency,
+        logoUrl: t.logoUrl,
+        plan: t.subscriptions[0]?.plan ?? 'free',
+        status: deriveBusinessStatus(t.subscriptions[0], t.suspendedAt),
+        ownerName: owner?.user.firstName
+          ? `${owner.user.firstName} ${owner.user.lastName ?? ''}`.trim()
+          : null,
+        ownerEmail: owner?.user.email ?? null,
+        customerCount: t._count.customers,
+        branchCount: t._count.branches,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+        lastActive: t.updatedAt.toISOString(),
+      };
+    });
 
     return {
-      items: filtered,
-      total: filteredTotal,
+      items,
+      total,
       page,
       pageSize,
-      totalPages: Math.max(1, Math.ceil(filteredTotal / pageSize)),
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
   }
 
@@ -144,15 +164,17 @@ export class AdminBusinessesService {
         subscriptions: { take: 1, orderBy: { createdAt: 'desc' } },
         memberships: {
           include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
-          take: 1,
+        },
+        integrations: {
+          select: { id: true, type: true, status: true, lastSyncedAt: true, errorLog: true },
         },
       },
     });
     if (!tenant) throw new NotFoundException('Business not found');
 
-    const status = await businessStatus(this.prisma, tenant.id);
+    const status = deriveBusinessStatus(tenant.subscriptions[0], tenant.suspendedAt);
     const lastActive = await lastActiveFor(this.prisma, tenant.id);
-    const owner = tenant.memberships[0];
+    const owner = tenant.memberships.find((m) => m.role === 'OWNER') ?? tenant.memberships[0];
 
     const counts = await Promise.all([
       this.prisma.customer.count({ where: { tenantId } }),
@@ -176,11 +198,24 @@ export class AdminBusinessesService {
       tierCount, campaignCount, staffCount, branchCount, websiteCount, bookingLinkCount,
       projectCount, integrationCount, supportCount, aiCount] = counts;
 
-    const recentActivity = await this.prisma.subscriptionEvent.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
+    const [recentActivity, notes, tickets] = await Promise.all([
+      this.prisma.subscriptionEvent.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.adminAuditLog.findMany({
+        where: { action: 'business.noteAdded', targetId: tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.supportTicket.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: { id: true, ticketNumber: true, subject: true, status: true, createdAt: true },
+      }),
+    ]);
     const activities = recentActivity.map((e) => ({
       id: e.id,
       type: e.type,
@@ -243,6 +278,35 @@ export class AdminBusinessesService {
         supportTickets: supportCount,
         aiConversations: aiCount,
       },
+      members: tenant.memberships.map((m) => ({
+        id: m.id,
+        tenantId: m.tenantId,
+        userId: m.user.id,
+        name: `${m.user.firstName} ${m.user.lastName ?? ''}`.trim(),
+        email: m.user.email,
+        role: m.role,
+        createdAt: m.createdAt.toISOString(),
+      })),
+      integrations: tenant.integrations.map((i) => ({
+        id: i.id,
+        type: i.type,
+        status: i.status,
+        lastSyncedAt: i.lastSyncedAt?.toISOString() ?? null,
+        lastError: i.errorLog,
+      })),
+      notes: notes.map((n) => ({
+        id: n.id,
+        message: String((n.metadata as { note?: string } | null)?.note ?? ''),
+        actorEmail: n.actorEmail,
+        createdAt: n.createdAt.toISOString(),
+      })),
+      supportTickets: tickets.map((t) => ({
+        id: t.id,
+        ticketNumber: t.ticketNumber,
+        subject: t.subject,
+        status: t.status,
+        createdAt: t.createdAt.toISOString(),
+      })),
       recentActivity: activities,
     };
   }
@@ -305,11 +369,21 @@ export class AdminBusinessesService {
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
-    if (existing) {
+    if (status === 'SUSPENDED') {
+      await this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { suspendedAt: tenant.suspendedAt ?? new Date() },
+      });
+    } else if (status === 'ACTIVE' || status === 'PAUSED' || status === 'CANCELED') {
+      await this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { suspendedAt: null },
+      });
+    }
+    if (existing && status !== 'SUSPENDED') {
       const mapped = {
         ACTIVE: 'ACTIVE',
         PAUSED: 'PAST_DUE',
-        SUSPENDED: 'PAST_DUE',
         CANCELED: 'CANCELED',
       } as Record<string, string>;
       await this.prisma.subscription.update({

@@ -247,6 +247,9 @@ model User {
   isAdmin          Boolean  @default(false)
   /// Platform-level admin role (grants role-specific admin permissions).
   adminRole        AdminRole?
+  /// Set when a Super Admin suspends this account. JWT validation rejects
+  /// suspended users until this is cleared.
+  suspendedAt      DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -342,6 +345,9 @@ model Tenant {
   blockedDates          Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  /// Set when a Super Admin suspends this business. Staff APIs reject access
+  /// until this is cleared. Independent of subscription status.
+  suspendedAt           DateTime?
 
   memberships            Membership[]
   branches               Branch[]
@@ -1596,6 +1602,9 @@ model Subscription {
   updatedAt          DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([plan])
 }
 
 /// Immutable billing event log powering the Billing Center history.
@@ -1627,10 +1636,12 @@ model SyncLog {
   recordsProcessed Int?
   errorMessage     String?
   metadata         Json?
+  resolvedAt       DateTime?
 
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
   @@index([integrationId])
+  @@index([status, startedAt])
 }
 
 model WebhookEvent {
@@ -1647,6 +1658,7 @@ model WebhookEvent {
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
   @@index([integrationId])
+  @@index([status, createdAt])
   @@unique([integrationId, externalEventId])
 }
 

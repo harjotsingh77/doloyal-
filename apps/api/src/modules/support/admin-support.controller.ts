@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { CurrentUser } from '../../common/current-user.decorator';
-import { AdminGuard } from '../../common/admin.guard';
+import { AdminGuard, AdminPermission } from '../../common/admin.guard';
 import { FastifyRequest } from 'fastify';
 import {
   IsBoolean,
@@ -64,32 +64,38 @@ export class AdminSupportController {
   ) {}
 
   @Sse('events')
+  @AdminPermission('support:view')
   events(): Observable<MessageEvent> {
     return this.realtime.streamAdmin();
   }
 
   @Get('stats')
+  @AdminPermission('support:view')
   stats() {
     return this.support.adminGetStats();
   }
 
   @Get('analytics')
+  @AdminPermission('support:view')
   analytics() {
     return this.support.adminGetAnalytics();
   }
 
   @Get('conversations/:id')
+  @AdminPermission('support:view')
   conversation(@Param('id') id: string) {
     return this.support.adminGetConversation(id);
   }
 
   @Get('agents')
+  @AdminPermission('support:view')
   agents() {
     return this.support.adminListAgents();
   }
 
   @Post('tickets/:id/ai-assist')
   @HttpCode(HttpStatus.OK)
+  @AdminPermission('support:manage')
   aiAssist(@Param('id') id: string, @CurrentUser() user: any) {
     if (!adminAiAssistLimiter.allow(`ai-assist:${user.id}`)) {
       throw new BadRequestException('Too many AI assist requests. Please try again in a moment.');
@@ -98,6 +104,7 @@ export class AdminSupportController {
   }
 
   @Get('tickets')
+  @AdminPermission('support:view')
   list(
     @Query('status') status?: string,
     @Query('priority') priority?: string,
@@ -119,16 +126,19 @@ export class AdminSupportController {
   }
 
   @Get('tickets/:id')
+  @AdminPermission('support:view')
   get(@Param('id') id: string) {
     return this.support.adminGetTicket(id);
   }
 
   @Patch('tickets/:id')
+  @AdminPermission('support:manage')
   update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: any) {
     return this.support.adminUpdateTicket(user, id, dto);
   }
 
   @Patch('tickets/:id/status')
+  @AdminPermission('support:manage')
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateStatusDto,
@@ -139,6 +149,7 @@ export class AdminSupportController {
 
   @Post('tickets/:id/assign')
   @HttpCode(HttpStatus.OK)
+  @AdminPermission('support:manage')
   assign(
     @Param('id') id: string,
     @Body() dto: AssignDto,
@@ -148,12 +159,14 @@ export class AdminSupportController {
   }
 
   @Get('tickets/:id/messages')
+  @AdminPermission('support:view')
   messages(@Param('id') id: string) {
     return this.support.adminGetMessages(id);
   }
 
   @Post('tickets/:id/messages')
   @HttpCode(HttpStatus.CREATED)
+  @AdminPermission('support:manage')
   sendMessage(
     @Param('id') id: string,
     @Body() dto: SendMessageDto,
@@ -167,23 +180,27 @@ export class AdminSupportController {
 
   @Post('tickets/:id/messages/read')
   @HttpCode(HttpStatus.OK)
+  @AdminPermission('support:manage')
   markRead(@Param('id') id: string) {
     return this.support.adminMarkRead(id);
   }
 
   @Get('tickets/:id/notes')
+  @AdminPermission('support:view')
   notes(@Param('id') id: string) {
     return this.support.adminListNotes(id);
   }
 
   @Post('tickets/:id/notes')
   @HttpCode(HttpStatus.CREATED)
+  @AdminPermission('support:manage')
   addNote(@Param('id') id: string, @Body() dto: AddNoteDto, @CurrentUser() user: any) {
     return this.support.adminAddNote(user, id, dto.note);
   }
 
   @Post('tickets/:id/upload')
   @HttpCode(HttpStatus.OK)
+  @AdminPermission('support:manage')
   async multipartUpload(
     @Param('id') id: string,
     @Req() req: FastifyRequest & { file: () => Promise<any> },

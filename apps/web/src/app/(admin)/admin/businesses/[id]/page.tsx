@@ -42,6 +42,7 @@ export default function AdminBusinessDetailPage() {
   const [data, setData] = React.useState<AdminBusinessDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
+  const [tab, setTab] = React.useState<"overview" | "users" | "billing" | "integrations" | "support" | "notes">("overview");
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -106,6 +107,7 @@ export default function AdminBusinessDetailPage() {
     try {
       await api.adminAddBusinessNote(id, note);
       toast.success("Note added");
+      void load();
     } catch {
       toast.error("Could not add note");
     }
@@ -159,6 +161,23 @@ export default function AdminBusinessDetailPage() {
         }
       />
 
+      <div className="flex flex-wrap gap-2">
+        {([
+          ["overview", "Overview"],
+          ["users", "Users"],
+          ["billing", "Billing"],
+          ["integrations", "Integrations"],
+          ["support", "Support"],
+          ["notes", "Notes"],
+        ] as const).map(([key, label]) => (
+          <Button key={key} size="sm" variant={tab === key ? "primary" : "outline"} onClick={() => setTab(key)}>
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      {tab === "overview" ? (
+      <>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -278,6 +297,126 @@ export default function AdminBusinessDetailPage() {
 
         <AddNoteCard onAdd={addNote} />
       </div>
+      </>
+      ) : null}
+
+      {tab === "users" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Users</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {(data.members ?? []).length === 0 ? (
+              <p className="px-5 py-6 text-center text-xs text-[rgb(var(--color-muted-foreground))]">No members.</p>
+            ) : (
+              <ul className="divide-y divide-[rgb(var(--color-border))]">
+                {(data.members ?? []).map((m) => (
+                  <li key={m.id} className="flex items-center justify-between px-5 py-3">
+                    <div>
+                      <p className="text-sm font-medium">{m.name || m.email}</p>
+                      <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{m.email}</p>
+                    </div>
+                    <span className="text-xs">{m.role}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "billing" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Subscription</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <InfoItem label="Plan" value={data.subscription?.plan ?? data.plan} />
+            <InfoItem label="Status" value={data.subscription?.status ?? data.status} />
+            <InfoItem label="Trial ends" value={data.subscription?.trialEndsAt ? relativeTime(data.subscription.trialEndsAt) : "—"} />
+            <InfoItem label="Period ends" value={data.subscription?.currentPeriodEnd ? relativeTime(data.subscription.currentPeriodEnd) : "—"} />
+            <InfoItem label="Auto renew" value={data.subscription?.autoRenew ? "Yes" : "No"} />
+            <InfoItem label="Owner" value={data.owner ? `${data.owner.name} (${data.owner.email})` : "—"} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "integrations" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Integrations</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {(data.integrations ?? []).length === 0 ? (
+              <p className="px-5 py-6 text-center text-xs text-[rgb(var(--color-muted-foreground))]">No integrations connected.</p>
+            ) : (
+              <ul className="divide-y divide-[rgb(var(--color-border))]">
+                {(data.integrations ?? []).map((i) => (
+                  <li key={i.id} className="px-5 py-3">
+                    <p className="text-sm font-medium">{i.type.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                      {i.status}
+                      {i.lastSyncedAt ? ` · synced ${relativeTime(i.lastSyncedAt)}` : ""}
+                    </p>
+                    {i.lastError ? <p className="mt-1 text-[0.62rem] text-[rgb(var(--color-danger))]">{i.lastError}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "support" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Support tickets</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {(data.supportTickets ?? []).length === 0 ? (
+              <p className="px-5 py-6 text-center text-xs text-[rgb(var(--color-muted-foreground))]">No tickets.</p>
+            ) : (
+              <ul className="divide-y divide-[rgb(var(--color-border))]">
+                {(data.supportTickets ?? []).map((t) => (
+                  <li key={t.id} className="px-5 py-3">
+                    <a href={`/admin/support/${t.id}`} className="text-sm font-medium hover:underline">
+                      {t.ticketNumber} {t.subject}
+                    </a>
+                    <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{t.status} · {relativeTime(t.createdAt)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "notes" ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Internal notes</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {(data.notes ?? []).length === 0 ? (
+                <p className="px-5 py-6 text-center text-xs text-[rgb(var(--color-muted-foreground))]">No notes yet.</p>
+              ) : (
+                <ul className="divide-y divide-[rgb(var(--color-border))]">
+                  {(data.notes ?? []).map((n) => (
+                    <li key={n.id} className="px-5 py-3">
+                      <p className="text-sm">{n.message}</p>
+                      <p className="text-[0.62rem] text-[rgb(var(--color-muted-foreground))]">
+                        {n.actorEmail ?? "Admin"} · {relativeTime(n.createdAt)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+          <AddNoteCard onAdd={addNote} />
+        </div>
+      ) : null}
     </div>
   );
 }

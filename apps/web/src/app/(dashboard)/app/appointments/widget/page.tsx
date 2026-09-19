@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { WidgetPreview } from "@/components/widget/widget-preview";
 import { api } from "@/lib/api";
+import { getAppBaseUrl } from "@/lib/api-base";
 import type { WidgetSettings } from "@doloyal/shared";
 
 const FONT_OPTIONS = ["Inter", "Roboto", "Open Sans", "Poppins"];
@@ -143,7 +144,7 @@ export default function WidgetPage() {
   };
 
   const embedCode = settings
-    ? `<script src="https://app.doloyal.ai/widget.js" data-slug="${slug}" data-primary="${settings.primaryColor}" data-position="${settings.position}"></script>`
+    ? `<script src="${getAppBaseUrl()}/widget.js" data-slug="${slug}" data-primary="${settings.primaryColor}" data-position="${settings.position}"></script>`
     : "";
 
   const handleCopy = async () => {

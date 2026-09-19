@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, NotFoundException, ConflictException
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
+import { getPublicAppUrl } from '../../common/helpers';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type { AuthUser } from '@doloyal/shared';
@@ -299,14 +300,40 @@ export class AuthService {
     );
   }
 
-  async switchTenant(userId: string, tenantId: string): Promise<AuthUser> {
+  /**
+   * Moves the session to another workspace the user belongs to.
+   *
+   * This must return a NEW token. The active workspace is carried in the JWT
+   * `tid` claim, so without reissuing, the client would show the new
+   * workspace while every subsequent API call still resolved to the old one —
+   * silently writing records into the wrong tenant.
+   */
+  async switchTenant(
+    userId: string,
+    tenantId: string,
+  ): Promise<{ user: AuthUser; token: string }> {
     const membership = await this.prisma.membership.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
     });
     if (!membership) throw new NotFoundException('Tenant membership not found');
+    if (membership.role === 'CUSTOMER') {
+      throw new NotFoundException('Tenant membership not found');
+    }
     const dbUser = await this.prisma.user.findUnique({ where: { id: userId }, include: { memberships: true } });
     if (!dbUser) throw new NotFoundException('User not found');
-    return this.mapUser(dbUser, membership.tenantId, membership.role);
+
+    const token = this.jwtService.sign({
+      sub: dbUser.id,
+      email: dbUser.email,
+      tv: dbUser.tokenVersion ?? 0,
+      kind: 'staff' as const,
+      tid: membership.tenantId,
+    });
+
+    return {
+      user: this.mapUser(dbUser, membership.tenantId, membership.role),
+      token,
+    };
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
@@ -356,8 +383,7 @@ export class AuthService {
       data: { passwordResetToken: hashedToken, passwordResetExpires: expires },
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const resetUrl = `${appUrl}/forgot-password?token=${rawToken}`;
+    const resetUrl = `${getPublicAppUrl()}/forgot-password?token=${rawToken}`;
     const sent = await this.sendPlatformEmail(
       user.email,
       'Reset your Doloyal password',

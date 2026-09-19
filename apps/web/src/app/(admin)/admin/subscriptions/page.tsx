@@ -180,7 +180,35 @@ export default function AdminSubscriptionsPage() {
                       <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{s.renewal ? relativeTime(s.renewal) : "—"}</p>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {(s.status === "TRIAL" || s.plan === "free") && s.status !== "CANCELED" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            loading={busy === s.id}
+                            onClick={() => {
+                              const days = Number(window.prompt("Extend trial by how many days (1-90)?", "7"));
+                              if (!Number.isFinite(days) || days < 1) return;
+                              act(s.id, () => api.adminExtendTrial(s.id, days), `Trial extended by ${days} days`);
+                            }}
+                          >
+                            Extend trial
+                          </Button>
+                        ) : null}
+                        {s.status !== "CANCELED" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            loading={busy === s.id}
+                            onClick={() => {
+                              const plan = window.prompt("New plan (free, starter, growth, professional, enterprise)", s.plan);
+                              if (!plan || plan === s.plan) return;
+                              act(s.id, () => api.adminChangeSubscriptionPlan(s.id, plan), `Plan changed to ${plan}`);
+                            }}
+                          >
+                            Change plan
+                          </Button>
+                        ) : null}
                         {s.status === "CANCELED" ? (
                           <Button size="sm" variant="success" loading={busy === s.id} onClick={() => act(s.id, () => api.adminRestartSubscription(s.id), "Subscription restarted")}>
                             Restart

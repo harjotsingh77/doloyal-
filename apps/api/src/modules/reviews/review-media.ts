@@ -2,6 +2,12 @@ import { createReadStream, existsSync } from 'fs';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { join, normalize } from 'path';
 import { randomUUID } from 'crypto';
+import {
+  deleteObject,
+  getObject,
+  isRemoteStorageEnabled,
+  putObject,
+} from '../../common/object-storage';
 
 export const REVIEW_UPLOAD_ROOT = join(process.cwd(), 'uploads', 'reviews');
 export const VIDEO_MAX_BYTES = 40 * 1024 * 1024;
@@ -55,12 +61,18 @@ export async function saveReviewMedia(opts: {
   filename: string;
 }): Promise<{ key: string; mime: string }> {
   const ext = extForMime(opts.mime, opts.filename);
+  const name = `${randomUUID()}${ext}`;
+  const key = `reviews/${opts.tenantId}/${name}`;
+
+  if (isRemoteStorageEnabled()) {
+    await putObject(key, opts.buffer, opts.mime);
+    return { key, mime: opts.mime };
+  }
+
   const dir = join(REVIEW_UPLOAD_ROOT, opts.tenantId);
   await mkdir(dir, { recursive: true });
-  const name = `${randomUUID()}${ext}`;
-  const abs = join(dir, name);
-  await writeFile(abs, opts.buffer);
-  return { key: `reviews/${opts.tenantId}/${name}`, mime: opts.mime };
+  await writeFile(join(dir, name), opts.buffer);
+  return { key, mime: opts.mime };
 }
 
 export function mediaAbsolutePath(key: string): string | null {
@@ -73,14 +85,31 @@ export function mediaExists(key: string): boolean {
   return Boolean(abs && existsSync(abs));
 }
 
-export function openMediaStream(key: string) {
+/**
+ * Returns a readable stream on local disk, or the raw bytes when the object
+ * lives in remote storage. Callers hand either shape straight to Fastify.
+ */
+export async function openMedia(
+  key: string,
+): Promise<{ stream?: NodeJS.ReadableStream; buffer?: Buffer } | null> {
+  if (isRemoteStorageEnabled()) {
+    const buffer = await getObject(key);
+    return buffer ? { buffer } : null;
+  }
+
   const abs = mediaAbsolutePath(key);
   if (!abs || !existsSync(abs)) return null;
-  return createReadStream(abs);
+  return { stream: createReadStream(abs) };
 }
 
 export async function deleteReviewMedia(key: string | null | undefined): Promise<void> {
   if (!key || !isStoredMediaKey(key)) return;
+
+  if (isRemoteStorageEnabled()) {
+    await deleteObject(key);
+    return;
+  }
+
   const abs = mediaAbsolutePath(key);
   if (!abs) return;
   try {

@@ -307,11 +307,31 @@ export class AdminBillingService {
       revenueByPlan,
       invoices,
       payments,
-      providers: [
-        { name: 'Stripe', status: 'CONNECTED', lastCheck: null },
-        { name: 'Razorpay', status: 'CONNECTED', lastCheck: null },
-      ],
+      providers: await this.paymentProviders(),
     };
+  }
+
+  private async paymentProviders() {
+    const connected = await this.prisma.integration.findMany({
+      where: { type: { in: ['STRIPE', 'RAZORPAY'] } },
+      select: { type: true, status: true, lastSyncedAt: true },
+    });
+    const byType = new Map<string, { status: string; lastCheck: string | null }>();
+    for (const row of connected) {
+      const current = byType.get(row.type);
+      const lastCheck = row.lastSyncedAt?.toISOString() ?? null;
+      if (!current || row.status === 'CONNECTED' || row.status === 'ERROR') {
+        byType.set(row.type, {
+          status: row.status,
+          lastCheck: lastCheck ?? current?.lastCheck ?? null,
+        });
+      }
+    }
+    return ['STRIPE', 'RAZORPAY'].map((name) => ({
+      name: name === 'STRIPE' ? 'Stripe' : 'Razorpay',
+      status: byType.get(name)?.status ?? 'NOT_CONNECTED',
+      lastCheck: byType.get(name)?.lastCheck ?? null,
+    }));
   }
 
   async plans() {
@@ -482,6 +502,18 @@ export class AdminBillingService {
       tenantName = sub.tenant.name;
       targetId = sub.tenantId;
       targetType = 'tenant';
+      await this.prisma.subscriptionEvent.create({
+        data: {
+          tenantId: sub.tenantId,
+          type: 'PAYMENT_REFUNDED',
+          plan: sub.plan,
+          amount: data.amount,
+          currency: data.currency ?? 'INR',
+          description: data.reason || 'Refund recorded by admin',
+          status: 'REFUNDED',
+          metadata: { by: actor?.email, subscriptionId: sub.id },
+        },
+      });
     } else if (data.tenantId) {
       const tenant = await this.prisma.tenant.findUnique({ where: { id: data.tenantId } });
       if (!tenant) throw new NotFoundException('Business not found');
@@ -506,8 +538,7 @@ export class AdminBillingService {
       ok: true,
       amount: data.amount,
       currency: data.currency ?? 'INR',
-      message: `Refund of ${data.amount} ${data.currency ?? 'INR'} issued to ${tenantName}.`,
-      simulated: true,
+      message: `Refund of ${data.amount} ${data.currency ?? 'INR'} recorded for ${tenantName}. Provider settlement is not performed from this screen.`,
     };
   }
 }

@@ -10,6 +10,7 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   BadRequestException,
   StreamableFile,
 } from '@nestjs/common';
@@ -295,9 +296,7 @@ export class ReviewsController {
       tenantId: user.activeTenantId,
       kind: query.kind || 'video',
     });
-    reply.header('Content-Type', media.mime);
-    reply.header('Cache-Control', 'private, max-age=3600');
-    return new StreamableFile(media.stream);
+    return this.sendMedia(reply, media, 'private, max-age=3600');
   }
 
   @Public()
@@ -327,9 +326,23 @@ export class ReviewsController {
       kind: query.kind || 'video',
       publicOnly: true,
     });
+    return this.sendMedia(reply, media, 'public, max-age=3600');
+  }
+
+  /**
+   * Review media comes back as a stream from local disk and as a buffer from
+   * remote object storage, so both shapes have to be handled here.
+   */
+  private sendMedia(
+    reply: FastifyReply,
+    media: { mime: string; stream?: NodeJS.ReadableStream; buffer?: Buffer },
+    cacheControl: string,
+  ) {
     reply.header('Content-Type', media.mime);
-    reply.header('Cache-Control', 'public, max-age=3600');
-    return new StreamableFile(media.stream);
+    reply.header('Cache-Control', cacheControl);
+    if (media.buffer) return new StreamableFile(media.buffer);
+    if (media.stream) return new StreamableFile(media.stream as any);
+    throw new NotFoundException('Media not found');
   }
 
   @Public()

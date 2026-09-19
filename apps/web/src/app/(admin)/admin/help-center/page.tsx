@@ -252,18 +252,22 @@ function ArticleDialog({
   }, [item]);
 
   React.useEffect(() => {
-    if (!editing && title.trim()) {
-      setSlug(title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""));
-    }
-  }, [title, editing]);
+    if (!item || item === "new") return;
+    api
+      .adminGetHelpArticle(item.id)
+      .then((full) => {
+        if (full.content) setContent(full.content);
+      })
+      .catch(() => undefined);
+  }, [item]);
 
   const save = async () => {
     if (!title.trim()) {
       toast.error("Title is required");
       return;
     }
-    if (!editing && !content.trim()) {
-      toast.error("Content is required for a new article");
+    if (!content.trim()) {
+      toast.error("Content is required");
       return;
     }
     setBusy(true);
@@ -278,7 +282,7 @@ function ArticleDialog({
         published,
       };
       if (editing) {
-        await api.adminUpdateHelpArticle(item.id, payload);
+        await api.adminUpdateHelpArticle(item.id, { ...payload, content });
         toast.success("Article updated");
       } else {
         await api.adminCreateHelpArticle({ ...payload, content });
@@ -311,12 +315,10 @@ function ArticleDialog({
             <Label className="mb-1 block text-xs font-medium text-[rgb(var(--color-muted-foreground))]">Description</Label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short summary" />
           </div>
-          {!editing ? (
-            <div>
-              <Label className="mb-1 block text-xs font-medium text-[rgb(var(--color-muted-foreground))]">Content</Label>
-              <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="Article body…" />
-            </div>
-          ) : null}
+          <div>
+            <Label className="mb-1 block text-xs font-medium text-[rgb(var(--color-muted-foreground))]">Content</Label>
+            <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="Article body…" />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="mb-1 block text-xs font-medium text-[rgb(var(--color-muted-foreground))]">Category</Label>

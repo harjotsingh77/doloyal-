@@ -445,6 +445,10 @@ export interface AdminDashboardOverview {
     churnRate30d: number;
     openSupportTickets: number;
     websiteRequests: number;
+    totalUsers: number;
+    totalCustomers: number;
+    totalBookings: number;
+    integrationErrors24h: number;
   };
   kpis: Record<string, AdminKpiValue>;
   revenueTrend: AdminRevenuePoint[];
@@ -625,6 +629,35 @@ export interface AdminBusinessDetail extends AdminBusinessSummary {
   owner: { id: string; name: string; email: string } | null;
   counts: Record<string, number>;
   recentActivity: AdminBusinessActivity[];
+  members?: Array<{
+    id: string;
+    tenantId: string;
+    userId: string;
+    name: string;
+    email: string;
+    role: string;
+    createdAt: string;
+  }>;
+  integrations?: Array<{
+    id: string;
+    type: string;
+    status: string;
+    lastSyncedAt?: string | null;
+    lastError?: string | null;
+  }>;
+  notes?: Array<{
+    id: string;
+    message: string;
+    actorEmail?: string | null;
+    createdAt: string;
+  }>;
+  supportTickets?: Array<{
+    id: string;
+    ticketNumber: string;
+    subject: string;
+    status: string;
+    createdAt: string;
+  }>;
 }
 
 export interface AdminBusinessActivity {
@@ -644,6 +677,8 @@ export interface AdminUserItem {
   avatarUrl?: string | null;
   isAdmin: boolean;
   adminRole?: AdminRole | null;
+  role?: string | null;
+  authProvider?: string;
   status: "ACTIVE" | "SUSPENDED" | "INVITED";
   businessCount: number;
   primaryBusiness?: string | null;
@@ -970,6 +1005,7 @@ export interface AdminHelpArticleItem {
   published: boolean;
   sortOrder: number;
   views: number;
+  content?: string;
   updatedAt: string;
 }
 
@@ -983,9 +1019,10 @@ export interface AdminSystemHealth {
     latencyMs?: number;
     errorRate?: number;
     uptime?: number;
+    note?: string;
   }>;
   overall: "OPERATIONAL" | "DEGRADED" | "DOWN";
-  uptime: number;
+  uptime: number | null;
   incidents24h: number;
   lastChecked: string;
 }
@@ -1081,6 +1118,7 @@ export interface AdminSearchResults {
   tickets: Array<{ id: string; ticketNumber: string; subject: string; status: string; businessName?: string }>;
   websiteRequests: Array<{ id: string; name: string; status: string; businessName?: string }>;
   invoices: Array<{ id: string; invoiceNumber: string; status: string; businessName?: string; total: number }>;
+  auditLogs?: Array<{ id: string; action: string; targetName?: string | null; actorEmail?: string | null; createdAt: string }>;
   total: number;
 }
 
@@ -1091,4 +1129,47 @@ export interface AdminImpersonationResult {
   accessToken: string;
   tenantId: string;
   message: string;
+}
+
+export interface AdminSyncErrorItem {
+  id: string;
+  integrationId: string;
+  integration: string;
+  businessId: string;
+  businessName: string;
+  status: string;
+  severity: string;
+  error?: string | null;
+  recordsProcessed?: number | null;
+  startedAt: string;
+  completedAt?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface AdminWebhookEventItem {
+  id: string;
+  eventType: string;
+  source: string;
+  businessId: string;
+  businessName: string;
+  status: string;
+  error?: string | null;
+  processedAt?: string | null;
+  createdAt: string;
+  payload?: unknown;
+}
+
+export interface AdminFeatureFlagCatalogItem {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  core: boolean;
+  enabledTenants: number;
+  disabledTenants: number;
+}
+
+export interface AdminFeatureFlagOverview {
+  tenantCount: number;
+  catalog: AdminFeatureFlagCatalogItem[];
 }

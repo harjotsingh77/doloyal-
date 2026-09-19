@@ -139,6 +139,23 @@ export default function AdminDashboardPage() {
               label="Open tickets"
               value={data.kpis.openTickets.value}
             />
+            <KpiCard
+              label="Users"
+              value={data.kpis.totalUsers?.value ?? 0}
+            />
+            <KpiCard
+              label="Customers"
+              value={data.kpis.totalCustomers?.value ?? 0}
+            />
+            <KpiCard
+              label="Bookings"
+              value={data.kpis.totalBookings?.value ?? 0}
+            />
+            <KpiCard
+              label="Integration errors (30d)"
+              value={data.kpis.integrationErrors?.value ?? 0}
+              accent="danger"
+            />
           </div>
 
           {/* Alerts */}
@@ -290,10 +307,10 @@ export default function AdminDashboardPage() {
                 <ul className="divide-y divide-[rgb(var(--color-border))]">
                   {data.recentSignups.map((s) => (
                     <li key={s.id} className="flex items-center justify-between gap-2 px-5 py-3">
-                      <div className="min-w-0">
+                      <Link href={`/admin/businesses/${s.id}`} className="min-w-0 hover:underline">
                         <p className="truncate text-xs font-medium text-[rgb(var(--color-foreground))]">{s.name}</p>
                         <p className="truncate text-[0.62rem] text-[rgb(var(--color-muted-foreground))]">{s.email}</p>
-                      </div>
+                      </Link>
                       <div className="flex shrink-0 items-center gap-2">
                         <Badge variant="outline">{s.plan}</Badge>
                         <span className="text-[0.62rem] text-[rgb(var(--color-muted-foreground))]">{relativeTime(s.createdAt)}</span>
@@ -319,6 +336,7 @@ export default function AdminDashboardPage() {
                   <ul className="divide-y divide-[rgb(var(--color-border))]">
                     {data.recentTickets.map((t) => (
                       <li key={t.id} className="px-5 py-3">
+                        <Link href={`/admin/support/${t.id}`} className="block hover:underline">
                         <p className="line-clamp-1 text-xs font-medium text-[rgb(var(--color-foreground))]">
                           <span className="text-[rgb(var(--color-primary))]">{t.ticketNumber}</span> {t.subject}
                         </p>
@@ -326,6 +344,7 @@ export default function AdminDashboardPage() {
                           <Badge variant="outline">{t.status}</Badge>
                           <span className="text-[0.62rem] text-[rgb(var(--color-muted-foreground))]">{relativeTime(t.updatedAt)}</span>
                         </div>
+                        </Link>
                       </li>
                     ))}
                   </ul>

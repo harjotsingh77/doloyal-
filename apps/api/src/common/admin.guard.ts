@@ -42,8 +42,16 @@ export class AdminGuard implements CanActivate {
       AdminPermissionType[]
     >(ADMIN_PERMISSION_KEY, [handler, cls]);
 
+    const effectiveRole: AdminRole | null =
+      user.adminRole ?? (user.isAdmin === true ? 'SUPER_ADMIN' : null);
+    // Super Admins hold every permission even if the JWT was minted before
+    // adminRole was backfilled.
+    if (effectiveRole === 'SUPER_ADMIN') {
+      return true;
+    }
+
     if (requiredRoles && requiredRoles.length > 0) {
-      const ok = requiredRoles.includes(user.adminRole);
+      const ok = requiredRoles.includes(effectiveRole as AdminRole);
       if (!ok) {
         throw new ForbiddenException(
           `Requires one of admin roles: ${requiredRoles.join(', ')}`,

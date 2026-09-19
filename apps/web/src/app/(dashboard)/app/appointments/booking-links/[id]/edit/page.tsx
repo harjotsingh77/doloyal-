@@ -179,7 +179,7 @@ export default function EditBookingPageEditor() {
       setBranding({ ...(data.branding || {}) });
       setSeo({ ...(data.seo || {}) });
       setDomain({
-        subdomain: data.domain?.subdomain || `${data.slug}.doloyal.ai`,
+        subdomain: data.domain?.subdomain || `${data.slug}.doloyal.com`,
         customDomain: data.domain?.customDomain || "",
         status: data.domain?.status || "PENDING",
       });
@@ -474,7 +474,7 @@ export default function EditBookingPageEditor() {
               </Card>
               <Field label="Doloyal subdomain">
                 <Input
-                  value={domain.subdomain || `${link.slug}.doloyal.ai`}
+                  value={domain.subdomain || `${link.slug}.doloyal.com`}
                   onChange={(e) => setDomain({ ...domain, subdomain: e.target.value })}
                 />
               </Field>

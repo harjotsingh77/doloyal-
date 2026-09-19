@@ -61,7 +61,7 @@ export default function AdminBillingPage() {
             </Button>
             <Button onClick={() => setRefundOpen(true)}>
               <Undo2 className="h-4 w-4" />
-              Issue refund
+              Record refund
             </Button>
           </>
         }
@@ -228,7 +228,7 @@ function RefundDialog({ open, onClose }: { open: boolean; onClose: () => void })
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Issue refund</DialogTitle>
+          <DialogTitle>Record refund</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>

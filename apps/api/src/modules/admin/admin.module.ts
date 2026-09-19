@@ -26,7 +26,7 @@ import { AdminOpsController } from './admin-ops.controller';
 import { AdminTeamService } from './admin-team.service';
 import { AdminTeamController } from './admin-team.controller';
 import { AdminSettingsService } from './admin-settings.service';
-import { AdminSettingsController } from './admin-settings.controller';
+import { AdminSettingsController, AdminFeatureFlagsController } from './admin-settings.controller';
 import { AdminCommService } from './admin-comm.service';
 import { AdminCommController } from './admin-comm.controller';
 
@@ -63,6 +63,7 @@ import { AdminCommController } from './admin-comm.controller';
     AdminOpsController,
     AdminTeamController,
     AdminSettingsController,
+    AdminFeatureFlagsController,
     AdminCommController,
   ],
 })

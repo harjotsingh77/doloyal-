@@ -34,6 +34,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       include: { memberships: true },
     });
     if (!user) throw new UnauthorizedException('User not found');
+    if (user.suspendedAt) {
+      throw new UnauthorizedException('This account has been suspended.');
+    }
     if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
       throw new UnauthorizedException('Session expired. Please sign in again.');
     }
@@ -70,7 +73,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const staffMemberships = user.memberships.filter((m) => m.role !== 'CUSTOMER');
-    const activeMembership = staffMemberships[0];
+    // `tid` records which workspace the user switched to. It is only ever
+    // honoured when the user still holds a membership for it, so a tampered
+    // or stale claim degrades to their first workspace instead of granting
+    // access to someone else's data.
+    const activeMembership =
+      (payload.tid && staffMemberships.find((m) => m.tenantId === payload.tid)) ||
+      staffMemberships[0];
     if (payload.imp) {
       if (user.isAdmin !== true) {
         throw new UnauthorizedException('Not authorized to impersonate');
@@ -85,8 +94,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         avatarUrl: user.avatarUrl,
         twoFactorEnabled: user.twoFactorEnabled,
         isAdmin: Boolean(user.isAdmin),
-        adminRole: user.adminRole ?? null,
-        adminPermissions: permissionsForRole(user.adminRole),
+        adminRole: user.adminRole ?? (user.isAdmin ? 'SUPER_ADMIN' : null),
+        adminPermissions: permissionsForRole(
+          user.adminRole ?? (user.isAdmin ? 'SUPER_ADMIN' : null),
+        ),
         memberships: staffMemberships,
         activeTenantId: tenant.id,
         activeRole: 'OWNER' as const,
@@ -105,8 +116,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: user.twoFactorEnabled,
       isAdmin: Boolean(user.isAdmin),
-      adminRole: user.adminRole ?? null,
-      adminPermissions: permissionsForRole(user.adminRole),
+      adminRole: user.adminRole ?? (user.isAdmin ? 'SUPER_ADMIN' : null),
+      adminPermissions: permissionsForRole(
+        user.adminRole ?? (user.isAdmin ? 'SUPER_ADMIN' : null),
+      ),
       memberships: staffMemberships,
       activeTenantId: activeMembership?.tenantId || '',
       activeRole: activeMembership?.role || 'OWNER',

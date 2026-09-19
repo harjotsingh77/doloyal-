@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X, CalendarDays } from "lucide-react";
 import type { WidgetSettings } from "@doloyal/shared";
+import { getAppBaseUrl } from "@/lib/api-base";
 
 interface WidgetPreviewProps {
   settings: WidgetSettings;
@@ -20,7 +21,7 @@ const POSITIONS: Record<string, string> = {
 export function WidgetPreview({ settings, slug, tenantName }: WidgetPreviewProps) {
   const [popupOpen, setPopupOpen] = React.useState(false);
 
-  const bookingUrl = `https://app.doloyal.ai/book/${slug}`;
+  const bookingUrl = `${getAppBaseUrl()}/book/${slug}`;
 
   return (
     <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] overflow-hidden">

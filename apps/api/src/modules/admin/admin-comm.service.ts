@@ -69,11 +69,11 @@ export class AdminCommService {
   async search(q: string) {
     const term = q?.trim();
     if (!term) {
-      return { businesses: [], users: [], customers: [], subscriptions: [], tickets: [], websiteRequests: [], invoices: [], total: 0 };
+      return { businesses: [], users: [], customers: [], subscriptions: [], tickets: [], websiteRequests: [], invoices: [], auditLogs: [], total: 0 };
     }
     const like = { contains: term, mode: 'insensitive' as const };
 
-    const [businesses0, users0, customers0, subscriptions0, tickets0, requests0, invoices0] =
+    const [businesses0, users0, customers0, subscriptions0, tickets0, requests0, invoices0, audit0] =
       await Promise.all([
         this.prisma.tenant.findMany({
           where: { OR: [{ name: like }, { slug: like }, { email: like }] },
@@ -106,8 +106,13 @@ export class AdminCommService {
           take: 8,
           include: {
             tenant: {
-              select: { name: true },
-              include: { memberships: { where: { role: 'OWNER' }, include: { user: { select: { email: true } } } } },
+              select: {
+                name: true,
+                memberships: {
+                  where: { role: 'OWNER' },
+                  include: { user: { select: { email: true } } },
+                },
+              },
             },
           },
         }),
@@ -125,6 +130,13 @@ export class AdminCommService {
           where: { OR: [{ invoiceNumber: like }, { tenant: { name: like } }] },
           take: 8,
           include: { tenant: { select: { name: true } } },
+        }),
+        this.prisma.adminAuditLog.findMany({
+          where: {
+            OR: [{ action: like }, { targetName: like }, { actorEmail: like }, { category: like }],
+          },
+          take: 8,
+          orderBy: { createdAt: 'desc' },
         }),
       ]);
 
@@ -166,7 +178,7 @@ export class AdminCommService {
       avatarUrl: u.avatarUrl,
       isAdmin: Boolean(u.isAdmin),
       adminRole: u.adminRole ?? null,
-      status: 'ACTIVE' as const,
+      status: u.suspendedAt ? ('SUSPENDED' as const) : ('ACTIVE' as const),
       businessCount: u.memberships.length,
       primaryBusiness: u.memberships[0]?.tenant?.name ?? null,
       createdAt: u.createdAt.toISOString(),
@@ -200,7 +212,8 @@ export class AdminCommService {
       subscriptions.length +
       tickets0.length +
       requests0.length +
-      invoices0.length;
+      invoices0.length +
+      audit0.length;
 
     return {
       businesses,
@@ -226,6 +239,13 @@ export class AdminCommService {
         status: i.status,
         businessName: i.tenant?.name,
         total: i.total,
+      })),
+      auditLogs: audit0.map((a) => ({
+        id: a.id,
+        action: a.action,
+        targetName: a.targetName,
+        actorEmail: a.actorEmail,
+        createdAt: a.createdAt.toISOString(),
       })),
       total,
     };

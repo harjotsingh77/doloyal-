@@ -29,7 +29,9 @@ import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
 
-const BASE_URL = getApiBaseUrl();
+function apiBase(): string {
+  return getApiBaseUrl();
+}
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
   (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -63,7 +65,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers["Content-Type"] = "application/json";
   }
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     ...options,
     headers,
     cache: options.cache ?? "no-store",
@@ -250,7 +252,7 @@ export const api = {
     form.append("file", file);
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${BASE_URL}/products/${id}/image`, { method: "POST", headers, body: form });
+    const res = await fetch(`${apiBase()}/products/${id}/image`, { method: "POST", headers, body: form });
     if (res.ok) {
       const envelope = (await res.json()) as ApiResponse<CatalogProduct>;
       if (isApiError(envelope) || !("data" in envelope)) {
@@ -318,7 +320,7 @@ export const api = {
       form.append("file", file);
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${BASE_URL}/customers/import`, {
+      const res = await fetch(`${apiBase()}/customers/import`, {
         method: "POST",
         headers,
         body: form,
@@ -357,7 +359,7 @@ export const api = {
       const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${BASE_URL}/customers/export`, { headers });
+      const res = await fetch(`${apiBase()}/customers/export`, { headers });
       if (!res.ok) {
         const ct = res.headers.get("content-type") || "";
         let message = `Export failed with status ${res.status}`;
@@ -691,7 +693,7 @@ export const api = {
   subscribeReferralEvents: () => {
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = BASE_URL;
+    const base = apiBase();
     const url = `${base}/referrals/events`;
     // EventSource cannot set Authorization headers in browsers; token query fallback for SSE.
     const withAuth = token ? `${url}?access_token=${encodeURIComponent(token)}` : url;
@@ -793,7 +795,7 @@ export const api = {
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(
-      `${BASE_URL}/website-projects/${projectId}/upload?category=${encodeURIComponent(category)}`,
+      `${apiBase()}/website-projects/${projectId}/upload?category=${encodeURIComponent(category)}`,
       { method: "POST", headers, body: form },
     );
     const ct = res.headers.get("content-type") || "";
@@ -811,7 +813,7 @@ export const api = {
   subscribeWebsiteProjectEvents: () => {
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = BASE_URL;
+    const base = apiBase();
     const withAuth = token
       ? `${base}/website-projects/events?access_token=${encodeURIComponent(token)}`
       : `${base}/website-projects/events`;
@@ -879,7 +881,7 @@ export const api = {
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(
-      `${BASE_URL}/admin/website-projects/${projectId}/upload?category=${encodeURIComponent(category)}`,
+      `${apiBase()}/admin/website-projects/${projectId}/upload?category=${encodeURIComponent(category)}`,
       { method: "POST", headers, body: form },
     );
     const ct = res.headers.get("content-type") || "";
@@ -897,7 +899,7 @@ export const api = {
   subscribeAdminWebsiteProjectEvents: () => {
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = BASE_URL;
+    const base = apiBase();
     const withAuth = token
       ? `${base}/admin/website-projects/events?access_token=${encodeURIComponent(token)}`
       : `${base}/admin/website-projects/events`;
@@ -1268,7 +1270,7 @@ export const api = {
     const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "text/event-stream" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const controller = new AbortController();
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetch(`${apiBase()}${path}`, {
       method: "POST",
       headers,
       body: JSON.stringify(data),
@@ -1606,7 +1608,7 @@ export const api = {
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(`${BASE_URL}/reviews/video`, { method: "POST", headers, body: form });
+    const res = await fetch(`${apiBase()}/reviews/video`, { method: "POST", headers, body: form });
     const ct = res.headers.get("content-type") || "";
     if (!res.ok) {
       let message = "Could not save the video review.";
@@ -1662,7 +1664,7 @@ export const api = {
 
   submitPublicVideoReview: async (slug: string, form: FormData) => {
     assertApiBaseUrlConfigured();
-    const res = await fetch(`${BASE_URL}/public/reviews/${encodeURIComponent(slug)}/video`, {
+    const res = await fetch(`${apiBase()}/public/reviews/${encodeURIComponent(slug)}/video`, {
       method: "POST",
       body: form,
     });
@@ -1693,7 +1695,7 @@ export const api = {
       form.append("kind", kind);
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${BASE_URL}/tenants/upload?kind=${encodeURIComponent(kind)}`, { method: "POST", headers, body: form });
+      const res = await fetch(`${apiBase()}/tenants/upload?kind=${encodeURIComponent(kind)}`, { method: "POST", headers, body: form });
       const ct = res.headers.get("content-type") || "";
       if (!res.ok) {
         let body: { error?: { message?: string } } = {};
@@ -1882,7 +1884,7 @@ export const api = {
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${BASE_URL}/staff/export?format=${format}`, { headers });
+    const res = await fetch(`${apiBase()}/staff/export?format=${format}`, { headers });
     if (!res.ok) {
       let message = `Export failed with status ${res.status}`;
       try { const b = await res.json(); message = b.error?.message ?? message; } catch {}
@@ -1901,7 +1903,7 @@ export const api = {
     form.append("file", file);
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${BASE_URL}/staff/members/${id}/photo`, { method: "POST", headers, body: form });
+    const res = await fetch(`${apiBase()}/staff/members/${id}/photo`, { method: "POST", headers, body: form });
     if (!res.ok) {
       let message = "Photo upload failed";
       try { const b = await res.json(); message = b.error?.message ?? message; } catch {}
@@ -2125,6 +2127,14 @@ export const api = {
     request<{ token: string; user: any }>("/auth/supabase/exchange", {
       method: "POST",
       body: JSON.stringify({ accessToken }),
+    }),
+
+  // Returns a new token scoped to the target workspace. The caller must store
+  // it, otherwise later requests keep resolving to the previous workspace.
+  switchTenant: (tenantId: string) =>
+    request<{ token: string; user: AuthUser }>("/auth/switch-tenant", {
+      method: "POST",
+      body: JSON.stringify({ tenantId }),
     }),
 
   getClientSignInConfig: (slug: string) =>
@@ -2402,7 +2412,7 @@ export const api = {
     form.append("file", file);
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${BASE_URL}/support/tickets/${ticketId}/upload`, {
+    const res = await fetch(`${apiBase()}/support/tickets/${ticketId}/upload`, {
       method: "POST",
       headers,
       body: form,
@@ -2422,7 +2432,7 @@ export const api = {
   subscribeSupportEvents: () => {
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = BASE_URL;
+    const base = apiBase();
     const withAuth = token
       ? `${base}/support/events?access_token=${encodeURIComponent(token)}`
       : `${base}/support/events`;
@@ -2552,7 +2562,7 @@ export const api = {
     form.append("file", file);
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${BASE_URL}/admin/support/tickets/${ticketId}/upload`, {
+    const res = await fetch(`${apiBase()}/admin/support/tickets/${ticketId}/upload`, {
       method: "POST",
       headers,
       body: form,
@@ -2572,7 +2582,7 @@ export const api = {
   subscribeAdminSupportEvents: () => {
     assertApiBaseUrlConfigured();
     const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-    const base = BASE_URL;
+    const base = apiBase();
     const withAuth = token
       ? `${base}/admin/support/events?access_token=${encodeURIComponent(token)}`
       : `${base}/admin/support/events`;
@@ -2785,6 +2795,55 @@ export const api = {
 
   adminIntegrationsOverview: () =>
     request<import("@doloyal/shared").AdminIntegrationsOverview>("/admin/integrations/overview"),
+
+  adminListIntegrationErrors: (params?: { status?: string; type?: string; businessId?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.type) q.set("type", params.type);
+    if (params?.businessId) q.set("businessId", params.businessId);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminSyncErrorItem>>(
+      `/admin/integrations/errors${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminResolveIntegrationError: (id: string) =>
+    request<{ ok: boolean }>(`/admin/integrations/errors/${id}/resolve`, { method: "POST", body: JSON.stringify({}) }),
+
+  adminRetryIntegrationError: (id: string) =>
+    request<{ ok: boolean }>(`/admin/integrations/errors/${id}/retry`, { method: "POST", body: JSON.stringify({}) }),
+
+  adminListWebhookEvents: (params?: { status?: string; type?: string; businessId?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.type) q.set("type", params.type);
+    if (params?.businessId) q.set("businessId", params.businessId);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
+    const qs = q.toString();
+    return request<import("@doloyal/shared").AdminPaginated<import("@doloyal/shared").AdminWebhookEventItem>>(
+      `/admin/integrations/webhooks${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  adminGetWebhookEvent: (id: string) =>
+    request<import("@doloyal/shared").AdminWebhookEventItem>(`/admin/integrations/webhooks/${id}`),
+
+  adminFeatureFlagOverview: () =>
+    request<import("@doloyal/shared").AdminFeatureFlagOverview>("/admin/feature-flags"),
+
+  adminTenantFeatureFlags: (tenantId: string) =>
+    request<{ tenant: { id: string; name: string }; features: Array<{ key: string; name: string; description: string; category: string; core: boolean; enabled: boolean }> }>(
+      `/admin/feature-flags/tenant?tenantId=${encodeURIComponent(tenantId)}`,
+    ),
+
+  adminSetTenantFeatureFlag: (tenantId: string, featureKey: string, enabled: boolean) =>
+    request<{ ok?: boolean }>(`/admin/feature-flags/${tenantId}/${encodeURIComponent(featureKey)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
 
   adminAnalyticsOverview: (range?: string) =>
     request<import("@doloyal/shared").AdminAnalyticsOverview>(`/admin/analytics/overview${range ? `?range=${range}` : ""}`),

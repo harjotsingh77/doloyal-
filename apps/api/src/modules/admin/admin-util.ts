@@ -92,21 +92,36 @@ export function paginate(pageStr?: string, pageSizeStr?: string) {
   return { page, pageSize };
 }
 
-/** Business status derived from its subscription state. */
-export async function businessStatus(prisma: PrismaService, tenantId: string) {
-  const sub = await prisma.subscription.findFirst({
-    where: { tenantId },
-    orderBy: { createdAt: 'desc' },
-  });
+export function deriveBusinessStatus(
+  sub?: { status: string; trialEndsAt?: Date | null } | null,
+  suspendedAt?: Date | null,
+): string {
+  if (suspendedAt) return 'SUSPENDED';
   if (!sub) return 'TRIAL';
   const now = new Date();
   if (sub.status === 'CANCELED' || sub.status === 'EXPIRED') return 'CANCELED';
   if (sub.status === 'PAST_DUE') return 'PAUSED';
   const trialActive =
-    sub.status === 'TRIALING' || (sub.trialEndsAt && sub.trialEndsAt > now);
+    sub.status === 'TRIALING' || (sub.trialEndsAt != null && sub.trialEndsAt > now);
   if (trialActive) return 'TRIAL';
   if (sub.status === 'ACTIVE') return 'ACTIVE';
   return 'ACTIVE';
+}
+
+/** Business status derived from suspend flag + subscription state. */
+export async function businessStatus(prisma: PrismaService, tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      suspendedAt: true,
+      subscriptions: {
+        select: { status: true, trialEndsAt: true },
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  return deriveBusinessStatus(tenant?.subscriptions[0], tenant?.suspendedAt);
 }
 
 export async function lastActiveFor(prisma: PrismaService, tenantId: string): Promise<Date | null> {

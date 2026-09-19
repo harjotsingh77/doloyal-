@@ -18,6 +18,8 @@ export class AdminTeamService {
   async list(query: { status?: string; search?: string; page?: string; pageSize?: string }) {
     const { page, pageSize } = paginate(query.page, query.pageSize);
     const where: Record<string, unknown> = { isAdmin: true };
+    if (query.status === 'SUSPENDED') where.suspendedAt = { not: null };
+    else if (query.status === 'ACTIVE') where.suspendedAt = null;
     if (query.search?.trim()) {
       where.OR = [
         { email: { contains: query.search.trim(), mode: 'insensitive' as const } },
@@ -42,7 +44,7 @@ export class AdminTeamService {
       avatarUrl: m.avatarUrl,
       isAdmin: true,
       adminRole: m.adminRole,
-      status: 'ACTIVE',
+      status: m.suspendedAt ? 'SUSPENDED' : 'ACTIVE',
       lastActive: m.loginHistory[0]?.createdAt?.toISOString() ?? null,
       createdAt: m.createdAt.toISOString(),
     }));
@@ -50,7 +52,8 @@ export class AdminTeamService {
       query.status && query.status !== 'ALL'
         ? items.filter((i) => i.status === query.status)
         : items;
-    return { items: filtered, total: filtered.length, page, pageSize, totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)) };
+    const total = await this.prisma.user.count({ where });
+    return { items: filtered, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
   async invite(actor: any, data: { email: string; firstName?: string; lastName?: string; role: string }) {
@@ -105,13 +108,24 @@ export class AdminTeamService {
   async setStatus(actor: any, userId: string, status: 'ACTIVE' | 'SUSPENDED') {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    if (status === 'SUSPENDED') {
-      // Revoke all sessions.
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { tokenVersion: { increment: 1 }, sessions: [] },
-      });
+    if (actor?.id === userId) {
+      throw new BadRequestException('You cannot suspend your own admin account');
     }
+    if (status === 'SUSPENDED' && user.adminRole === 'SUPER_ADMIN') {
+      const remaining = await this.prisma.user.count({
+        where: { isAdmin: true, adminRole: 'SUPER_ADMIN', suspendedAt: null, id: { not: userId } },
+      });
+      if (remaining === 0) {
+        throw new BadRequestException('Cannot suspend the last Super Admin');
+      }
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data:
+        status === 'SUSPENDED'
+          ? { suspendedAt: new Date(), tokenVersion: { increment: 1 }, sessions: [] }
+          : { suspendedAt: null },
+    });
     await this.audit.record(actor, status === 'SUSPENDED' ? 'adminTeam.suspended' : 'adminTeam.reactivated', 'TEAM', {
       targetType: 'user',
       targetId: userId,

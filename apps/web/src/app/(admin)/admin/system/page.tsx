@@ -59,7 +59,7 @@ export default function AdminSystemPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AdminStatCard label="Overall status" value={data.overall.replace(/_/g, " ")} tone={data.overall === "OPERATIONAL" ? "success" : data.overall === "DEGRADED" ? "warning" : "danger"} />
-        <AdminStatCard label="Uptime" value={`${data.uptime}%`} tone="primary" />
+        <AdminStatCard label="Uptime" value={data.uptime == null ? "Not measured" : `${data.uptime}%`} tone="primary" />
         <AdminStatCard label="Incidents (24h)" value={data.incidents24h} tone={data.incidents24h > 0 ? "warning" : "success"} />
         <AdminStatCard label="Last checked" value={relativeTime(data.lastChecked)} />
       </div>
@@ -75,7 +75,7 @@ export default function AdminSystemPage() {
                   <p className="text-[0.62rem] text-[rgb(var(--color-muted-foreground))]">
                     {s.latencyMs !== undefined ? `${s.latencyMs}ms` : "—"}
                     {s.errorRate !== undefined ? ` · ${s.errorRate}% errors` : ""}
-                    {s.uptime !== undefined ? ` · ${s.uptime}% uptime` : ""}
+                    {s.note ? ` · ${s.note}` : ""}
                   </p>
                 </div>
                 <Badge variant={(SERVICE_VARIANT[s.status] as any) ?? "outline"}>{s.status.replace(/_/g, " ")}</Badge>

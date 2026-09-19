@@ -44,6 +44,10 @@ export class AdminDashboardService {
       websiteRequestsOpen,
       subscriptions,
       contracts,
+      totalUsers,
+      totalCustomers,
+      totalBookings,
+      integrationErrors24h,
     ] = await Promise.all([
       this.prisma.tenant.count(),
       this.prisma.tenant.findMany({
@@ -73,6 +77,12 @@ export class AdminDashboardService {
       this.prisma.subscription.findMany(),
       this.prisma.enterpriseContract.findMany({
         select: { tenantId: true, contractPrice: true, billingCycle: true },
+      }),
+      this.prisma.user.count({ where: { isAdmin: false } }),
+      this.prisma.customer.count(),
+      this.prisma.appointment.count(),
+      this.prisma.syncLog.count({
+        where: { status: 'FAILED', resolvedAt: null, startedAt: { gte: thirtyDaysAgo } },
       }),
     ]);
 
@@ -145,6 +155,10 @@ export class AdminDashboardService {
       churnRate30d,
       openSupportTickets: supportOpen,
       websiteRequests: websiteRequestsOpen,
+      totalUsers,
+      totalCustomers,
+      totalBookings,
+      integrationErrors24h,
     };
 
     const kpis = {
@@ -163,6 +177,10 @@ export class AdminDashboardService {
       churnRate: { value: churnRate30d, delta: null, prefix: '%' },
       openTickets: { value: supportOpen, delta: null },
       websiteRequests: { value: websiteRequestsOpen, delta: null },
+      totalUsers: { value: totalUsers, delta: null },
+      totalCustomers: { value: totalCustomers, delta: null },
+      totalBookings: { value: totalBookings, delta: null },
+      integrationErrors: { value: integrationErrors24h, delta: null },
     };
 
     const revenueTrend = await this.revenueTrend(range, subscriptions, contracts);

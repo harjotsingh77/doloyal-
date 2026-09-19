@@ -9,12 +9,8 @@ import {
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
+import { getPublicAppUrl } from '../../common/helpers';
 import { ReferralsRealtimeService } from './referrals-realtime.service';
-
-const APP_BASE =
-  process.env.PUBLIC_APP_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  'https://doloyal.ai';
 
 function genCode(len = 8) {
   return randomBytes(12)
@@ -70,7 +66,7 @@ export class ReferralsService {
   ) {}
 
   private linkUrl(code: string) {
-    return `${APP_BASE.replace(/\/$/, '')}/r/${code}`;
+    return `${getPublicAppUrl()}/r/${code}`;
   }
 
   private async emit(

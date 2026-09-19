@@ -58,7 +58,7 @@ export default function AdminPlansPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {plans.map((p) => (
-              <PlanCard key={p.id} plan={p} onSave={() => {}} />
+              <PlanCard key={p.id} plan={p} />
             ))}
           </div>
 
@@ -67,6 +67,11 @@ export default function AdminPlansPage() {
               <BadgeCheck className="h-5 w-5 text-[rgb(var(--color-primary))]" />
               Enterprise contracts
             </h2>
+            <EnterpriseContractForm
+              onCreated={() => {
+                void api.adminListEnterpriseContracts().then(setContracts);
+              }}
+            />
             {contracts.length === 0 ? (
               <Card>
                 <CardContent className="p-8">
@@ -116,7 +121,7 @@ export default function AdminPlansPage() {
   );
 }
 
-function PlanCard({ plan }: { plan: AdminPlanInfo; onSave: () => void }) {
+function PlanCard({ plan }: { plan: AdminPlanInfo }) {
   const [configText, setConfigText] = React.useState(JSON.stringify(plan.config ?? {}, null, 2));
   const [busy, setBusy] = React.useState(false);
 
@@ -179,6 +184,62 @@ function PlanCard({ plan }: { plan: AdminPlanInfo; onSave: () => void }) {
             Save overrides
           </Button>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EnterpriseContractForm({ onCreated }: { onCreated: () => void }) {
+  const [tenantId, setTenantId] = React.useState("");
+  const [price, setPrice] = React.useState("");
+  const [cycle, setCycle] = React.useState("MONTHLY");
+  const [busy, setBusy] = React.useState(false);
+
+  const submit = async () => {
+    if (!tenantId.trim()) {
+      toast.error("Business ID is required");
+      return;
+    }
+    const contractPrice = Number(price);
+    if (!Number.isFinite(contractPrice) || contractPrice < 0) {
+      toast.error("Enter a valid contract price");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.adminCreateEnterpriseContract({
+        tenantId: tenantId.trim(),
+        contractPrice,
+        billingCycle: cycle,
+        startDate: new Date().toISOString(),
+      });
+      toast.success("Enterprise contract saved");
+      setTenantId("");
+      setPrice("");
+      onCreated();
+    } catch {
+      toast.error("Could not save contract. Check the business ID.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="mb-4">
+      <CardContent className="grid gap-3 p-4 sm:grid-cols-4">
+        <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Business ID" />
+        <Input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Contract price" type="number" min="0" />
+        <select
+          value={cycle}
+          onChange={(e) => setCycle(e.target.value)}
+          className="h-10 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-sm"
+        >
+          <option value="MONTHLY">Monthly</option>
+          <option value="YEARLY">Yearly</option>
+        </select>
+        <Button onClick={submit} loading={busy}>
+          Save contract
+        </Button>
       </CardContent>
     </Card>
   );

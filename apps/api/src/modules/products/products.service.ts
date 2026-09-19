@@ -13,7 +13,7 @@ import {
   isProductImageMime,
   isStoredProductKey,
   mimeFromProductKey,
-  openProductMediaStream,
+  openProductMedia,
   PRODUCT_IMAGE_MAX_BYTES,
   productImageExt,
   resolveProductImageUrl,
@@ -469,9 +469,9 @@ export class ProductsService {
     if (!isStoredProductKey(row.imageUrl)) {
       throw new NotFoundException('Product image not found');
     }
-    const stream = openProductMediaStream(row.imageUrl);
-    if (!stream) throw new NotFoundException('Product image not found');
-    return { mime: mimeFromProductKey(row.imageUrl), stream };
+    const media = await openProductMedia(row.imageUrl);
+    if (!media) throw new NotFoundException('Product image not found');
+    return { mime: mimeFromProductKey(row.imageUrl), ...media };
   }
 
   private async persistIncomingImage(

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, UnauthorizedExcepti
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
+import { getPublicAppUrl } from '../../common/helpers';
 import { WhatsAppIntegrationService } from './services/whatsapp.service';
 import { getIntegrationDef } from './integration-definitions';
 import * as crypto from 'crypto';
@@ -1066,9 +1067,7 @@ export class IntegrationsService {
   private getDefaultRedirectUri(): string {
     return (
       process.env.GOOGLE_CALENDAR_REDIRECT_URI ||
-      (process.env.NODE_ENV === 'production'
-        ? 'https://www.doloyal.com/app/integrations/callback'
-        : 'http://localhost:3000/app/integrations/callback')
+      `${getPublicAppUrl()}/app/integrations/callback`
     );
   }
 

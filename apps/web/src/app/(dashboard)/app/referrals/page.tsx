@@ -66,6 +66,7 @@ import type {
   ReferralLeaderboardRow,
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { getAppBaseUrl } from "@/lib/api-base";
 import { useCurrency } from "@/lib/currency-context";
 
 const RANGES = [
@@ -1322,11 +1323,8 @@ function GenerateLinkModal({
     return () => clearTimeout(timer);
   }, [customSlug]);
 
-  const appBase =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "https://doloyal.ai");
   const previewSlug = customSlug.trim() ? customSlug.trim().toLowerCase() : "auto-generated";
-  const previewUrl = `${appBase.replace(/\/$/, "")}/r/${previewSlug}`;
+  const previewUrl = `${getAppBaseUrl()}/r/${previewSlug}`;
   const canSubmit = !saving && !(slugStatus && !slugStatus.available);
 
   return (

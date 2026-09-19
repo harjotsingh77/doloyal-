@@ -5,16 +5,16 @@
  * RESEND_OAUTH_CLIENT_ID environment variable.
  *
  * Usage:
- *   node scripts/register-resend-oauth.mjs [--app-url https://www.doloyal.com]
+ *   node scripts/register-resend-oauth.mjs [--app-url https://doloyal.com]
  *
- * The app URL defaults to https://www.doloyal.com. Use
+ * The app URL defaults to https://doloyal.com. Use
  * `--app-url http://localhost:3000` for local development. The registered
  * redirect URI(s) must match the callback page exactly, otherwise the
  * authorization flow will reject the callback.
  */
 
 const DCR_ENDPOINT = 'https://api.resend.com/oauth/register';
-const DEFAULT_APP_URL = 'https://www.doloyal.com';
+const DEFAULT_APP_URL = 'https://doloyal.com';
 
 function parseArgs(argv) {
   const args = { appUrl: DEFAULT_APP_URL };
@@ -41,7 +41,7 @@ if (help) {
       '  node scripts/register-resend-oauth.mjs [--app-url <url>]',
       '',
       'Options:',
-      '  --app-url  Base URL of the app. Defaults to https://www.doloyal.com.',
+      '  --app-url  Base URL of the app. Defaults to https://doloyal.com.',
       '             Use http://localhost:3000 for local development.',
       '',
     ].join('\n'),

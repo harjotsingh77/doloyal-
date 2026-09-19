@@ -234,7 +234,19 @@ export class AdminContentService {
   async getArticle(id: string) {
     const article = await this.prisma.supportArticle.findUnique({ where: { id } });
     if (!article) throw new NotFoundException('Article not found');
-    return article;
+    return {
+      id: article.id,
+      slug: article.slug,
+      title: article.title,
+      description: article.description,
+      content: article.content,
+      category: article.category,
+      keywords: article.keywords,
+      faq: article.faq,
+      published: article.published,
+      sortOrder: article.sortOrder,
+      updatedAt: article.updatedAt.toISOString(),
+    };
   }
 
   async createArticle(actor: any, data: any) {

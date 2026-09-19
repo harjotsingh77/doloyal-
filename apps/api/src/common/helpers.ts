@@ -318,11 +318,50 @@ export function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pi
 export function getAllowedOrigins(): string[] {
   return (
     process.env.CORS_ORIGIN ||
-    'https://doloyal.com,https://www.doloyal.com,http://localhost:3000'
+    'https://doloyal.com,https://www.doloyal.com,http://localhost:3000,http://127.0.0.1:3000'
   )
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * Canonical public origin of the Doloyal web app, with no trailing slash.
+ *
+ * Every customer-visible link the API generates — password resets, staff
+ * invites, booking links, client pages, referral links — must be built from
+ * this. Previously four call sites each had their own fallback chain, two of
+ * which defaulted to `http://localhost:3000` and two to `https://doloyal.ai`,
+ * so setting a single env var in production still left broken links in some
+ * emails. The legacy names are still read so existing deployments keep
+ * working, but `APP_URL` is the one to set.
+ */
+export function getPublicAppUrl(): string {
+  const configured =
+    process.env.APP_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.WEB_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_WEB_URL ||
+    '';
+
+  const fallback =
+    process.env.NODE_ENV === 'production'
+      ? 'https://doloyal.com'
+      : 'http://localhost:3000';
+
+  const resolved = (configured || fallback).trim().replace(/\/+$/, '');
+
+  // A localhost URL leaking into production would produce dead links in real
+  // customer emails, so ignore it and fall back to the canonical domain.
+  if (
+    process.env.NODE_ENV === 'production' &&
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(resolved)
+  ) {
+    return 'https://doloyal.com';
+  }
+
+  return resolved;
 }
 
 /**

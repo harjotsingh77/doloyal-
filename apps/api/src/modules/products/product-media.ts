@@ -2,6 +2,13 @@ import { createReadStream, existsSync } from 'fs';
 import { copyFile, mkdir, unlink, writeFile } from 'fs/promises';
 import { join, normalize } from 'path';
 import { randomUUID } from 'crypto';
+import {
+  copyObject,
+  deleteObject,
+  getObject,
+  isRemoteStorageEnabled,
+  putObject,
+} from '../../common/object-storage';
 
 export const PRODUCT_UPLOAD_ROOT = join(process.cwd(), 'uploads', 'products');
 export const PRODUCT_IMAGE_MAX_BYTES = 12 * 1024 * 1024;
@@ -51,22 +58,35 @@ export async function saveProductImage(opts: {
   filename: string;
 }): Promise<string> {
   const ext = productImageExt(opts.mime, opts.filename);
+  const key = `products/${opts.tenantId}/${randomUUID()}${ext}`;
+
+  if (isRemoteStorageEnabled()) {
+    await putObject(key, opts.buffer, opts.mime);
+    return key;
+  }
+
   const dir = join(PRODUCT_UPLOAD_ROOT, opts.tenantId);
   await mkdir(dir, { recursive: true });
-  const name = `${randomUUID()}${ext}`;
-  await writeFile(join(dir, name), opts.buffer);
-  return `products/${opts.tenantId}/${name}`;
+  await writeFile(join(dir, key.split('/').pop()!), opts.buffer);
+  return key;
 }
 
 export async function copyProductImage(key: string, tenantId: string): Promise<string> {
+  const ext = key.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] || '.jpg';
+  const target = `products/${tenantId}/${randomUUID()}${ext}`;
+
+  if (isRemoteStorageEnabled()) {
+    // Fall back to the original key so the duplicate still shows an image
+    // rather than a broken one.
+    return (await copyObject(key, target)) ? target : key;
+  }
+
   const abs = productMediaAbsolutePath(key);
   if (!abs || !existsSync(abs)) return key;
-  const ext = key.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] || '.jpg';
   const dir = join(PRODUCT_UPLOAD_ROOT, tenantId);
   await mkdir(dir, { recursive: true });
-  const name = `${randomUUID()}${ext}`;
-  await copyFile(abs, join(dir, name));
-  return `products/${tenantId}/${name}`;
+  await copyFile(abs, join(dir, target.split('/').pop()!));
+  return target;
 }
 
 export function productMediaAbsolutePath(key: string): string | null {
@@ -74,14 +94,31 @@ export function productMediaAbsolutePath(key: string): string | null {
   return safeJoin(PRODUCT_UPLOAD_ROOT, key);
 }
 
-export function openProductMediaStream(key: string) {
+/**
+ * Returns a readable stream on local disk, or the raw bytes when the object
+ * lives in remote storage. Callers hand either shape straight to Fastify.
+ */
+export async function openProductMedia(
+  key: string,
+): Promise<{ stream?: NodeJS.ReadableStream; buffer?: Buffer } | null> {
+  if (isRemoteStorageEnabled()) {
+    const buffer = await getObject(key);
+    return buffer ? { buffer } : null;
+  }
+
   const abs = productMediaAbsolutePath(key);
   if (!abs || !existsSync(abs)) return null;
-  return createReadStream(abs);
+  return { stream: createReadStream(abs) };
 }
 
 export async function deleteProductImage(key: string | null | undefined): Promise<void> {
   if (!isStoredProductKey(key)) return;
+
+  if (isRemoteStorageEnabled()) {
+    await deleteObject(key!);
+    return;
+  }
+
   const abs = productMediaAbsolutePath(key!);
   if (!abs) return;
   try {

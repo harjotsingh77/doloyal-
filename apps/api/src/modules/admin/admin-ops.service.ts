@@ -3,40 +3,6 @@ import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
 import { paginate } from './admin-util';
 
-const SERVICES = [
-  'DATABASE',
-  'AUTH',
-  'API',
-  'REALTIME',
-  'PAYMENTS',
-  'EMAIL',
-  'SMS',
-  'WHATSAPP',
-  'AI',
-  'STORAGE',
-  'BACKGROUND_JOBS',
-  'CRON',
-  'WEBHOOKS',
-  'INTEGRATIONS',
-];
-
-const SERVICE_LABELS: Record<string, string> = {
-  DATABASE: 'Database',
-  AUTH: 'Authentication',
-  API: 'API',
-  REALTIME: 'Realtime',
-  PAYMENTS: 'Payments',
-  EMAIL: 'Email',
-  SMS: 'SMS',
-  WHATSAPP: 'WhatsApp',
-  AI: 'AI',
-  STORAGE: 'Storage',
-  BACKGROUND_JOBS: 'Background Jobs',
-  CRON: 'Cron Jobs',
-  WEBHOOKS: 'Webhooks',
-  INTEGRATIONS: 'Integrations',
-};
-
 @Injectable()
 export class AdminOpsService {
   constructor(
@@ -46,49 +12,93 @@ export class AdminOpsService {
 
   async systemHealth() {
     const now = Date.now();
-    const services = await Promise.all(
-      SERVICES.map(async (key) => {
-        const recent = await this.prisma.systemLog.count({
-          where: { service: key, createdAt: { gte: new Date(now - 24 * 3600000) } },
-        });
-        const errors = await this.prisma.systemLog.count({
-          where: { service: key, severity: { in: ['ERROR', 'CRITICAL'] }, createdAt: { gte: new Date(now - 24 * 3600000) } },
-        });
-        let status: 'OPERATIONAL' | 'DEGRADED' | 'DOWN' = 'OPERATIONAL';
-        if (errors > 3) status = 'DOWN';
-        else if (errors > 0) status = 'DEGRADED';
+    const dayAgo = new Date(now - 24 * 3600000);
 
-        // Derive live signals where possible.
-        if (key === 'DATABASE') {
-          try {
-            await this.prisma.$queryRaw`SELECT 1`;
-          } catch {
-            status = 'DOWN';
-          }
-        }
-        if (key === 'PAYMENTS') {
-          const stripeFailures = await this.prisma.subscriptionEvent.count({
-            where: { type: 'PAYMENT_FAILED', createdAt: { gte: new Date(now - 24 * 3600000) } },
-          });
-          if (stripeFailures > 3) status = 'DEGRADED';
-        }
-        if (key === 'AI') {
-          const aiFailures = await this.prisma.systemLog.count({
-            where: { service: 'AI', severity: 'ERROR', createdAt: { gte: new Date(now - 3600000) } },
-          });
-          if (aiFailures > 5) status = 'DOWN';
-        }
+    const dbStart = Date.now();
+    let databaseStatus: 'OPERATIONAL' | 'DEGRADED' | 'DOWN' = 'OPERATIONAL';
+    let dbLatency = 0;
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      dbLatency = Date.now() - dbStart;
+      if (dbLatency > 800) databaseStatus = 'DEGRADED';
+    } catch {
+      databaseStatus = 'DOWN';
+      dbLatency = Date.now() - dbStart;
+    }
 
-        return {
-          key,
-          label: SERVICE_LABELS[key] ?? key,
-          status,
-          latencyMs: undefined,
-          errorRate: recent > 0 ? Math.round((errors / recent) * 1000) / 10 : 0,
-          uptime: undefined,
-        };
+    const [paymentFailures, failedSyncs, failedWebhooks, criticalLogs, emailFailures] = await Promise.all([
+      this.prisma.subscriptionEvent.count({
+        where: { type: 'PAYMENT_FAILED', createdAt: { gte: dayAgo } },
       }),
-    );
+      this.prisma.syncLog.count({
+        where: { status: 'FAILED', resolvedAt: null, startedAt: { gte: dayAgo } },
+      }),
+      this.prisma.webhookEvent.count({
+        where: { status: 'FAILED', createdAt: { gte: dayAgo } },
+      }),
+      this.prisma.systemLog.count({
+        where: { severity: 'CRITICAL', createdAt: { gte: dayAgo } },
+      }),
+      this.prisma.emailLog.count({
+        where: { status: 'FAILED', createdAt: { gte: dayAgo } },
+      }),
+    ]);
+
+    const services = [
+      {
+        key: 'API',
+        label: 'API',
+        status: 'OPERATIONAL' as const,
+        latencyMs: undefined,
+        errorRate: undefined,
+        uptime: undefined,
+        note: 'This health endpoint responded successfully.',
+      },
+      {
+        key: 'DATABASE',
+        label: 'Database',
+        status: databaseStatus,
+        latencyMs: dbLatency,
+        errorRate: undefined,
+        uptime: undefined,
+      },
+      {
+        key: 'PAYMENTS',
+        label: 'Payments',
+        status: (paymentFailures > 5 ? 'DEGRADED' : 'OPERATIONAL') as 'OPERATIONAL' | 'DEGRADED',
+        latencyMs: undefined,
+        errorRate: undefined,
+        uptime: undefined,
+        note: `${paymentFailures} failed payment events in 24h`,
+      },
+      {
+        key: 'INTEGRATIONS',
+        label: 'Integrations',
+        status: (failedSyncs > 10 ? 'DEGRADED' : 'OPERATIONAL') as 'OPERATIONAL' | 'DEGRADED',
+        latencyMs: undefined,
+        errorRate: undefined,
+        uptime: undefined,
+        note: `${failedSyncs} unresolved sync failures in 24h`,
+      },
+      {
+        key: 'WEBHOOKS',
+        label: 'Webhooks',
+        status: (failedWebhooks > 10 ? 'DEGRADED' : 'OPERATIONAL') as 'OPERATIONAL' | 'DEGRADED',
+        latencyMs: undefined,
+        errorRate: undefined,
+        uptime: undefined,
+        note: `${failedWebhooks} failed webhook events in 24h`,
+      },
+      {
+        key: 'EMAIL',
+        label: 'Email',
+        status: (emailFailures > 10 ? 'DEGRADED' : 'OPERATIONAL') as 'OPERATIONAL' | 'DEGRADED',
+        latencyMs: undefined,
+        errorRate: undefined,
+        uptime: undefined,
+        note: `${emailFailures} failed email sends in 24h`,
+      },
+    ];
 
     const overall: 'OPERATIONAL' | 'DEGRADED' | 'DOWN' = services.some((s) => s.status === 'DOWN')
       ? 'DOWN'
@@ -96,15 +106,11 @@ export class AdminOpsService {
         ? 'DEGRADED'
         : 'OPERATIONAL';
 
-    const incidents24h = await this.prisma.systemLog.count({
-      where: { severity: 'CRITICAL', createdAt: { gte: new Date(now - 24 * 3600000) } },
-    });
-
     return {
       services,
       overall,
-      uptime: 99.9,
-      incidents24h,
+      uptime: null,
+      incidents24h: criticalLogs,
       lastChecked: new Date(now).toISOString(),
     };
   }

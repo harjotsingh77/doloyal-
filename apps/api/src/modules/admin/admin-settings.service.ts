@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
+import { FeatureFlagsService } from '../feature-flags/feature-flags.service';
+import { LOYALTY_FEATURE_CATALOG } from '@doloyal/shared';
 
 const SETTING_DEFINITIONS: Array<{ key: string; group: string; type: string; description?: string }> = [
   // general
@@ -59,6 +61,7 @@ export class AdminSettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AdminAuditService,
+    private readonly featureFlags: FeatureFlagsService,
   ) {}
 
   async getAll() {
@@ -103,5 +106,56 @@ export class AdminSettingsService {
       metadata: { keys: changes.map((c) => c.key) },
     });
     return { ok: true, updated: changes.map((c) => c.key) };
+  }
+
+  async featureFlagOverview() {
+    const grouped = await this.prisma.featureFlag.groupBy({
+      by: ['featureKey', 'enabled'],
+      _count: { _all: true },
+    });
+    const tenantCount = await this.prisma.tenant.count();
+    return {
+      tenantCount,
+      catalog: LOYALTY_FEATURE_CATALOG.map((def) => {
+        const enabled = grouped.find((g) => g.featureKey === def.key && g.enabled)?._count._all ?? 0;
+        const disabled = grouped.find((g) => g.featureKey === def.key && !g.enabled)?._count._all ?? 0;
+        return {
+          key: def.key,
+          name: def.name,
+          description: def.description,
+          category: def.category,
+          core: def.core,
+          enabledTenants: def.core ? tenantCount : enabled,
+          disabledTenants: def.core ? 0 : disabled,
+        };
+      }),
+    };
+  }
+
+  async listTenantFeatureFlags(tenantId: string) {
+    if (!tenantId?.trim()) throw new BadRequestException('tenantId is required');
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true },
+    });
+    if (!tenant) throw new NotFoundException('Business not found');
+    const features = await this.featureFlags.getBusinessFeatures(tenantId);
+    return { tenant, ...features };
+  }
+
+  async setTenantFeatureFlag(actor: any, tenantId: string, featureKey: string, enabled: boolean) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    if (!tenant) throw new NotFoundException('Business not found');
+    const result = await this.featureFlags.setEnabled(tenantId, featureKey, enabled);
+    await this.audit.record(actor, enabled ? 'featureFlag.enabled' : 'featureFlag.disabled', 'SETTINGS', {
+      targetType: 'tenant',
+      targetId: tenantId,
+      targetName: tenant.name,
+      metadata: { featureKey, enabled },
+    });
+    return result;
   }
 }

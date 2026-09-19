@@ -57,7 +57,7 @@ type Phase =
   | "published";
 
 function slugToDomain(slug?: string): string {
-  return slug ? `https://${slug}.doloyal.ai` : "";
+  return slug ? `https://${slug}.doloyal.com` : "";
 }
 
 export default function AiWebsiteBuilderPage() {

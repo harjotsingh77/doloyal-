@@ -63,7 +63,8 @@ export function AdminGlobalSearch() {
       results.subscriptions.length +
       results.tickets.length +
       results.websiteRequests.length +
-      results.invoices.length
+      results.invoices.length +
+      (results.auditLogs?.length ?? 0)
     : 0;
 
   return (
@@ -130,6 +131,13 @@ export function AdminGlobalSearch() {
                       ))}
                     </Group>
                   ) : null}
+                  {results.subscriptions.length > 0 ? (
+                    <Group label="Subscriptions">
+                      {results.subscriptions.map((s) => (
+                        <Row key={s.id} onClick={() => go(`/admin/subscriptions`)} title={s.businessName} sub={`${s.plan} · ${s.status}`} />
+                      ))}
+                    </Group>
+                  ) : null}
                   {results.tickets.length > 0 ? (
                     <Group label="Support tickets">
                       {results.tickets.map((t) => (
@@ -148,6 +156,13 @@ export function AdminGlobalSearch() {
                     <Group label="Invoices">
                       {results.invoices.map((i) => (
                         <Row key={i.id} onClick={() => go(`/admin/billing`)} title={i.invoiceNumber} sub={`${i.businessName} · ${i.status}`} />
+                      ))}
+                    </Group>
+                  ) : null}
+                  {(results.auditLogs?.length ?? 0) > 0 ? (
+                    <Group label="Audit logs">
+                      {results.auditLogs!.map((a) => (
+                        <Row key={a.id} onClick={() => go(`/admin/audit-logs`)} title={a.action} sub={a.targetName || a.actorEmail || ""} />
                       ))}
                     </Group>
                   ) : null}

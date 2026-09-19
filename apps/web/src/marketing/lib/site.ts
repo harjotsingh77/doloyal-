@@ -1,12 +1,12 @@
 export const site = {
   name: "Doloyal",
   legalName: "Doloyal AI",
-  domain: "doloyal.ai",
-  url: "https://doloyal.ai",
+  domain: "doloyal.com",
+  url: "https://doloyal.com",
   tagline: "The AI Customer Retention OS for Local Businesses",
   description:
     "Doloyal unifies loyalty, rewards, memberships, online booking, website building, and AI-driven retention for salons, spas, gyms, clinics, and local businesses — in one platform.",
-  ogImage: "https://doloyal.ai/og.png",
+  ogImage: "https://doloyal.com/og.png",
   logo: "/logo-full.png",
   logoMark: "/logo-symbol.png",
   email: "hello@doloyal.com",

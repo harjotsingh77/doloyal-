@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Search, Users } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import {
   Avatar,
   AvatarFallback,
@@ -25,6 +26,16 @@ import { api } from "@/lib/api";
 import { ExportCsvButton, Pagination } from "../_components/admin-utils";
 
 export default function AdminCustomersPage() {
+  return (
+    <React.Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+      <AdminCustomersInner />
+    </React.Suspense>
+  );
+}
+
+function AdminCustomersInner() {
+  const searchParams = useSearchParams();
+  const businessId = searchParams.get("business") || "";
   const [items, setItems] = React.useState<AdminCustomerItem[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
@@ -41,7 +52,12 @@ export default function AdminCustomersPage() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.adminListCustomers({ search: debounced || undefined, page, pageSize });
+      const res = await api.adminListCustomers({
+        search: debounced || undefined,
+        businessId: businessId || undefined,
+        page,
+        pageSize,
+      });
       setItems(res.items || []);
       setTotal(res.total || 0);
     } catch {
@@ -50,7 +66,7 @@ export default function AdminCustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [debounced, page, pageSize]);
+  }, [debounced, page, pageSize, businessId]);
 
   React.useEffect(() => {
     void load();
@@ -58,13 +74,17 @@ export default function AdminCustomersPage() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [debounced]);
+  }, [debounced, businessId]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Customers"
-        description="End consumers across every business on the platform."
+        description={
+          businessId
+            ? "Showing customers for one business. Clear the URL parameter to see the full platform."
+            : "End consumers across every business on the platform."
+        }
         breadcrumbs={[{ label: "Admin" }, { label: "Customers" }]}
         actions={<ExportCsvButton entity="customers" />}
       />

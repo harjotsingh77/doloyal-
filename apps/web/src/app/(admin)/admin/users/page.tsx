@@ -31,7 +31,7 @@ import type { AdminUserItem } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { ExportCsvButton, Pagination } from "../_components/admin-utils";
 
-const ROLES = ["OWNER", "MANAGER", "RECEPTIONIST", "STAFF"];
+const ROLES = ["ADMIN", "OWNER", "MANAGER", "RECEPTIONIST", "STAFF", "CUSTOMER"];
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -100,7 +100,7 @@ export default function AdminUsersPage() {
             <SelectItem value="ALL">All roles</SelectItem>
             {ROLES.map((r) => (
               <SelectItem key={r} value={r}>
-                {r.charAt(0) + r.slice(1).toLowerCase()}
+                {r === "ADMIN" ? "Admin team" : r.charAt(0) + r.slice(1).toLowerCase()}
               </SelectItem>
             ))}
           </SelectContent>
@@ -138,6 +138,7 @@ export default function AdminUsersPage() {
                 <TableRow>
                   <TableHead>User</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="hidden md:table-cell">Businesses</TableHead>
                   <TableHead className="hidden sm:table-cell">Admin</TableHead>
                   <TableHead className="hidden xl:table-cell">Last login</TableHead>
@@ -161,6 +162,9 @@ export default function AdminUsersPage() {
                           <p className="truncate text-xs text-[rgb(var(--color-muted-foreground))]">{u.email}</p>
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm text-[rgb(var(--color-foreground))]">{u.role ?? "—"}</p>
                     </TableCell>
                     <TableCell>
                       <Badge variant={u.status === "SUSPENDED" ? "danger" : "success"}>{u.status}</Badge>

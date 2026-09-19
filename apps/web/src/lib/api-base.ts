@@ -20,6 +20,9 @@ export function getApiBaseUrl(): string {
   const explicit = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "");
 
   if (process.env.NODE_ENV !== "production") {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}${PRODUCTION_PROXY_PATH}`;
+    }
     return explicit || DEV_API_FALLBACK;
   }
 
@@ -39,3 +42,21 @@ export function getApiBaseUrl(): string {
 
 /** Kept for call sites. Production no longer throws — traffic goes through `/backend`. */
 export function assertApiBaseUrlConfigured(): void {}
+
+/**
+ * Canonical origin of this web app, with no trailing slash.
+ *
+ * Use this for any customer-facing URL rendered in the dashboard — booking
+ * links, referral links, widget embed snippets. In the browser it prefers the
+ * live origin, so a link copied from production is always a production link.
+ */
+export function getAppBaseUrl(): string {
+  if (typeof window !== "undefined") return window.location.origin;
+
+  const configured = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+  if (configured && !isLocalhostUrl(configured)) return configured;
+
+  return process.env.NODE_ENV === "production"
+    ? "https://doloyal.com"
+    : "http://localhost:3000";
+}

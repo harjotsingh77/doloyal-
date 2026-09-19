@@ -2,14 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Activity,
-  Bell,
+  AlertTriangle,
   Building2,
-  Command,
   CreditCard,
   FileText,
+  Flag,
+  Gift,
   Globe,
   Heart,
   LayoutDashboard,
@@ -19,10 +20,8 @@ import {
   Menu,
   MessagesSquare,
   Package,
-  Palette,
   RefreshCcw,
   Rocket,
-  Search,
   Settings,
   Shield,
   ShieldCheck,
@@ -34,14 +33,11 @@ import {
   Webhook,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
 import { useAuth, AdminGuard } from "@/lib/auth";
-import { api } from "@/lib/api";
 import { cn } from "@doloyal/ui";
 import { AdminGlobalSearch } from "./_components/global-search";
 import { AdminNotifications } from "./_components/notifications";
 import { AskDoloyal } from "@/components/ask-doloyal";
-import { relativeTime } from "@doloyal/shared";
 
 const NAV = [
   {
@@ -67,7 +63,7 @@ const NAV = [
       { href: "/admin/customers", label: "Customers", icon: Users, match: (p: string) => p.startsWith("/admin/customers") },
       { href: "/admin/bookings", label: "Bookings", icon: ShoppingBag, match: (p: string) => p.startsWith("/admin/bookings") },
       { href: "/admin/loyalty", label: "Loyalty", icon: Heart, match: (p: string) => p.startsWith("/admin/loyalty") },
-      { href: "/admin/rewards", label: "Rewards", icon: GiftIcon, match: (p: string) => p.startsWith("/admin/rewards") },
+      { href: "/admin/rewards", label: "Rewards", icon: Gift, match: (p: string) => p.startsWith("/admin/rewards") },
       { href: "/admin/memberships", label: "Memberships", icon: SquareStack, match: (p: string) => p.startsWith("/admin/memberships") },
       { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone, match: (p: string) => p.startsWith("/admin/campaigns") },
     ],
@@ -76,18 +72,21 @@ const NAV = [
     section: "AI & Websites",
     items: [
       { href: "/admin/ai", label: "AI", icon: Sparkles, match: (p: string) => p.startsWith("/admin/ai") },
-      { href: "/admin/websites", label: "Website Builder", icon: Globe, match: (p: string) => p.startsWith("/admin/websites") },
+      { href: "/admin/websites", label: "Website Builder", icon: Globe, match: (p: string) => p === "/admin/websites" || p.startsWith("/admin/websites/") },
       { href: "/admin/website-requests", label: "Website Requests", icon: FileText, match: (p: string) => p.startsWith("/admin/website-requests") },
       { href: "/admin/connections", label: "Connections", icon: Webhook, match: (p: string) => p.startsWith("/admin/connections") },
     ],
   },
   {
-    section: "Support & Content",
+    section: "Operations",
     items: [
       { href: "/admin/support", label: "Support", icon: LifeBuoy, match: (p: string) => p.startsWith("/admin/support") },
       { href: "/admin/feedback", label: "Feedback", icon: MessagesSquare, match: (p: string) => p.startsWith("/admin/feedback") },
       { href: "/admin/announcements", label: "Announcements", icon: Megaphone, match: (p: string) => p.startsWith("/admin/announcements") },
       { href: "/admin/help-center", label: "Help Center", icon: Ticket, match: (p: string) => p.startsWith("/admin/help-center") },
+      { href: "/admin/integrations", label: "Integrations", icon: Webhook, match: (p: string) => p === "/admin/integrations" },
+      { href: "/admin/integration-errors", label: "Integration Errors", icon: AlertTriangle, match: (p: string) => p.startsWith("/admin/integration-errors") },
+      { href: "/admin/webhooks", label: "Webhooks", icon: Webhook, match: (p: string) => p.startsWith("/admin/webhooks") },
     ],
   },
   {
@@ -97,26 +96,21 @@ const NAV = [
       { href: "/admin/logs", label: "Logs", icon: FileText, match: (p: string) => p.startsWith("/admin/logs") },
       { href: "/admin/security", label: "Security", icon: Shield, match: (p: string) => p.startsWith("/admin/security") },
       { href: "/admin/audit-logs", label: "Audit Logs", icon: ShieldCheck, match: (p: string) => p.startsWith("/admin/audit-logs") },
+      { href: "/admin/feature-flags", label: "Feature Flags", icon: Flag, match: (p: string) => p.startsWith("/admin/feature-flags") },
+      { href: "/admin/settings", label: "Settings", icon: Settings, match: (p: string) => p.startsWith("/admin/settings") },
     ],
   },
   {
-    section: "Team & Settings",
+    section: "Team",
     items: [
       { href: "/admin/team", label: "Admin Team", icon: Users, match: (p: string) => p.startsWith("/admin/team") },
-      { href: "/admin/integrations", label: "Integrations", icon: Webhook, match: (p: string) => p.startsWith("/admin/integrations") },
-      { href: "/admin/settings", label: "Settings", icon: Settings, match: (p: string) => p.startsWith("/admin/settings") },
     ],
   },
 ];
 
-function GiftIcon(props: React.ComponentProps<"svg">) {
-  return <Palette {...props} />;
-}
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);

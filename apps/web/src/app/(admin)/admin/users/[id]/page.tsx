@@ -144,6 +144,10 @@ export default function AdminUserDetailPage() {
                 <p className="font-medium text-[rgb(var(--color-foreground))]">{data.phone ?? "—"}</p>
               </div>
               <div>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Auth</p>
+                <p className="font-medium text-[rgb(var(--color-foreground))]">{data.authProvider ?? "Email"}</p>
+              </div>
+              <div>
                 <p className="text-xs text-[rgb(var(--color-muted-foreground))]">2FA</p>
                 <p className="font-medium text-[rgb(var(--color-foreground))]">{data.twoFactorEnabled ? "Enabled" : "Disabled"}</p>
               </div>

@@ -1,5 +1,7 @@
 /** Default configs for new booking links */
 
+import { getPublicAppUrl } from '../../common/helpers';
+
 export const DEFAULT_CUSTOMER_FIELDS = {
   name: { enabled: true, required: true },
   phone: { enabled: true, required: true },
@@ -176,11 +178,7 @@ export function defaultDomain(slug: string) {
 }
 
 export function webBaseUrl(): string {
-  return (
-    process.env.WEB_BASE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.NODE_ENV === 'production' ? 'https://doloyal.ai' : 'http://localhost:3000')
-  ).replace(/\/+$/, '');
+  return getPublicAppUrl();
 }
 
 export function bookingUrl(slug: string): string {

@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ReviewStatus, ReviewType } from '@prisma/client';
-import { createReadStream } from 'fs';
 import { PrismaService } from '../../common/prisma.service';
 import { logActivity } from '../../common/customer-commerce';
 import {
@@ -14,9 +13,8 @@ import {
   isImageMime,
   isStoredMediaKey,
   isVideoMime,
-  mediaAbsolutePath,
-  mediaExists,
   mimeFromKey,
+  openMedia,
   saveReviewMedia,
 } from './review-media';
 
@@ -704,17 +702,17 @@ export class ReviewsService {
       if (!isStoredMediaKey(row.thumbnailUrl)) {
         throw new BadRequestException('Thumbnail is inline');
       }
-      const abs = mediaAbsolutePath(row.thumbnailUrl);
-      if (!abs || !mediaExists(row.thumbnailUrl)) throw new NotFoundException('Thumbnail not found');
-      return { stream: createReadStream(abs), mime: mimeFromKey(row.thumbnailUrl, 'image/jpeg') };
+      const media = await openMedia(row.thumbnailUrl);
+      if (!media) throw new NotFoundException('Thumbnail not found');
+      return { ...media, mime: mimeFromKey(row.thumbnailUrl, 'image/jpeg') };
     }
 
     if (!row.videoUrl || !isStoredMediaKey(row.videoUrl)) {
       throw new NotFoundException('Video not found');
     }
-    const abs = mediaAbsolutePath(row.videoUrl);
-    if (!abs || !mediaExists(row.videoUrl)) throw new NotFoundException('Video not found');
-    return { stream: createReadStream(abs), mime: mimeFromKey(row.videoUrl, 'video/mp4') };
+    const media = await openMedia(row.videoUrl);
+    if (!media) throw new NotFoundException('Video not found');
+    return { ...media, mime: mimeFromKey(row.videoUrl, 'video/mp4') };
   }
 
   async averageForTenant(tenantId: string): Promise<number | null> {

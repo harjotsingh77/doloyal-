@@ -37,7 +37,15 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: false, bodyLimit: 45 * 1024 * 1024 }),
+    // trustProxy makes Fastify read the client IP from X-Forwarded-For. Managed
+    // hosts always sit behind a load balancer, so without this every request
+    // appears to come from the proxy and the IP-based rate limiter would treat
+    // all users as a single caller.
+    new FastifyAdapter({
+      logger: false,
+      bodyLimit: 45 * 1024 * 1024,
+      trustProxy: isProduction,
+    }),
     // Keeps the raw request body on req.rawBody so webhook signature
     // verification can HMAC the exact bytes the provider signed.
     { rawBody: true },
@@ -67,15 +75,21 @@ async function bootstrap() {
     }),
   );
 
+  // Lets Nest run OnModuleDestroy hooks (scheduler locks, Prisma, SSE buses)
+  // when the host sends SIGTERM during a rolling deploy.
+  app.enableShutdownHooks();
+
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
     new TransformInterceptor(),
   );
 
-  const port = parseInt(process.env.API_PORT || '4000', 10);
+  // Managed hosts (Render, Railway, Fly) inject the port to bind as `PORT` and
+  // route traffic only to that port. `API_PORT` stays supported for local dev.
+  const port = parseInt(process.env.PORT || process.env.API_PORT || '4000', 10);
   await app.listen(port, '0.0.0.0');
-  console.log(`Doloyal API running on http://localhost:${port}`);
+  console.log(`Doloyal API listening on 0.0.0.0:${port}`);
   if (isProduction) {
     console.log(`CORS origins: ${allowedOrigins.join(', ')}`);
   }

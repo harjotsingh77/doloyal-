@@ -47,7 +47,7 @@ interface AuthContextValue {
   demoLogin: () => Promise<void>;
   signUp: (data: { name: string; email: string; phone: string; password: string }) => Promise<void>;
   logout: () => void;
-  switchTenant: (tenantId: string) => void;
+  switchTenant: (tenantId: string) => Promise<void>;
   refreshUser: () => Promise<AuthUser | null>;
   resolveSupabaseSession: () => Promise<AuthUser | null>;
 }
@@ -497,13 +497,18 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
   }, [clearAuth]);
 
   const switchTenant = React.useCallback(
-    (tenantId: string) => {
+    async (tenantId: string) => {
       if (!user) return;
       const m = user.memberships.find((m) => m.tenantId === tenantId);
       if (!m) return;
-      const u = { ...user, activeTenantId: tenantId, activeRole: m.role };
-      saveUser(u);
-      setUser(u);
+
+      // The active workspace lives in the JWT, so the server has to mint a new
+      // token. Updating only local state would leave the UI showing the new
+      // workspace while every request still hit the old one.
+      const { token, user: nextUser } = await api.switchTenant(tenantId);
+      setToken(token);
+      saveUser(nextUser);
+      setUser(nextUser);
     },
     [user],
   );

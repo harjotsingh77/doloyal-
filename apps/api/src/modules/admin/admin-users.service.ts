@@ -3,6 +3,12 @@ import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
 import { paginate } from './admin-util';
 
+function authProviderFor(user: { googleId?: string | null; clerkId?: string | null }): string {
+  if (user.googleId) return 'Google';
+  if (user.clerkId) return 'Clerk';
+  return 'Email';
+}
+
 @Injectable()
 export class AdminUsersService {
   constructor(
@@ -32,7 +38,9 @@ export class AdminUsersService {
         { lastName: { contains: search, mode: 'insensitive' as const } },
       ];
     }
-    if (role && role !== 'ALL') {
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      where.isAdmin = true;
+    } else if (role && role !== 'ALL') {
       where.memberships = { some: { role } };
     }
     if (plan && plan !== 'ALL') {
@@ -43,36 +51,41 @@ export class AdminUsersService {
         },
       };
     }
+    if (status === 'SUSPENDED') where.suspendedAt = { not: null };
+    else if (status === 'ACTIVE') where.suspendedAt = null;
 
-    const users = await this.prisma.user.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: {
-        memberships: {
-          take: 1,
-          include: {
-            tenant: {
-              select: {
-                name: true,
-                subscriptions: { select: { plan: true }, take: 1, orderBy: { createdAt: 'desc' } },
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          memberships: {
+            take: 1,
+            include: {
+              tenant: {
+                select: {
+                  name: true,
+                  subscriptions: { select: { plan: true }, take: 1, orderBy: { createdAt: 'desc' } },
+                },
               },
             },
           },
+          loginHistory: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            where: { successful: true },
+          },
+          _count: { select: { memberships: true } },
         },
-        loginHistory: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          where: { successful: true },
-        },
-        _count: { select: { memberships: true } },
-      },
-    });
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
     const items = users.map((u) => {
       const membership = u.memberships[0];
-      const suspended = this.isSuspended(u);
+      const suspended = Boolean(u.suspendedAt);
       return {
         id: u.id,
         email: u.email,
@@ -81,7 +94,9 @@ export class AdminUsersService {
         avatarUrl: u.avatarUrl,
         isAdmin: u.isAdmin,
         adminRole: u.adminRole,
-        status: suspended ? 'SUSPENDED' : 'ACTIVE',
+        role: membership?.role ?? null,
+        authProvider: authProviderFor(u),
+        status: (suspended ? 'SUSPENDED' : 'ACTIVE') as 'ACTIVE' | 'SUSPENDED',
         businessCount: u._count.memberships,
         primaryBusiness: membership?.tenant?.name ?? null,
         plan: membership?.tenant?.subscriptions?.[0]?.plan ?? null,
@@ -90,15 +105,12 @@ export class AdminUsersService {
       };
     });
 
-    const filtered =
-      status && status !== 'ALL' ? items.filter((i) => i.status === status) : items;
-
     return {
-      items: filtered,
-      total: filtered.length,
+      items,
+      total,
       page,
       pageSize,
-      totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
   }
 
@@ -124,7 +136,9 @@ export class AdminUsersService {
       twoFactorEnabled: user.twoFactorEnabled,
       isAdmin: user.isAdmin,
       adminRole: user.adminRole,
-      status: this.isSuspended(user) ? 'SUSPENDED' : 'ACTIVE',
+      role: user.memberships[0]?.role ?? null,
+      authProvider: authProviderFor(user),
+      status: user.suspendedAt ? 'SUSPENDED' : 'ACTIVE',
       businessCount: user.memberships.length,
       createdAt: user.createdAt.toISOString(),
       memberships: user.memberships.map((m) => ({
@@ -147,13 +161,25 @@ export class AdminUsersService {
   }
 
   async suspend(actor: any, userId: string, suspended = true) {
+    if (actor?.id === userId) {
+      throw new BadRequestException('You cannot suspend your own account');
+    }
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
+    if (suspended && user.adminRole === 'SUPER_ADMIN') {
+      const remaining = await this.prisma.user.count({
+        where: { isAdmin: true, adminRole: 'SUPER_ADMIN', suspendedAt: null, id: { not: userId } },
+      });
+      if (remaining === 0) {
+        throw new BadRequestException('Cannot suspend the last Super Admin');
+      }
+    }
     await this.prisma.user.update({
       where: { id: userId },
-      data: suspended ? { tokenVersion: { increment: 1 }, sessions: [] } : {},
+      data: suspended
+        ? { suspendedAt: new Date(), tokenVersion: { increment: 1 }, sessions: [] }
+        : { suspendedAt: null },
     });
-    // Suspension is expressed via a security event + audit trail (no soft-delete).
     await this.audit.record(actor, suspended ? 'user.suspended' : 'user.reactivated', 'USER', {
       targetType: 'user',
       targetId: userId,
@@ -180,10 +206,5 @@ export class AdminUsersService {
       metadata: { tenantId, from: membership.role, to: role },
     });
     return { ok: true, role };
-  }
-
-  private isSuspended(user: { sessions?: unknown; tokenVersion?: number }) {
-    void user;
-    return false;
   }
 }

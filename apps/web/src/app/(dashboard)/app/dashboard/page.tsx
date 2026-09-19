@@ -275,11 +275,15 @@ export default function DashboardPage() {
 
   if (!data || !dynamicMetrics) return <EmptyState title="No dashboard data" description="Dashboard will populate once your business has activity." />;
 
+  // Defaulted rather than destructured bare: a partial overview response (an
+  // older API build, or a section that failed server-side) would otherwise
+  // crash the whole page on `topCustomers.map` or `kpis.appointmentsToday`.
+  // Missing collections should render their existing "no data yet" rows.
   const {
-    kpis,
-    topCustomers,
-    topRewards,
-    recentActivity,
+    kpis = {} as NonNullable<typeof data.kpis>,
+    topCustomers = [],
+    topRewards = [],
+    recentActivity = [],
   } = data;
 
   const {

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
+import { getPublicAppUrl } from '../../common/helpers';
 import type { Prisma, User as PrismaUser } from '@prisma/client';
 import {
   STAFF_ROLE_DEFAULT_PERMISSIONS,
@@ -43,7 +44,7 @@ export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
   private webBaseUrl() {
-    return process.env.WEB_BASE_URL || process.env.NEXT_PUBLIC_WEB_URL || 'http://localhost:3000';
+    return getPublicAppUrl();
   }
 
   private inviteExpiryMs() {

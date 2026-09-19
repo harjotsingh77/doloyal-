@@ -12,11 +12,10 @@ import { DOLOYAL_ICONS, type MultiplierIconItem } from "./multiplier-icons";
 
 const LOOP_MS = 28000;
 
-// 24 icons along the track for uniform, continuous ribbon density
+// 22 icons along the track for a slightly tighter, harmonious spacing
 const TRACK_ICONS: MultiplierIconItem[] = [
   ...DOLOYAL_ICONS,
-  ...DOLOYAL_ICONS,
-  ...DOLOYAL_ICONS,
+  ...DOLOYAL_ICONS.slice(0, 10),
 ];
 
 interface Point {
@@ -176,7 +175,7 @@ function TravelingDoloyalIcon({
       aria-hidden="true"
     >
       {/* Pure icon squircle without text label */}
-      <div className="h-[38px] w-[38px] xs:h-[46px] xs:w-[46px] sm:h-[58px] sm:w-[58px] lg:h-[68px] lg:w-[68px]">
+      <div className="h-[42px] w-[42px] xs:h-[50px] xs:w-[50px] sm:h-[62px] sm:w-[62px] lg:h-[76px] lg:w-[76px]">
         {item.node}
       </div>
     </motion.div>

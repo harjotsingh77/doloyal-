@@ -42,6 +42,7 @@ export default function AdminBookingsPage() {
   const [overview, setOverview] = React.useState<{ today: number; upcoming: number; completed: number; canceled: number; noShows: number; total: number } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [status, setStatus] = React.useState("");
+  const [date, setDate] = React.useState("");
   const [page, setPage] = React.useState(1);
   const pageSize = 20;
 
@@ -49,7 +50,7 @@ export default function AdminBookingsPage() {
     setLoading(true);
     try {
       const [list, ov] = await Promise.all([
-        api.adminListBookings({ status: status || undefined, page, pageSize }),
+        api.adminListBookings({ status: status || undefined, date: date || undefined, page, pageSize }),
         api.adminBookingsOverview(),
       ]);
       setItems(list.items || []);
@@ -62,7 +63,7 @@ export default function AdminBookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, page, pageSize]);
+  }, [status, date, page, pageSize]);
 
   React.useEffect(() => {
     void load();
@@ -70,7 +71,7 @@ export default function AdminBookingsPage() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [status]);
+  }, [status, date]);
 
   return (
     <div className="space-y-6">
@@ -89,8 +90,8 @@ export default function AdminBookingsPage() {
         <AdminStatCard label="Total" value={overview?.total ?? "—"} />
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="w-44">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="w-full sm:w-44">
           <Select value={status} onValueChange={(v) => setStatus(v === "ALL" ? "" : v)}>
             <SelectTrigger>
               <SelectValue placeholder="All statuses" />
@@ -105,6 +106,12 @@ export default function AdminBookingsPage() {
             </SelectContent>
           </Select>
         </div>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="h-10 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-sm"
+        />
       </div>
 
       <Card>

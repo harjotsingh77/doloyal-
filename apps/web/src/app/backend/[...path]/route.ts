@@ -21,6 +21,10 @@ function apiOrigin(): string | null {
     /\/+$/,
     "",
   );
+  if (process.env.NODE_ENV !== "production") {
+    if (raw && !/localhost|127\.0\.0\.1/.test(raw)) return raw;
+    return "http://127.0.0.1:4000";
+  }
   if (!raw || /localhost|127\.0\.0\.1/.test(raw)) return null;
   return raw;
 }

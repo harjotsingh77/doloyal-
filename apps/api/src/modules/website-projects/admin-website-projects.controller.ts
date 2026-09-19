@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { CurrentUser } from '../../common/current-user.decorator';
-import { AdminGuard } from '../../common/admin.guard';
+import { AdminGuard, AdminPermission } from '../../common/admin.guard';
 import {
   IsBoolean,
   IsNotEmpty,
@@ -64,11 +64,13 @@ export class AdminWebsiteProjectsController {
   ) {}
 
   @Sse('events')
+  @AdminPermission('websites:view')
   events(): Observable<MessageEvent> {
     return this.realtime.streamAdmin();
   }
 
   @Get()
+  @AdminPermission('websites:view')
   list(
     @Query('status') status?: string,
     @Query('search') search?: string,
@@ -79,16 +81,19 @@ export class AdminWebsiteProjectsController {
   }
 
   @Get(':id')
+  @AdminPermission('websites:view')
   get(@Param('id') id: string) {
     return this.projects.adminGetProject(id);
   }
 
   @Patch(':id')
+  @AdminPermission('websites:manage')
   update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.projects.adminUpdateProject(id, dto);
   }
 
   @Patch(':id/status')
+  @AdminPermission('websites:manage')
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateStatusDto,
@@ -99,6 +104,7 @@ export class AdminWebsiteProjectsController {
 
   @Post(':id/assign')
   @HttpCode(HttpStatus.OK)
+  @AdminPermission('websites:manage')
   assign(
     @Param('id') id: string,
     @Body() dto: AssignDto,
@@ -108,12 +114,14 @@ export class AdminWebsiteProjectsController {
   }
 
   @Get(':id/messages')
+  @AdminPermission('websites:view')
   messages(@Param('id') id: string) {
     return this.projects.adminGetMessages(id);
   }
 
   @Post(':id/messages')
   @HttpCode(HttpStatus.CREATED)
+  @AdminPermission('websites:manage')
   sendMessage(
     @Param('id') id: string,
     @Body() dto: SendMessageDto,
@@ -124,18 +132,21 @@ export class AdminWebsiteProjectsController {
   }
 
   @Get(':id/notes')
+  @AdminPermission('websites:view')
   notes(@Param('id') id: string) {
     return this.projects.adminListNotes(id);
   }
 
   @Post(':id/notes')
   @HttpCode(HttpStatus.CREATED)
+  @AdminPermission('websites:manage')
   addNote(@Param('id') id: string, @Body() dto: AddNoteDto, @CurrentUser() user: any) {
     return this.projects.adminAddNote(user, id, dto.note);
   }
 
   @Post(':id/upload')
   @HttpCode(HttpStatus.OK)
+  @AdminPermission('websites:manage')
   async multipartUpload(
     @Param('id') id: string,
     @Query('category') category: string,
