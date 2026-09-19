@@ -44,6 +44,7 @@ export class WorkflowSchedulerService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (err: any) {
       this.logger.warn(`Workflow scheduler tick failed: ${err?.message}`);
+      throw err;
     } finally {
       this.running = false;
       await this.lock.release(lockKey);

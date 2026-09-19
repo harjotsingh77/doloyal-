@@ -41,6 +41,7 @@ export class AppointmentReminderService implements OnModuleInit, OnModuleDestroy
       if (sent > 0) this.logger.log(`Appointment reminders sent: ${sent}`);
     } catch (err: any) {
       this.logger.warn(`Appointment reminder tick failed: ${err?.message}`);
+      throw err;
     } finally {
       this.running = false;
       await this.lock.release(lockKey);

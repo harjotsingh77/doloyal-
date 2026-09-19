@@ -86,6 +86,7 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (e: any) {
       this.logger.warn(`expireCampaigns failed: ${e?.message}`);
+      throw e;
     }
   }
 
@@ -102,6 +103,7 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
       });
     } catch (e: any) {
       this.logger.warn(`expireLinks failed: ${e?.message}`);
+      throw e;
     }
   }
 
@@ -118,6 +120,7 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (e: any) {
       this.logger.warn(`recomputeAllLeaderboards failed: ${e?.message}`);
+      throw e;
     }
   }
 
@@ -141,6 +144,7 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (e: any) {
       this.logger.warn(`processPendingRewards failed: ${e?.message}`);
+      throw e;
     }
   }
 
@@ -156,6 +160,7 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (e: any) {
       this.logger.warn(`aggregateSources failed: ${e?.message}`);
+      throw e;
     }
   }
 
@@ -184,6 +189,7 @@ export class ReferralsJobsService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (e: any) {
       this.logger.warn(`scanFraud failed: ${e?.message}`);
+      throw e;
     }
   }
 }

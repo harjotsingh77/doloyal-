@@ -63,6 +63,7 @@ export class CampaignSchedulerService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (err: any) {
       this.logger.warn(`Campaign scheduler tick failed: ${err?.message}`);
+      throw err;
     } finally {
       this.ticking = false;
       await this.lock.release(lockKey);
