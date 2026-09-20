@@ -36,10 +36,10 @@ export class AdminDashboardService {
 
   async overview(range = '30d') {
     try {
-      return await this.withTimeout(this.buildOverview(range), 8_000);
+      return await this.buildOverview(range);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Admin dashboard overview failed or timed out: ${message}`);
+      this.logger.warn(`Admin dashboard overview failed: ${message}`);
       return emptyAdminDashboardOverview(range);
     }
   }
@@ -73,49 +73,30 @@ export class AdminDashboardService {
   private async buildOverview(range = '30d') {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
+    const ninetyAgo = new Date(now.getTime() - 90 * 86400000);
 
     const [
       totalBusinesses,
-      tenants,
       newSignups30d,
       supportOpen,
       websiteRequestsOpen,
-      subscriptions,
-      contracts,
       totalUsers,
       totalCustomers,
       totalBookings,
       integrationErrors24h,
       canceled30d,
+      activeSubRows,
+      trialSubRows,
+      contracts,
+      recentTenants,
     ] = await Promise.all([
       this.prisma.tenant.count(),
-      this.prisma.tenant.findMany({
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          subscriptions: {
-            select: {
-              plan: true,
-              status: true,
-              trialEndsAt: true,
-              createdAt: true,
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-        },
-      }),
       this.prisma.tenant.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
       this.prisma.supportTicket.count({
         where: { status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING_FOR_CUSTOMER'] } },
       }),
       this.prisma.websiteProject.count({
         where: { status: { notIn: ['COMPLETED', 'PUBLISHED'] } },
-      }),
-      this.prisma.subscription.findMany(),
-      this.prisma.enterpriseContract.findMany({
-        select: { tenantId: true, contractPrice: true, billingCycle: true },
       }),
       this.prisma.user.count({ where: { isAdmin: false } }),
       this.prisma.customer.count(),
@@ -129,30 +110,53 @@ export class AdminDashboardService {
           updatedAt: { gte: thirtyDaysAgo },
         },
       }),
+      this.prisma.subscription.findMany({
+        where: { status: 'ACTIVE' },
+        select: { plan: true, tenantId: true, status: true, trialEndsAt: true, createdAt: true },
+      }),
+      this.prisma.subscription.findMany({
+        where: {
+          OR: [{ status: 'TRIALING' }, { trialEndsAt: { gt: now } }],
+        },
+        select: { plan: true, tenantId: true, status: true, trialEndsAt: true, createdAt: true },
+      }),
+      this.prisma.enterpriseContract.findMany({
+        select: { tenantId: true, contractPrice: true, billingCycle: true },
+      }),
+      this.prisma.tenant.findMany({
+        where: { createdAt: { gte: ninetyAgo } },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          subscriptions: {
+            select: { plan: true, status: true, trialEndsAt: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+      }),
     ]);
 
     const contractMap = new Map(
       contracts.map((c) => [c.tenantId, { price: c.contractPrice, cycle: c.billingCycle }]),
     );
 
-    const withSub: TenantWithSub[] = tenants.map((t) => {
-      const sub = t.subscriptions[0];
-      const contract = contractMap.get(t.id);
+    const withSub: TenantWithSub[] = activeSubRows.map((s) => {
+      const contract = contractMap.get(s.tenantId);
       return {
-        id: t.id,
-        name: t.name,
-        createdAt: t.createdAt,
-        subscription: sub,
+        id: s.tenantId,
+        name: '',
+        createdAt: s.createdAt,
+        subscription: s,
         contractPrice: contract?.price,
         contractCycle: contract?.cycle,
       };
     });
 
-    const activeSubs = withSub.filter((t) => t.subscription?.status === 'ACTIVE');
-    const trialSubs = withSub.filter(
-      (t) =>
-        t.subscription?.status === 'TRIALING' ||
-        (t.subscription?.trialEndsAt && t.subscription.trialEndsAt > now),
+    const activeSubs = withSub;
+    const trialSubs = trialSubRows.filter(
+      (s) => s.status === 'TRIALING' || (s.trialEndsAt && s.trialEndsAt > now),
     );
     const paidSubs = activeSubs.filter(
       (t) => planMonthlyAmount(t.subscription!.plan, t.contractPrice, t.contractCycle) > 0,
@@ -163,15 +167,10 @@ export class AdminDashboardService {
       0,
     );
 
-    // Trial → paid conversion over the last 90 days.
-    const ninetyAgo = new Date(now.getTime() - 90 * 86400000);
-    const trialsStarted90d = withSub.filter((t) => t.createdAt >= ninetyAgo);
-    const convertedCount = trialsStarted90d.filter(
-      (t) => t.subscription?.status === 'ACTIVE',
-    ).length;
+    const convertedCount = recentTenants.filter((t) => t.subscriptions[0]?.status === 'ACTIVE').length;
     const trialToPaidRate =
-      trialsStarted90d.length > 0
-        ? Math.round((convertedCount / trialsStarted90d.length) * 1000) / 10
+      recentTenants.length > 0
+        ? Math.round((convertedCount / recentTenants.length) * 1000) / 10
         : 0;
 
     const churnBase = activeSubs.length + canceled30d;
@@ -194,7 +193,78 @@ export class AdminDashboardService {
       atRiskAccounts: 0,
     };
 
-    const [
+    const emptyWidgets = {
+      activeDelta: null as number | null,
+      signupsDelta: null as number | null,
+      paidDelta: null as number | null,
+      trialDelta: null as number | null,
+      mrrDeltaVal: null as number | null,
+      revenueTrend: [] as Awaited<ReturnType<AdminDashboardService['revenueTrend']>>,
+      growth: [] as Awaited<ReturnType<AdminDashboardService['growth']>>,
+      activationRate: 0,
+      trial: emptyTrial,
+      churn: emptyChurn,
+      insights: [] as Awaited<ReturnType<AdminDashboardService['aiInsights']>>,
+      recentActivity: [] as Awaited<ReturnType<AdminDashboardService['recentActivity']>>,
+      recentSignups: [] as Awaited<ReturnType<AdminDashboardService['recentSignups']>>,
+      recentPayments: [] as Awaited<ReturnType<AdminDashboardService['recentPayments']>>,
+      recentTickets: [] as Awaited<ReturnType<AdminDashboardService['recentTickets']>>,
+      recentWebsiteRequests: [] as Awaited<ReturnType<AdminDashboardService['recentWebsiteRequests']>>,
+      alerts: [] as Awaited<ReturnType<AdminDashboardService['systemAlerts']>>,
+      featureAdoption: [] as Awaited<ReturnType<AdminDashboardService['featureAdoption']>>,
+    };
+
+    let widgets = emptyWidgets;
+    try {
+      const loaded = await this.withTimeout(
+        Promise.all([
+          this.soft('activeDelta', () => this.monthDelta('tenant', 'active'), null),
+          this.soft('signupsDelta', () => this.monthDelta('tenant', 'signups'), null),
+          this.soft('paidDelta', () => this.monthDelta('tenant', 'paid'), null),
+          this.soft('trialDelta', () => this.monthDelta('tenant', 'trial'), null),
+          this.soft('mrrDelta', () => this.mrrDelta(), null),
+          this.soft('revenueTrend', () => this.revenueTrend(range, activeSubRows, contracts), []),
+          this.soft('growth', () => this.growth(range), []),
+          this.soft('activationRate', () => this.activationRate(), 0),
+          this.soft('trial', () => this.trialAnalytics(thirtyDaysAgo, now), emptyTrial),
+          this.soft('churn', () => this.churnAnalytics(thirtyDaysAgo, now, canceled30d, churnRate30d), emptyChurn),
+          this.soft('insights', () => this.aiInsights(thirtyDaysAgo, now, supportOpen), []),
+          this.soft('recentActivity', () => this.recentActivity(30), []),
+          this.soft('recentSignups', () => this.recentSignups(), []),
+          this.soft('recentPayments', () => this.recentPayments(), []),
+          this.soft('recentTickets', () => this.recentTickets(), []),
+          this.soft('recentWebsiteRequests', () => this.recentWebsiteRequests(), []),
+          this.soft('alerts', () => this.systemAlerts(thirtyDaysAgo, now), []),
+          this.soft('featureAdoption', () => this.featureAdoption(), []),
+        ]),
+        6_000,
+      );
+      widgets = {
+        activeDelta: loaded[0],
+        signupsDelta: loaded[1],
+        paidDelta: loaded[2],
+        trialDelta: loaded[3],
+        mrrDeltaVal: loaded[4],
+        revenueTrend: loaded[5],
+        growth: loaded[6],
+        activationRate: loaded[7],
+        trial: loaded[8],
+        churn: loaded[9],
+        insights: loaded[10],
+        recentActivity: loaded[11],
+        recentSignups: loaded[12],
+        recentPayments: loaded[13],
+        recentTickets: loaded[14],
+        recentWebsiteRequests: loaded[15],
+        alerts: loaded[16],
+        featureAdoption: loaded[17],
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Admin overview widgets timed out; returning core KPIs: ${message}`);
+    }
+
+    const {
       activeDelta,
       signupsDelta,
       paidDelta,
@@ -213,26 +283,7 @@ export class AdminDashboardService {
       recentWebsiteRequests,
       alerts,
       featureAdoption,
-    ] = await Promise.all([
-      this.soft('activeDelta', () => this.monthDelta('tenant', 'active'), null),
-      this.soft('signupsDelta', () => this.monthDelta('tenant', 'signups'), null),
-      this.soft('paidDelta', () => this.monthDelta('tenant', 'paid'), null),
-      this.soft('trialDelta', () => this.monthDelta('tenant', 'trial'), null),
-      this.soft('mrrDelta', () => this.mrrDelta(), null),
-      this.soft('revenueTrend', () => this.revenueTrend(range, subscriptions, contracts), []),
-      this.soft('growth', () => this.growth(range), []),
-      this.soft('activationRate', () => this.activationRate(), 0),
-      this.soft('trial', () => this.trialAnalytics(thirtyDaysAgo, now), emptyTrial),
-      this.soft('churn', () => this.churnAnalytics(thirtyDaysAgo, now, canceled30d, churnRate30d), emptyChurn),
-      this.soft('insights', () => this.aiInsights(thirtyDaysAgo, now, supportOpen), []),
-      this.soft('recentActivity', () => this.recentActivity(30), []),
-      this.soft('recentSignups', () => this.recentSignups(), []),
-      this.soft('recentPayments', () => this.recentPayments(), []),
-      this.soft('recentTickets', () => this.recentTickets(), []),
-      this.soft('recentWebsiteRequests', () => this.recentWebsiteRequests(), []),
-      this.soft('alerts', () => this.systemAlerts(thirtyDaysAgo, now), []),
-      this.soft('featureAdoption', () => this.featureAdoption(), []),
-    ]);
+    } = widgets;
 
     const totals = {
       totalBusinesses,

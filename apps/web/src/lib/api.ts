@@ -2735,7 +2735,7 @@ export const api = {
 
   adminDashboardOverview: async (range?: string) => {
     const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
-    const timer = controller ? setTimeout(() => controller.abort(), 8_000) : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), 15_000) : undefined;
     try {
       return await request<import("@doloyal/shared").AdminDashboardOverview>(
         `/admin/dashboard/overview${range ? `?range=${range}` : ""}`,
