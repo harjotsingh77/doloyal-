@@ -38,12 +38,15 @@ export class TenantsService {
    * this makes accidental double-submits and re-runs safe.
    */
   async onboard(data: OnboardInput) {
-    // 1. Idempotency — user may already have completed onboarding.
+    // Signup already creates a placeholder OWNER tenant. Complete that row
+    // instead of inserting a second tenant the JWT will never point at.
     const existingMembership = await this.prisma.membership.findFirst({
       where: { userId: data.userId, role: 'OWNER' },
       include: { tenant: true },
+      orderBy: { createdAt: 'asc' },
     });
     if (existingMembership?.tenant?.onboardingComplete) {
+      await this.ensureDefaultSubscription(existingMembership.tenantId);
       return existingMembership.tenant;
     }
 
@@ -54,43 +57,48 @@ export class TenantsService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '');
 
-    // Ensure slug uniqueness without hard-failing on a name collision.
-    const slug = await this.uniqueSlug(baseSlug);
+    const profile = {
+      name: data.name,
+      category: data.category,
+      phone: data.phone,
+      email: data.email,
+      address: data.address,
+      gst: data.gst,
+      logoUrl: data.logoUrl,
+      currency: data.currency || 'INR',
+      timezone: data.timezone || 'Asia/Kolkata',
+      brandColor: data.brandColor || '#2563EB',
+      onboardingComplete: true,
+    };
 
-    // 2. Persist the full profile the form collected.
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        name: data.name,
-        slug,
-        category: data.category,
-        phone: data.phone,
-        email: data.email,
-        address: data.address,
-        gst: data.gst,
-        logoUrl: data.logoUrl,
-        currency: data.currency || 'INR',
-        timezone: data.timezone || 'Asia/Kolkata',
-        brandColor: data.brandColor || '#2563EB',
-        onboardingComplete: true,
-      },
-    });
+    let tenantId: string;
+    if (existingMembership?.tenant) {
+      const slug = await this.uniqueSlug(baseSlug, existingMembership.tenant.id);
+      await this.prisma.tenant.update({
+        where: { id: existingMembership.tenant.id },
+        data: { ...profile, slug },
+      });
+      tenantId = existingMembership.tenant.id;
+    } else {
+      const slug = await this.uniqueSlug(baseSlug);
+      const tenant = await this.prisma.tenant.create({
+        data: { ...profile, slug },
+      });
+      await this.prisma.membership.create({
+        data: {
+          userId: data.userId,
+          tenantId: tenant.id,
+          role: 'OWNER',
+        },
+      });
+      tenantId = tenant.id;
+    }
 
-    // 3. Link the owner to the new tenant.
-    await this.prisma.membership.create({
-      data: {
-        userId: data.userId,
-        tenantId: tenant.id,
-        role: 'OWNER',
-      },
-    });
-
-    // 4. Loyalty config — use the values the owner chose, falling back to sane
-    //    defaults if a field was omitted. Translate the shared mode enum into
-    //    the Prisma LoyaltyMode enum.
     const loyalty = data.loyalty ?? {};
-    await this.prisma.loyaltyConfig.create({
-      data: {
-        tenantId: tenant.id,
+    await this.prisma.loyaltyConfig.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
         mode: mapModeToPrisma(loyalty.mode ?? 'CURRENCY'),
         pointsPerUnit: this.coerceInt(loyalty.pointsPerCurrency, 1),
         currencyUnit: this.coerceNum(loyalty.currencyPerPoint, 1),
@@ -99,31 +107,43 @@ export class TenantsService {
         signupBonus: 50,
         referralBonus: 100,
       },
-    });
-
-    // 5. Default subscription.
-    await this.prisma.subscription.create({
-      data: {
-        tenantId: tenant.id,
-        plan: 'growth',
-        status: 'ACTIVE',
+      update: {
+        mode: mapModeToPrisma(loyalty.mode ?? 'CURRENCY'),
+        pointsPerUnit: this.coerceInt(loyalty.pointsPerCurrency, 1),
+        currencyUnit: this.coerceNum(loyalty.currencyPerPoint, 1),
+        pointsPerVisit: this.coerceInt(loyalty.pointsPerVisit, 10),
+        expiryDays: this.coerceInt(loyalty.expiryDays, 365),
       },
     });
 
+    await this.ensureDefaultSubscription(tenantId);
+
     return this.prisma.tenant.findUnique({
-      where: { id: tenant.id },
+      where: { id: tenantId },
     });
   }
 
-  private async uniqueSlug(base: string): Promise<string> {
+  async ensureDefaultSubscription(tenantId: string) {
+    const existing = await this.prisma.subscription.findUnique({ where: { tenantId } });
+    if (existing) return existing;
+    try {
+      return await this.prisma.subscription.create({
+        data: { tenantId, plan: 'growth', status: 'ACTIVE' },
+      });
+    } catch {
+      return this.prisma.subscription.findUnique({ where: { tenantId } });
+    }
+  }
+
+  private async uniqueSlug(base: string, excludeId?: string): Promise<string> {
     let candidate = base || 'business';
     let n = 1;
-    // Loop until we find a slug that isn't taken.
-    while (await this.prisma.tenant.findUnique({ where: { slug: candidate } })) {
+    while (true) {
+      const taken = await this.prisma.tenant.findUnique({ where: { slug: candidate } });
+      if (!taken || taken.id === excludeId) return candidate;
       n += 1;
       candidate = `${base}-${n}`;
     }
-    return candidate;
   }
 
   private coerceInt(value: number | undefined, fallback: number): number {

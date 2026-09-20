@@ -57,6 +57,10 @@ export class AuthService {
       },
     });
 
+    await this.prisma.subscription.create({
+      data: { tenantId: tenant.id, plan: 'growth', status: 'ACTIVE' },
+    });
+
     const payload = { sub: user.id, email: user.email, tv: 0, kind: 'staff' as const };
     const token = this.jwtService.sign(payload);
 
@@ -175,6 +179,10 @@ export class AuthService {
           tenantId: tenant.id,
           role: 'OWNER',
         },
+      });
+
+      await this.prisma.subscription.create({
+        data: { tenantId: tenant.id, plan: 'growth', status: 'ACTIVE' },
       });
 
       user = await this.prisma.user.findUnique({
