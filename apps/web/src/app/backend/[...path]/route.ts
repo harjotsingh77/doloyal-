@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+/** Dashboard overview fans out dozens of Prisma queries; the default 15s Pro limit drops the socket as "Failed to fetch". */
+export const maxDuration = 60;
 
 const HOP_BY_HOP = new Set([
   "connection",
@@ -50,7 +52,12 @@ async function proxy(req: NextRequest, path: string[]) {
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value);
   });
 
-  const init: RequestInit = { method: req.method, headers, redirect: "manual" };
+  const init: RequestInit = {
+    method: req.method,
+    headers,
+    redirect: "manual",
+    signal: AbortSignal.timeout(55_000),
+  };
   if (req.method !== "GET" && req.method !== "HEAD") {
     init.body = req.body;
     (init as { duplex?: "half" }).duplex = "half";
@@ -61,9 +68,19 @@ async function proxy(req: NextRequest, path: string[]) {
     upstream = await fetch(url, init);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Could not reach the Doloyal API.";
+    const timedOut =
+      (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) ||
+      /timeout|aborted/i.test(message);
     return NextResponse.json(
-      { error: { code: "API_UNREACHABLE", message } },
-      { status: 502 },
+      {
+        error: {
+          code: timedOut ? "API_TIMEOUT" : "API_UNREACHABLE",
+          message: timedOut
+            ? "The Doloyal API took too long to respond. Please try again."
+            : message,
+        },
+      },
+      { status: timedOut ? 504 : 502 },
     );
   }
 

@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import {
   Building2,
   Phone,
-  Sparkles,
   ArrowRight,
   ArrowLeft,
   Check,
@@ -460,7 +459,6 @@ export default function OnboardingPage() {
                         loading={submitting}
                         disabled={submitting}
                       >
-                        <Sparkles className="h-4 w-4" />
                         Get Started
                       </Button>
                     </div>
