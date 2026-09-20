@@ -5,12 +5,40 @@ function requireEnv(name: string): string {
 }
 
 /**
- * Validates the database topology required by Vercel Functions.
+ * Adds serverless-safe Prisma/Supabase query params without logging secrets.
+ * Transaction-mode PgBouncer needs pgbouncer=true, a single Prisma connection,
+ * and TLS. Missing any of these is a common Vercel boot failure.
+ */
+export function normalizeDatabaseUrl(raw: string): string {
+  const url = new URL(raw);
+  if (url.searchParams.get('pgbouncer') !== 'true') {
+    url.searchParams.set('pgbouncer', 'true');
+  }
+  if (url.searchParams.get('connection_limit') !== '1') {
+    url.searchParams.set('connection_limit', '1');
+  }
+  if (!url.searchParams.get('sslmode')) {
+    url.searchParams.set('sslmode', 'require');
+  }
+  return url.toString();
+}
+
+function isDirectSupabaseRuntimeUrl(url: URL): boolean {
+  const host = url.hostname;
+  const port = url.port || (url.protocol === 'postgresql:' || url.protocol === 'postgres:' ? '5432' : '');
+  const looksLikePooler = host.includes('pooler.supabase.com');
+  if (looksLikePooler && (port === '6543' || port === '')) return false;
+  if (port === '6543') return false;
+  if (host.startsWith('db.') && host.endsWith('.supabase.co') && port === '5432') return true;
+  if (port === '5432' && !looksLikePooler) return true;
+  return false;
+}
+
+/**
+ * Validates (and normalizes) the database topology required by Vercel Functions.
  *
- * Every warm function instance can own a Prisma pool, so using Supabase's
- * direct port 5432 URL at runtime can exhaust Postgres connections quickly.
- * Runtime traffic must use the transaction pooler; DIRECT_URL remains
- * available only to Prisma's migration CLI.
+ * Runtime traffic must use the Supabase transaction pooler. DIRECT_URL remains
+ * the direct port-5432 URL for Prisma migrate only.
  */
 export function validateVercelProductionEnv(): void {
   const databaseUrl = requireEnv('DATABASE_URL');
@@ -31,16 +59,10 @@ export function validateVercelProductionEnv(): void {
   if (!['postgresql:', 'postgres:'].includes(runtime.protocol)) {
     throw new Error('DATABASE_URL must use the PostgreSQL protocol.');
   }
-  if (runtime.port !== '6543') {
+  if (isDirectSupabaseRuntimeUrl(runtime)) {
     throw new Error(
       'DATABASE_URL must use the Supabase transaction pooler on port 6543, not a direct database connection.',
     );
-  }
-  if (runtime.searchParams.get('pgbouncer') !== 'true') {
-    throw new Error('DATABASE_URL must include pgbouncer=true.');
-  }
-  if (runtime.searchParams.get('connection_limit') !== '1') {
-    throw new Error('DATABASE_URL must include connection_limit=1 for serverless safety.');
   }
   if (!['postgresql:', 'postgres:'].includes(direct.protocol)) {
     throw new Error('DIRECT_URL must use the PostgreSQL protocol.');
@@ -48,4 +70,6 @@ export function validateVercelProductionEnv(): void {
   if (direct.port && direct.port !== '5432') {
     throw new Error('DIRECT_URL must use the direct PostgreSQL port 5432.');
   }
+
+  process.env.DATABASE_URL = normalizeDatabaseUrl(databaseUrl);
 }

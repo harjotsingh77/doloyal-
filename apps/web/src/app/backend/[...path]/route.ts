@@ -37,7 +37,7 @@ async function proxy(req: NextRequest, path: string[]) {
         error: {
           code: "API_UNCONFIGURED",
           message:
-            "Set API_BASE_URL on Vercel to your deployed Doloyal API URL (e.g. https://your-api.onrender.com), then redeploy.",
+            "Set API_BASE_URL on the Vercel frontend project (Settings → Environment Variables, Production) to the API project's .vercel.app origin, then Redeploy. Do not use NEXT_PUBLIC_API_BASE_URL.",
         },
       },
       { status: 503 },

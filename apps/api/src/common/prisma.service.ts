@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'async_hooks';
 import * as crypto from 'crypto';
+import { normalizeDatabaseUrl } from './production-env';
 
 export const tenantContext = new AsyncLocalStorage<{ tenantId: string }>();
 
@@ -245,14 +246,31 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     }
     super({
       datasources: {
-        db: { url: url || 'postgresql://postgres:postgres@localhost:5432/doloyal' },
+        db: {
+          url: url
+            ? process.env.VERCEL
+              ? normalizeDatabaseUrl(url)
+              : url
+            : 'postgresql://postgres:postgres@localhost:5432/doloyal',
+        },
       },
     });
     this.applyTenantMiddleware();
   }
 
   async onModuleInit() {
-    const maxAttempts = process.env.VERCEL ? 2 : 8;
+    // Vercel + Supabase transaction pooler (PgBouncer): Prisma $connect() uses
+    // session-level features that the pooler rejects. Connect lazily on the
+    // first query instead of failing the whole function at boot.
+    if (process.env.VERCEL) {
+      this.inMemory = false;
+      this.logger.log(
+        `Prisma will connect lazily. DATABASE_URL=${redactedDatabaseTarget(process.env.DATABASE_URL)}`,
+      );
+      return;
+    }
+
+    const maxAttempts = 8;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {

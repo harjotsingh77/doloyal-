@@ -16,8 +16,9 @@ export class HealthController {
     let database = 'ok';
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-    } catch {
+    } catch (err) {
       database = 'unavailable';
+      console.error('[health] database probe failed:', err instanceof Error ? err.stack || err.message : err);
     }
     return {
       status: database === 'ok' ? 'ok' : 'degraded',
