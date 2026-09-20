@@ -43,6 +43,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** False until `/auth/me` has settled for a real token (used by AdminGuard). */
+  claimsReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => void;
   demoLogin: () => Promise<void>;
@@ -59,6 +61,17 @@ const AuthContext = React.createContext<AuthContextValue | null>(null);
 
 function getToken(): string | null {
   return getStaffAuthToken();
+}
+
+function hasLiveStaffToken(): boolean {
+  const token = getToken();
+  return !!token && token !== "mock-token" && token !== "demo-token";
+}
+
+/** Cached Super Admin can paint immediately. Everyone else waits for /auth/me. */
+function initialClaimsReady(): boolean {
+  if (!hasLiveStaffToken()) return true;
+  return getSavedUser()?.isAdmin === true;
 }
 
 function setToken(token: string | null) {
@@ -175,30 +188,50 @@ function getInitialUser(): AuthUser | null {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Synchronous initialization — never starts as null during normal usage
   const [user, setUser] = React.useState<AuthUser | null>(getInitialUser);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(
+    () => hasLiveStaffToken() && !getSavedUser(),
+  );
+  const [claimsReady, setClaimsReady] = React.useState(initialClaimsReady);
 
-  // Background refresh: silently update user from API without blocking UI
+  // Background refresh: apply /auth/me (including isAdmin) without blanking the UI.
+  // Do not race this against a short timeout — a 2s cut-off dropped admin claims
+  // on cold API starts and left a stale non-admin cache gating /admin forever.
   React.useEffect(() => {
     const token = getToken();
-    if (!token || token === "mock-token" || token === "demo-token") return;
+    if (!token || token === "mock-token" || token === "demo-token") {
+      setClaimsReady(true);
+      setIsLoading(false);
+      return;
+    }
 
     let cancelled = false;
     const refresh = async () => {
       try {
-        const timeoutPromise = new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), 2000),
-        );
-        const realUser = await Promise.race([api.getMe(), timeoutPromise]);
+        const realUser = await api.getMe();
         if (realUser && !cancelled) {
           saveUser(realUser);
           setUser(realUser);
         }
       } catch {
         // Keep cached user — never blank the UI
+      } finally {
+        if (!cancelled) {
+          setClaimsReady(true);
+          setIsLoading(false);
+        }
       }
     };
     void refresh();
-    return () => { cancelled = true; };
+    const failSafe = setTimeout(() => {
+      if (!cancelled) {
+        setClaimsReady(true);
+        setIsLoading(false);
+      }
+    }, 10_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(failSafe);
+    };
   }, []);
 
   const setAuth = React.useCallback(
@@ -209,6 +242,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(token);
       saveUser(userData);
       setUser(userData);
+      setClaimsReady(true);
+      setIsLoading(false);
     },
     [],
   );
@@ -217,6 +252,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     saveUser(null);
     setUser(null);
+    setClaimsReady(true);
+    setIsLoading(false);
   }, []);
 
   const refreshUser = React.useCallback(async (): Promise<AuthUser | null> => {
@@ -484,6 +521,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isAuthenticated: !!user,
       isLoading,
+      claimsReady,
       login,
       loginWithGoogle,
       demoLogin,
@@ -493,7 +531,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshUser,
       resolveSupabaseSession,
     }),
-    [user, isLoading, login, loginWithGoogle, demoLogin, signUp, logout, switchTenant, refreshUser, resolveSupabaseSession],
+    [user, isLoading, claimsReady, login, loginWithGoogle, demoLogin, signUp, logout, switchTenant, refreshUser, resolveSupabaseSession],
   );
 
   return (
@@ -553,18 +591,30 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
  * - Admin                        → render children
  */
 export function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, claimsReady } = useAuth();
   const router = useRouter();
 
   const isAdmin = user?.isAdmin === true;
 
   React.useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated && claimsReady) {
       router.replace("/sign-in");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, claimsReady, router]);
 
-  if (!isAuthenticated && !isLoading) return null;
+  if (!isAuthenticated && !isLoading && claimsReady) return null;
+
+  if (!isAuthenticated || (isAuthenticated && !isAdmin && !claimsReady)) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
+          aria-hidden
+        />
+        <p className="text-sm text-muted-foreground">Checking admin access…</p>
+      </div>
+    );
+  }
 
   if (isAuthenticated && !isAdmin) {
     return (
@@ -573,7 +623,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
         <h1 className="text-2xl font-semibold text-foreground">Admin access required</h1>
         <p className="max-w-md text-sm text-muted-foreground">
           Your account does not have administrator privileges for the Doloyal control center.
-          If you believe this is a mistake, contact the Doloyal team.
+          If you believe this is a mistake, sign out and sign back in with Google, then open /admin again.
         </p>
         <a
           href="/app/dashboard"

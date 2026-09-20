@@ -13,6 +13,9 @@ export interface JwtPayload {
   kind?: 'staff' | 'customer';
   tid?: string;
   slug?: string;
+  /** Informational — `validate()` always re-reads isAdmin/adminRole from the DB. */
+  isAdmin?: boolean;
+  adminRole?: string | null;
 }
 
 @Injectable()

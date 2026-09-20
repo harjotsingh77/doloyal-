@@ -431,6 +431,84 @@ export interface AdminKpiValue {
   prefix?: string;
 }
 
+export function emptyAdminDashboardOverview(range = "30d"): AdminDashboardOverview {
+  const zero: AdminKpiValue = { value: 0, delta: null };
+  return {
+    totals: {
+      totalBusinesses: 0,
+      activeBusinesses: 0,
+      newSignups30d: 0,
+      paidBusinesses: 0,
+      mrr: 0,
+      arr: 0,
+      trialUsers: 0,
+      paidUsers: 0,
+      trialToPaidRate: 0,
+      churnRate30d: 0,
+      openSupportTickets: 0,
+      websiteRequests: 0,
+      totalUsers: 0,
+      totalCustomers: 0,
+      totalBookings: 0,
+      integrationErrors24h: 0,
+    },
+    kpis: {
+      totalBusinesses: { ...zero },
+      activeBusinesses: { ...zero },
+      newSignups: { ...zero },
+      paidBusinesses: { ...zero },
+      mrr: { ...zero },
+      arr: { ...zero },
+      trialUsers: { ...zero },
+      paidUsers: { ...zero },
+      trialToPaidRate: { ...zero, prefix: "%" },
+      churnRate: { ...zero, prefix: "%" },
+      openTickets: { ...zero },
+      websiteRequests: { ...zero },
+      totalUsers: { ...zero },
+      totalCustomers: { ...zero },
+      totalBookings: { ...zero },
+      integrationErrors: { ...zero },
+    },
+    revenueTrend: [],
+    revenueSeries: {
+      range,
+      totalRevenue: 0,
+      mrr: 0,
+      arr: 0,
+      refunds: 0,
+      netRevenue: 0,
+      byPlan: {},
+    },
+    growth: [],
+    activationRate: 0,
+    trial: {
+      trialUsers: 0,
+      trialsStarted30d: 0,
+      trialsExpiring7d: 0,
+      trialsConverted30d: 0,
+      conversionRate: 0,
+      averageTrialDurationDays: 0,
+      alerts: [],
+    },
+    churn: {
+      churnRate: 0,
+      canceled30d: 0,
+      downgrades30d: 0,
+      paymentFailures30d: 0,
+      atRiskAccounts: 0,
+    },
+    insights: [],
+    recentActivity: [],
+    recentSignups: [],
+    recentPayments: [],
+    recentTickets: [],
+    recentWebsiteRequests: [],
+    alerts: [],
+    featureAdoption: [],
+  };
+}
+
 export interface AdminDashboardOverview {
   totals: {
     totalBusinesses: number;

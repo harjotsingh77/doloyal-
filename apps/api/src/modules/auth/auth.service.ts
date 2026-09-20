@@ -6,6 +6,7 @@ import { getPublicAppUrl } from '../../common/helpers';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type { AuthUser } from '@doloyal/shared';
+import { permissionsForRole } from '@doloyal/shared';
 import { StaffService } from '../staff/staff.service';
 
 export type LoginMeta = {
@@ -61,8 +62,7 @@ export class AuthService {
       data: { tenantId: tenant.id, plan: 'growth', status: 'ACTIVE' },
     });
 
-    const payload = { sub: user.id, email: user.email, tv: 0, kind: 'staff' as const };
-    const token = this.jwtService.sign(payload);
+    const token = this.signStaffToken(user);
 
     return {
       token,
@@ -115,8 +115,7 @@ export class AuthService {
       ...(meta || {}),
     });
 
-    const payload = { sub: user.id, email: user.email, tv: user.tokenVersion ?? 0, kind: 'staff' as const };
-    const token = this.jwtService.sign(payload);
+    const token = this.signStaffToken(user);
 
     await this.touchSession(user.id, {
       id: `sess-${Date.now()}`,
@@ -203,8 +202,7 @@ export class AuthService {
       ...(meta || {}),
     });
 
-    const payload = { sub: user!.id, email: user!.email, tv: user!.tokenVersion ?? 0, kind: 'staff' as const };
-    const token = this.jwtService.sign(payload);
+    const token = this.signStaffToken(user!);
 
     return {
       token,
@@ -330,13 +328,7 @@ export class AuthService {
     const dbUser = await this.prisma.user.findUnique({ where: { id: userId }, include: { memberships: true } });
     if (!dbUser) throw new NotFoundException('User not found');
 
-    const token = this.jwtService.sign({
-      sub: dbUser.id,
-      email: dbUser.email,
-      tv: dbUser.tokenVersion ?? 0,
-      kind: 'staff' as const,
-      tid: membership.tenantId,
-    });
+    const token = this.signStaffToken(dbUser, { tid: membership.tenantId });
 
     return {
       user: this.mapUser(dbUser, membership.tenantId, membership.role),
@@ -540,7 +532,29 @@ export class AuthService {
     });
   }
 
+  private signStaffToken(
+    user: {
+      id: string;
+      email: string;
+      tokenVersion?: number | null;
+      isAdmin?: boolean | null;
+      adminRole?: string | null;
+    },
+    extra: { tid?: string } = {},
+  ) {
+    return this.jwtService.sign({
+      sub: user.id,
+      email: user.email,
+      tv: user.tokenVersion ?? 0,
+      kind: 'staff' as const,
+      isAdmin: Boolean(user.isAdmin),
+      adminRole: user.adminRole || (user.isAdmin ? 'SUPER_ADMIN' : null),
+      ...(extra.tid ? { tid: extra.tid } : {}),
+    });
+  }
+
   private mapUser(user: any, tenantId: string, role: string): AuthUser {
+    const adminRole = user.adminRole || (user.isAdmin ? 'SUPER_ADMIN' : null);
     return {
       id: user.id,
       externalId: user.googleId || user.clerkId || user.id,
@@ -551,7 +565,8 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       twoFactorEnabled: Boolean(user.twoFactorEnabled),
       isAdmin: Boolean(user.isAdmin),
-      adminRole: user.adminRole || (user.isAdmin ? 'SUPER_ADMIN' : undefined),
+      adminRole,
+      adminPermissions: permissionsForRole(adminRole),
       memberships: (user.memberships || []).map((m: any) => ({
         id: m.id,
         userId: m.userId,

@@ -262,6 +262,9 @@ export class AdminCommService {
       sub: actor.id,
       email: actor.email,
       tv: actor.tv ?? 0,
+      kind: 'staff' as const,
+      isAdmin: true,
+      adminRole: actor.adminRole || 'SUPER_ADMIN',
       imp: tenantId,
     });
 

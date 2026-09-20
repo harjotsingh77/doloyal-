@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
-import { getPlan } from '@doloyal/shared';
+import { emptyAdminDashboardOverview, getPlan } from '@doloyal/shared';
 import {
   dateRangeFor,
   fillDays,
@@ -27,12 +27,50 @@ interface TenantWithSub {
 
 @Injectable()
 export class AdminDashboardService {
+  private readonly logger = new Logger(AdminDashboardService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AdminAuditService,
   ) {}
 
   async overview(range = '30d') {
+    try {
+      return await this.withTimeout(this.buildOverview(range), 8_000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Admin dashboard overview failed or timed out: ${message}`);
+      return emptyAdminDashboardOverview(range);
+    }
+  }
+
+  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      );
+    });
+  }
+
+  private async soft<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Admin overview widget "${label}" failed: ${message}`);
+      return fallback;
+    }
+  }
+
+  private async buildOverview(range = '30d') {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
 
@@ -48,6 +86,7 @@ export class AdminDashboardService {
       totalCustomers,
       totalBookings,
       integrationErrors24h,
+      canceled30d,
     ] = await Promise.all([
       this.prisma.tenant.count(),
       this.prisma.tenant.findMany({
@@ -83,6 +122,12 @@ export class AdminDashboardService {
       this.prisma.appointment.count(),
       this.prisma.syncLog.count({
         where: { status: 'FAILED', resolvedAt: null, startedAt: { gte: thirtyDaysAgo } },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          status: 'CANCELED',
+          updatedAt: { gte: thirtyDaysAgo },
+        },
       }),
     ]);
 
@@ -129,18 +174,65 @@ export class AdminDashboardService {
         ? Math.round((convertedCount / trialsStarted90d.length) * 1000) / 10
         : 0;
 
-    // Churn (30d): canceled subscriptions in window vs current base.
-    const canceled30d = await this.prisma.subscription.count({
-      where: {
-        status: 'CANCELED',
-        updatedAt: { gte: thirtyDaysAgo },
-      },
-    });
     const churnBase = activeSubs.length + canceled30d;
     const churnRate30d = churnBase > 0 ? Math.round((canceled30d / churnBase) * 1000) / 10 : 0;
 
-    const monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
+    const emptyTrial = {
+      trialUsers: trialSubs.length,
+      trialsStarted30d: 0,
+      trialsExpiring7d: 0,
+      trialsConverted30d: 0,
+      conversionRate: 0,
+      averageTrialDurationDays: 0,
+      alerts: [] as string[],
+    };
+    const emptyChurn = {
+      churnRate: churnRate30d,
+      canceled30d,
+      downgrades30d: 0,
+      paymentFailures30d: 0,
+      atRiskAccounts: 0,
+    };
+
+    const [
+      activeDelta,
+      signupsDelta,
+      paidDelta,
+      trialDelta,
+      mrrDeltaVal,
+      revenueTrend,
+      growth,
+      activationRate,
+      trial,
+      churn,
+      insights,
+      recentActivity,
+      recentSignups,
+      recentPayments,
+      recentTickets,
+      recentWebsiteRequests,
+      alerts,
+      featureAdoption,
+    ] = await Promise.all([
+      this.soft('activeDelta', () => this.monthDelta('tenant', 'active'), null),
+      this.soft('signupsDelta', () => this.monthDelta('tenant', 'signups'), null),
+      this.soft('paidDelta', () => this.monthDelta('tenant', 'paid'), null),
+      this.soft('trialDelta', () => this.monthDelta('tenant', 'trial'), null),
+      this.soft('mrrDelta', () => this.mrrDelta(), null),
+      this.soft('revenueTrend', () => this.revenueTrend(range, subscriptions, contracts), []),
+      this.soft('growth', () => this.growth(range), []),
+      this.soft('activationRate', () => this.activationRate(), 0),
+      this.soft('trial', () => this.trialAnalytics(thirtyDaysAgo, now), emptyTrial),
+      this.soft('churn', () => this.churnAnalytics(thirtyDaysAgo, now, canceled30d, churnRate30d), emptyChurn),
+      this.soft('insights', () => this.aiInsights(thirtyDaysAgo, now, supportOpen), []),
+      this.soft('recentActivity', () => this.recentActivity(30), []),
+      this.soft('recentSignups', () => this.recentSignups(), []),
+      this.soft('recentPayments', () => this.recentPayments(), []),
+      this.soft('recentTickets', () => this.recentTickets(), []),
+      this.soft('recentWebsiteRequests', () => this.recentWebsiteRequests(), []),
+      this.soft('alerts', () => this.systemAlerts(thirtyDaysAgo, now), []),
+      this.soft('featureAdoption', () => this.featureAdoption(), []),
+    ]);
 
     const totals = {
       totalBusinesses,
@@ -163,15 +255,12 @@ export class AdminDashboardService {
 
     const kpis = {
       totalBusinesses: { value: totalBusinesses, delta: null },
-      activeBusinesses: {
-        value: activeSubs.length,
-        delta: await this.monthDelta('tenant', 'active'),
-      },
-      newSignups: { value: newSignups30d, delta: await this.monthDelta('tenant', 'signups') },
-      paidBusinesses: { value: paidSubs.length, delta: await this.monthDelta('tenant', 'paid') },
-      mrr: { value: mrr, delta: await this.mrrDelta() },
+      activeBusinesses: { value: activeSubs.length, delta: activeDelta },
+      newSignups: { value: newSignups30d, delta: signupsDelta },
+      paidBusinesses: { value: paidSubs.length, delta: paidDelta },
+      mrr: { value: mrr, delta: mrrDeltaVal },
       arr: { value: mrr * 12, delta: null },
-      trialUsers: { value: trialSubs.length, delta: await this.monthDelta('tenant', 'trial') },
+      trialUsers: { value: trialSubs.length, delta: trialDelta },
       paidUsers: { value: paidSubs.length, delta: null },
       trialToPaidRate: { value: trialToPaidRate, delta: null, prefix: '%' },
       churnRate: { value: churnRate30d, delta: null, prefix: '%' },
@@ -182,23 +271,6 @@ export class AdminDashboardService {
       totalBookings: { value: totalBookings, delta: null },
       integrationErrors: { value: integrationErrors24h, delta: null },
     };
-
-    const revenueTrend = await this.revenueTrend(range, subscriptions, contracts);
-    const growth = await this.growth(range);
-    const activationRate = await this.activationRate();
-    const trial = await this.trialAnalytics(thirtyDaysAgo, now);
-    const churn = await this.churnAnalytics(thirtyDaysAgo, now, canceled30d, churnRate30d);
-    const insights = await this.aiInsights(thirtyDaysAgo, now, supportOpen);
-    const recentActivity = await this.recentActivity(30);
-    const [recentSignups, recentPayments, recentTickets, recentWebsiteRequests, alerts, featureAdoption] =
-      await Promise.all([
-        this.recentSignups(),
-        this.recentPayments(),
-        this.recentTickets(),
-        this.recentWebsiteRequests(),
-        this.systemAlerts(thirtyDaysAgo, now),
-        this.featureAdoption(),
-      ]);
 
     return {
       totals,
@@ -942,36 +1014,45 @@ export class AdminDashboardService {
     return results;
   }
 
-  private async monthDelta(kind: 'tenant', metric: 'active' | 'signups' | 'paid' | 'trial') {
+  private async monthDelta(_kind: 'tenant', metric: 'active' | 'signups' | 'paid' | 'trial') {
     const now = new Date();
     const monthAgo = new Date(now.getTime() - 30 * 86400000);
     const prevAgo = new Date(now.getTime() - 60 * 86400000);
 
-    const count = async (from: Date, to: Date) => {
+    const windowStats = async (from: Date, to: Date) => {
+      if (metric === 'signups') {
+        return this.prisma.tenant.count({ where: { createdAt: { gte: from, lt: to } } });
+      }
       const tenants = await this.prisma.tenant.findMany({
         where: { createdAt: { gte: from, lt: to } },
-        select: { id: true },
-      });
-      if (metric === 'signups') return tenants.length;
-      if (metric === 'active' || metric === 'paid' || metric === 'trial') {
-        let n = 0;
-        for (const t of tenants) {
-          const sub = await this.prisma.subscription.findFirst({
-            where: { tenantId: t.id },
+        select: {
+          subscriptions: {
             orderBy: { createdAt: 'desc' },
-          });
-          if (!sub) continue;
-          if (metric === 'active' && sub.status === 'ACTIVE') n++;
-          if (metric === 'paid' && sub.status === 'ACTIVE' && planMonthlyAmount(sub.plan) > 0) n++;
-          if (metric === 'trial' && (sub.status === 'TRIALING' || (sub.trialEndsAt && sub.trialEndsAt > now))) n++;
+            take: 1,
+            select: { status: true, plan: true, trialEndsAt: true },
+          },
+        },
+      });
+      let n = 0;
+      for (const t of tenants) {
+        const sub = t.subscriptions[0];
+        if (!sub) continue;
+        if (metric === 'active' && sub.status === 'ACTIVE') n++;
+        if (metric === 'paid' && sub.status === 'ACTIVE' && planMonthlyAmount(sub.plan) > 0) n++;
+        if (
+          metric === 'trial' &&
+          (sub.status === 'TRIALING' || (sub.trialEndsAt && sub.trialEndsAt > now))
+        ) {
+          n++;
         }
-        return n;
       }
-      return 0;
+      return n;
     };
 
-    const current = await count(monthAgo, now);
-    const prev = await count(prevAgo, monthAgo);
+    const [current, prev] = await Promise.all([
+      windowStats(monthAgo, now),
+      windowStats(prevAgo, monthAgo),
+    ]);
     if (prev === 0) return current > 0 ? 100 : null;
     return Math.round(((current - prev) / prev) * 1000) / 10;
   }
