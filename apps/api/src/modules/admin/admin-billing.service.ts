@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
 import { PLANS } from '@doloyal/shared';
-import { paginate, planMonthlyAmount, planLabel } from './admin-util';
+import { paginate, planMonthlyAmount, planLabel, realTenantWhere, isRecognizedPaidSubscription } from './admin-util';
 
 @Injectable()
 export class AdminBillingService {
@@ -222,9 +222,11 @@ export class AdminBillingService {
   async overview() {
     const [subs, events, refundLogs] = await Promise.all([
       this.prisma.subscription.findMany({
+        where: { tenant: realTenantWhere() },
         include: { tenant: { select: { currency: true } } },
       }),
       this.prisma.subscriptionEvent.findMany({
+        where: { tenant: realTenantWhere() },
         orderBy: { createdAt: 'desc' },
         take: 100,
         include: { tenant: { select: { name: true } } },
@@ -236,29 +238,30 @@ export class AdminBillingService {
       }),
     ]);
 
-    const contracts = await this.prisma.enterpriseContract.findMany();
+    const contracts = await this.prisma.enterpriseContract.findMany({
+      where: { tenant: realTenantWhere() },
+    });
     const cMap = new Map(contracts.map((c) => [c.tenantId, c]));
 
     const activeSubs = subs.filter((s) => s.status === 'ACTIVE');
-    const mrr = activeSubs.reduce(
+    const paidSubs = activeSubs.filter((s) =>
+      isRecognizedPaidSubscription(s, cMap.get(s.tenantId)?.contractPrice, cMap.get(s.tenantId)?.billingCycle),
+    );
+    const mrr = paidSubs.reduce(
       (sum, s) => sum + planMonthlyAmount(s.plan, cMap.get(s.tenantId)?.contractPrice, cMap.get(s.tenantId)?.billingCycle),
       0,
     );
 
-    const grossRevenue = subs.reduce(
-      (sum, s) => {
-        if (s.status === 'CANCELED' || s.status === 'EXPIRED') return sum;
-        return sum + planMonthlyAmount(s.plan, cMap.get(s.tenantId)?.contractPrice, cMap.get(s.tenantId)?.billingCycle);
-      },
-      0,
-    );
+    const grossRevenue = events
+      .filter((e) => e.type === 'PAYMENT_SUCCEEDED')
+      .reduce((sum, e) => sum + (e.amount ?? 0), 0);
     const refunds = refundLogs.reduce(
       (sum, r) => sum + Number((r.metadata as any)?.amount ?? 0),
       0,
     );
 
     const revenueByPlan: Record<string, number> = {};
-    for (const s of activeSubs) {
+    for (const s of paidSubs) {
       const amount = planMonthlyAmount(s.plan, cMap.get(s.tenantId)?.contractPrice, cMap.get(s.tenantId)?.billingCycle);
       revenueByPlan[s.plan] = (revenueByPlan[s.plan] ?? 0) + amount;
     }

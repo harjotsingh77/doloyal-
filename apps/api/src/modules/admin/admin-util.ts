@@ -4,6 +4,72 @@ import { PrismaService } from '../../common/prisma.service';
 export const INR = (n: number) =>
   `₹${(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
+/** Seed / smoke / e2e tenants that must never inflate Super Admin KPIs. */
+export const SHOWCASE_TENANT_OR = [
+  { email: { equals: 'demo@doloyal.ai', mode: 'insensitive' as const } },
+  { slug: { equals: 'luxe-studio' } },
+  { slug: { startsWith: 'demo-' } },
+  { name: { equals: 'Luxe Studio & Spa', mode: 'insensitive' as const } },
+  { name: { startsWith: 'E2E' } },
+  { name: { startsWith: 'Smoke' } },
+  { email: { endsWith: '@doloyal-test.com' } },
+  {
+    memberships: {
+      some: {
+        user: {
+          OR: [
+            { email: { equals: 'demo@doloyal.ai', mode: 'insensitive' as const } },
+            { email: { endsWith: '@doloyal-test.com' } },
+            { email: { startsWith: 'e2e.doloyal.' } },
+            { clerkId: 'dev-user' },
+          ],
+        },
+      },
+    },
+  },
+];
+
+export function realTenantWhere(extra: Record<string, unknown> = {}) {
+  const notShowcase = { NOT: { OR: SHOWCASE_TENANT_OR } };
+  if (!extra || Object.keys(extra).length === 0) return notShowcase;
+  return { AND: [extra, notShowcase] };
+}
+
+export function realUserWhere(extra: Record<string, unknown> = {}) {
+  return {
+    AND: [
+      extra,
+      {
+        NOT: {
+          OR: [
+            { email: { equals: 'demo@doloyal.ai', mode: 'insensitive' as const } },
+            { email: { endsWith: '@doloyal-test.com' } },
+            { email: { startsWith: 'e2e.doloyal.' } },
+            { clerkId: 'dev-user' },
+            { memberships: { some: { tenant: { OR: SHOWCASE_TENANT_OR } } } },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+/** List-price of a plan is not revenue. Paid KPIs require a processor or payment id. */
+export function isRecognizedPaidSubscription(sub: {
+  status?: string | null;
+  plan: string;
+  stripeSubId?: string | null;
+  stripeId?: string | null;
+  paymentMethod?: string | null;
+}, contractPrice?: number, cycle?: string): boolean {
+  if (sub.status !== 'ACTIVE') return false;
+  if (planMonthlyAmount(sub.plan, contractPrice, cycle) <= 0) return false;
+  if (sub.stripeSubId || sub.stripeId) return true;
+  const method = (sub.paymentMethod || '').trim().toUpperCase();
+  if (!method || method === 'INTERNAL' || method === 'MANUAL') return false;
+  return true;
+}
+
 export function planMonthlyAmount(plan: string, contractPrice?: number, cycle?: string): number {
   if (plan === 'enterprise') {
     if (!contractPrice || contractPrice <= 0) return 0;

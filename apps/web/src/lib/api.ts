@@ -25,7 +25,7 @@ import type {
   CreateClientOrderInput, UpdateClientOrderInput, ClientOrderQuery,
 } from "@doloyal/shared";
 import type { ApiResponse, Paginated } from "@doloyal/shared";
-import { emptyAdminDashboardOverview, isApiError } from "@doloyal/shared";
+import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
 import { supabase } from "./supabase";
@@ -2733,20 +2733,10 @@ export const api = {
 
   // ─── Admin Control Center ──────────────────────────────────────────────
 
-  adminDashboardOverview: async (range?: string) => {
-    const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
-    const timer = controller ? setTimeout(() => controller.abort(), 15_000) : undefined;
-    try {
-      return await request<import("@doloyal/shared").AdminDashboardOverview>(
-        `/admin/dashboard/overview${range ? `?range=${range}` : ""}`,
-        controller ? { signal: controller.signal } : {},
-      );
-    } catch {
-      return emptyAdminDashboardOverview(range);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  },
+  adminDashboardOverview: (range?: string) =>
+    request<import("@doloyal/shared").AdminDashboardOverview>(
+      `/admin/dashboard/overview${range ? `?range=${range}` : ""}`,
+    ),
 
   adminListBusinesses: (params?: {
     status?: string; plan?: string; search?: string; sort?: string;

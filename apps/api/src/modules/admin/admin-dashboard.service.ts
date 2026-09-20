@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
-import { emptyAdminDashboardOverview, getPlan } from '@doloyal/shared';
+import { getPlan } from '@doloyal/shared';
 import {
   dateRangeFor,
   fillDays,
@@ -9,6 +9,9 @@ import {
   dayKey,
   planMonthlyAmount,
   planLabel,
+  realTenantWhere,
+  realUserWhere,
+  isRecognizedPaidSubscription,
 } from './admin-util';
 
 interface TenantWithSub {
@@ -20,6 +23,9 @@ interface TenantWithSub {
     status: string;
     trialEndsAt?: Date | null;
     createdAt: Date;
+    stripeSubId?: string | null;
+    stripeId?: string | null;
+    paymentMethod?: string | null;
   } | null;
   contractPrice?: number;
   contractCycle?: string;
@@ -35,13 +41,7 @@ export class AdminDashboardService {
   ) {}
 
   async overview(range = '30d') {
-    try {
-      return await this.buildOverview(range);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Admin dashboard overview failed: ${message}`);
-      return emptyAdminDashboardOverview(range);
-    }
+    return this.buildOverview(range);
   }
 
   private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -75,6 +75,7 @@ export class AdminDashboardService {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
     const ninetyAgo = new Date(now.getTime() - 90 * 86400000);
 
+    const realTenant = realTenantWhere();
     const [
       totalBusinesses,
       newSignups30d,
@@ -90,17 +91,17 @@ export class AdminDashboardService {
       contracts,
       recentTenants,
     ] = await Promise.all([
-      this.prisma.tenant.count(),
-      this.prisma.tenant.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      this.prisma.tenant.count({ where: realTenant }),
+      this.prisma.tenant.count({ where: realTenantWhere({ createdAt: { gte: thirtyDaysAgo } }) }),
       this.prisma.supportTicket.count({
-        where: { status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING_FOR_CUSTOMER'] } },
+        where: { status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING_FOR_CUSTOMER'] }, tenant: realTenant },
       }),
       this.prisma.websiteProject.count({
-        where: { status: { notIn: ['COMPLETED', 'PUBLISHED'] } },
+        where: { status: { notIn: ['COMPLETED', 'PUBLISHED'] }, tenant: realTenant },
       }),
-      this.prisma.user.count({ where: { isAdmin: false } }),
-      this.prisma.customer.count(),
-      this.prisma.appointment.count(),
+      this.prisma.user.count({ where: realUserWhere({ isAdmin: false }) }),
+      this.prisma.customer.count({ where: { tenant: realTenant } }),
+      this.prisma.appointment.count({ where: { tenant: realTenant } }),
       this.prisma.syncLog.count({
         where: { status: 'FAILED', resolvedAt: null, startedAt: { gte: thirtyDaysAgo } },
       }),
@@ -108,29 +109,58 @@ export class AdminDashboardService {
         where: {
           status: 'CANCELED',
           updatedAt: { gte: thirtyDaysAgo },
+          tenant: realTenant,
         },
       }),
       this.prisma.subscription.findMany({
-        where: { status: 'ACTIVE' },
-        select: { plan: true, tenantId: true, status: true, trialEndsAt: true, createdAt: true },
+        where: { status: 'ACTIVE', tenant: realTenant },
+        select: {
+          plan: true,
+          tenantId: true,
+          status: true,
+          trialEndsAt: true,
+          createdAt: true,
+          stripeSubId: true,
+          stripeId: true,
+          paymentMethod: true,
+        },
       }),
       this.prisma.subscription.findMany({
         where: {
+          tenant: realTenant,
           OR: [{ status: 'TRIALING' }, { trialEndsAt: { gt: now } }],
         },
-        select: { plan: true, tenantId: true, status: true, trialEndsAt: true, createdAt: true },
+        select: {
+          plan: true,
+          tenantId: true,
+          status: true,
+          trialEndsAt: true,
+          createdAt: true,
+          stripeSubId: true,
+          stripeId: true,
+          paymentMethod: true,
+        },
       }),
       this.prisma.enterpriseContract.findMany({
+        where: { tenant: realTenant },
         select: { tenantId: true, contractPrice: true, billingCycle: true },
       }),
       this.prisma.tenant.findMany({
-        where: { createdAt: { gte: ninetyAgo } },
+        where: realTenantWhere({ createdAt: { gte: ninetyAgo } }),
         select: {
           id: true,
           name: true,
           createdAt: true,
           subscriptions: {
-            select: { plan: true, status: true, trialEndsAt: true, createdAt: true },
+            select: {
+              plan: true,
+              status: true,
+              trialEndsAt: true,
+              createdAt: true,
+              stripeSubId: true,
+              stripeId: true,
+              paymentMethod: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
@@ -158,16 +188,20 @@ export class AdminDashboardService {
     const trialSubs = trialSubRows.filter(
       (s) => s.status === 'TRIALING' || (s.trialEndsAt && s.trialEndsAt > now),
     );
-    const paidSubs = activeSubs.filter(
-      (t) => planMonthlyAmount(t.subscription!.plan, t.contractPrice, t.contractCycle) > 0,
+    const paidSubs = activeSubs.filter((t) =>
+      isRecognizedPaidSubscription(t.subscription!, t.contractPrice, t.contractCycle),
     );
 
-    const mrr = activeSubs.reduce(
+    const mrr = paidSubs.reduce(
       (sum, t) => sum + planMonthlyAmount(t.subscription!.plan, t.contractPrice, t.contractCycle),
       0,
     );
 
-    const convertedCount = recentTenants.filter((t) => t.subscriptions[0]?.status === 'ACTIVE').length;
+    const convertedCount = recentTenants.filter((t) => {
+      const sub = t.subscriptions[0];
+      const contract = contractMap.get(t.id);
+      return sub ? isRecognizedPaidSubscription(sub, contract?.price, contract?.cycle) : false;
+    }).length;
     const trialToPaidRate =
       recentTenants.length > 0
         ? Math.round((convertedCount / recentTenants.length) * 1000) / 10
@@ -228,16 +262,16 @@ export class AdminDashboardService {
           this.soft('activationRate', () => this.activationRate(), 0),
           this.soft('trial', () => this.trialAnalytics(thirtyDaysAgo, now), emptyTrial),
           this.soft('churn', () => this.churnAnalytics(thirtyDaysAgo, now, canceled30d, churnRate30d), emptyChurn),
-          this.soft('insights', () => this.aiInsights(thirtyDaysAgo, now, supportOpen), []),
+          this.soft('insights', async () => [], []),
           this.soft('recentActivity', () => this.recentActivity(30), []),
           this.soft('recentSignups', () => this.recentSignups(), []),
           this.soft('recentPayments', () => this.recentPayments(), []),
           this.soft('recentTickets', () => this.recentTickets(), []),
           this.soft('recentWebsiteRequests', () => this.recentWebsiteRequests(), []),
           this.soft('alerts', () => this.systemAlerts(thirtyDaysAgo, now), []),
-          this.soft('featureAdoption', () => this.featureAdoption(), []),
+          this.soft('featureAdoption', async () => [], []),
         ]),
-        6_000,
+        2_500,
       );
       widgets = {
         activeDelta: loaded[0],
@@ -355,6 +389,7 @@ export class AdminDashboardService {
     const by: Record<string, number> = {};
     for (const t of withSub) {
       if (t.subscription?.status !== 'ACTIVE') continue;
+      if (!isRecognizedPaidSubscription(t.subscription, t.contractPrice, t.contractCycle)) continue;
       const amount = planMonthlyAmount(t.subscription.plan, t.contractPrice, t.contractCycle);
       by[t.subscription.plan] = (by[t.subscription.plan] ?? 0) + amount;
     }
@@ -373,6 +408,7 @@ export class AdminDashboardService {
     // Real payment events in window (subscription payments recognized).
     const events = await this.prisma.subscriptionEvent.findMany({
       where: {
+        tenant: realTenantWhere(),
         type: { in: ['PAYMENT_SUCCEEDED', 'PAYMENT_FAILED'] },
         createdAt: { gte: start, lte: end },
       },
@@ -400,23 +436,14 @@ export class AdminDashboardService {
       eventByDay.set(key, cur);
     }
 
-    // Initial subscription payments: plan price recognized on the sub's creation day.
-    for (const sub of subscriptions) {
-      if (sub.status === 'CANCELED' || sub.status === 'EXPIRED') continue;
-      const price = planMonthlyAmount(
-        sub.plan,
-        contractMap.get(sub.tenantId)?.contractPrice,
-        contractMap.get(sub.tenantId)?.billingCycle,
-      );
-      if (price <= 0) continue;
-      const key = dayKey(new Date(sub.createdAt));
-      const cur = eventByDay.get(key) ?? { revenue: 0, refunds: 0 };
-      cur.revenue += price;
-      eventByDay.set(key, cur);
-    }
+    // Do not recognize list-price on subscription creation — that painted
+    // unpaid default Growth plans as revenue. Revenue is payment events only.
 
     const byPlanByDay = new Map<string, Record<string, number>>();
     for (const sub of subscriptions) {
+      if (!isRecognizedPaidSubscription(sub, contractMap.get(sub.tenantId)?.contractPrice, contractMap.get(sub.tenantId)?.billingCycle)) {
+        continue;
+      }
       const price = planMonthlyAmount(
         sub.plan,
         contractMap.get(sub.tenantId)?.contractPrice,
@@ -429,7 +456,13 @@ export class AdminDashboardService {
     }
 
     const mrrTotal = subscriptions
-      .filter((s) => s.status === 'ACTIVE')
+      .filter((s) =>
+        isRecognizedPaidSubscription(
+          s,
+          contractMap.get(s.tenantId)?.contractPrice,
+          contractMap.get(s.tenantId)?.billingCycle,
+        ),
+      )
       .reduce(
         (sum, s) =>
           sum +
@@ -467,16 +500,16 @@ export class AdminDashboardService {
     const days = fillDays(start, end);
 
     const tenants = await this.prisma.tenant.findMany({
-      where: { createdAt: { gte: start } },
+      where: realTenantWhere({ createdAt: { gte: start } }),
       select: { id: true, createdAt: true },
     });
     const users = await this.prisma.user.findMany({
-      where: { createdAt: { gte: start } },
+      where: realUserWhere({ createdAt: { gte: start } }),
       select: { id: true, createdAt: true },
     });
     const subs = await this.prisma.subscription.findMany({
-      where: { status: 'ACTIVE' },
-      select: { tenantId: true, createdAt: true },
+      where: { status: 'ACTIVE', tenant: realTenantWhere() },
+      select: { tenantId: true, createdAt: true, plan: true, status: true, stripeSubId: true, stripeId: true, paymentMethod: true },
     });
     const activeTenantSet = new Set(subs.map((s) => s.tenantId));
 
@@ -503,8 +536,8 @@ export class AdminDashboardService {
 
   private async activationRate() {
     const [total, complete] = await Promise.all([
-      this.prisma.tenant.count(),
-      this.prisma.tenant.count({ where: { onboardingComplete: true } }),
+      this.prisma.tenant.count({ where: realTenantWhere() }),
+      this.prisma.tenant.count({ where: realTenantWhere({ onboardingComplete: true }) }),
     ]);
     return total > 0 ? Math.round((complete / total) * 1000) / 10 : 0;
   }
@@ -513,12 +546,14 @@ export class AdminDashboardService {
     const [trialsStarted, trialSubs, trialsExpiring] = await Promise.all([
       this.prisma.subscription.count({
         where: {
+          tenant: realTenantWhere(),
           createdAt: { gte: thirtyDaysAgo },
           OR: [{ status: 'TRIALING' }, { status: 'ACTIVE' }],
         },
       }),
       this.prisma.subscription.findMany({
         where: {
+          tenant: realTenantWhere(),
           OR: [
             { status: 'TRIALING' },
             { trialEndsAt: { gt: now }, status: 'ACTIVE' },
@@ -527,6 +562,7 @@ export class AdminDashboardService {
       }),
       this.prisma.subscription.findMany({
         where: {
+          tenant: realTenantWhere(),
           trialEndsAt: { gt: now, lt: new Date(now.getTime() + 3 * 86400000) },
         },
       }),
@@ -538,7 +574,12 @@ export class AdminDashboardService {
     }).length;
 
     const converted30d = await this.prisma.subscription.count({
-      where: { status: 'ACTIVE', updatedAt: { gte: thirtyDaysAgo } },
+      where: {
+        tenant: realTenantWhere(),
+        status: 'ACTIVE',
+        stripeSubId: { not: null },
+        updatedAt: { gte: thirtyDaysAgo },
+      },
     });
     const conversionRate =
       trialsStarted > 0 ? Math.round((converted30d / trialsStarted) * 1000) / 10 : 0;
@@ -562,7 +603,7 @@ export class AdminDashboardService {
               trialEvents.length /
               1,
           )
-        : 14;
+        : 0;
 
     const alerts: string[] = [];
     if (trialsExpiring7d > 0)
@@ -766,7 +807,7 @@ export class AdminDashboardService {
       },
     });
     if (thisWeek === 0 && prevWeek === 0) return null;
-    if (prevWeek === 0) return 100;
+    if (prevWeek === 0) return null;
     return Math.round(((thisWeek - prevWeek) / prevWeek) * 100);
   }
 
@@ -851,6 +892,7 @@ export class AdminDashboardService {
     const tenants = await this.prisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },
       take: 8,
+      where: realTenantWhere(),
       select: {
         id: true,
         name: true,
@@ -869,7 +911,7 @@ export class AdminDashboardService {
 
   private async recentPayments() {
     const events = await this.prisma.subscriptionEvent.findMany({
-      where: { type: 'PAYMENT_SUCCEEDED' },
+      where: { type: 'PAYMENT_SUCCEEDED', tenant: realTenantWhere() },
       orderBy: { createdAt: 'desc' },
       take: 8,
       include: { tenant: { select: { name: true } } },
@@ -1072,15 +1114,15 @@ export class AdminDashboardService {
 
     const windowStats = async (from: Date, to: Date) => {
       if (metric === 'signups') {
-        return this.prisma.tenant.count({ where: { createdAt: { gte: from, lt: to } } });
+        return this.prisma.tenant.count({ where: realTenantWhere({ createdAt: { gte: from, lt: to } }) });
       }
       const tenants = await this.prisma.tenant.findMany({
-        where: { createdAt: { gte: from, lt: to } },
+        where: realTenantWhere({ createdAt: { gte: from, lt: to } }),
         select: {
           subscriptions: {
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { status: true, plan: true, trialEndsAt: true },
+            select: { status: true, plan: true, trialEndsAt: true, stripeSubId: true, stripeId: true, paymentMethod: true },
           },
         },
       });
@@ -1089,7 +1131,7 @@ export class AdminDashboardService {
         const sub = t.subscriptions[0];
         if (!sub) continue;
         if (metric === 'active' && sub.status === 'ACTIVE') n++;
-        if (metric === 'paid' && sub.status === 'ACTIVE' && planMonthlyAmount(sub.plan) > 0) n++;
+        if (metric === 'paid' && isRecognizedPaidSubscription(sub)) n++;
         if (
           metric === 'trial' &&
           (sub.status === 'TRIALING' || (sub.trialEndsAt && sub.trialEndsAt > now))
@@ -1104,7 +1146,7 @@ export class AdminDashboardService {
       windowStats(monthAgo, now),
       windowStats(prevAgo, monthAgo),
     ]);
-    if (prev === 0) return current > 0 ? 100 : null;
+    if (prev === 0) return null;
     return Math.round(((current - prev) / prev) * 1000) / 10;
   }
 
@@ -1112,14 +1154,14 @@ export class AdminDashboardService {
     const now = new Date();
     const monthAgo = new Date(now.getTime() - 30 * 86400000);
     const subsNow = await this.prisma.subscription.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', tenant: realTenantWhere() },
     });
     const subsPrev = await this.prisma.subscription.findMany({
-      where: { status: 'ACTIVE', createdAt: { lt: monthAgo } },
+      where: { status: 'ACTIVE', createdAt: { lt: monthAgo }, tenant: realTenantWhere() },
     });
-    const mrrNow = subsNow.reduce((s, x) => s + planMonthlyAmount(x.plan), 0);
-    const mrrPrev = subsPrev.reduce((s, x) => s + planMonthlyAmount(x.plan), 0);
-    if (mrrPrev === 0) return mrrNow > 0 ? 100 : null;
+    const mrrNow = subsNow.filter((x) => isRecognizedPaidSubscription(x)).reduce((s, x) => s + planMonthlyAmount(x.plan), 0);
+    const mrrPrev = subsPrev.filter((x) => isRecognizedPaidSubscription(x)).reduce((s, x) => s + planMonthlyAmount(x.plan), 0);
+    if (mrrPrev === 0) return null;
     return Math.round(((mrrNow - mrrPrev) / mrrPrev) * 1000) / 10;
   }
 }

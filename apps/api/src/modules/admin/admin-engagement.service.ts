@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
-import { paginate } from './admin-util';
+import { paginate, realTenantWhere } from './admin-util';
 
 @Injectable()
 export class AdminEngagementService {
@@ -69,15 +69,16 @@ export class AdminEngagementService {
   async bookingsOverview() {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const realTenant = realTenantWhere();
     const [today, upcoming, completed, canceled, noShows, total] = await Promise.all([
       this.prisma.appointment.count({
-        where: { startTime: { gte: todayStart }, status: { notIn: ['CANCELLED', 'NO_SHOW'] } },
+        where: { tenant: realTenant, startTime: { gte: todayStart }, status: { notIn: ['CANCELLED', 'NO_SHOW'] } },
       }),
-      this.prisma.appointment.count({ where: { startTime: { gte: now }, status: { notIn: ['CANCELLED', 'NO_SHOW', 'COMPLETED'] } } }),
-      this.prisma.appointment.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.appointment.count({ where: { status: 'CANCELLED' } }),
-      this.prisma.appointment.count({ where: { status: 'NO_SHOW' } }),
-      this.prisma.appointment.count(),
+      this.prisma.appointment.count({ where: { tenant: realTenant, startTime: { gte: now }, status: { notIn: ['CANCELLED', 'NO_SHOW', 'COMPLETED'] } } }),
+      this.prisma.appointment.count({ where: { tenant: realTenant, status: 'COMPLETED' } }),
+      this.prisma.appointment.count({ where: { tenant: realTenant, status: 'CANCELLED' } }),
+      this.prisma.appointment.count({ where: { tenant: realTenant, status: 'NO_SHOW' } }),
+      this.prisma.appointment.count({ where: { tenant: realTenant } }),
     ]);
     return { today, upcoming, completed, canceled, noShows, total };
   }
@@ -146,7 +147,7 @@ export class AdminEngagementService {
       this.prisma.rewardRedemption.count(),
       this.prisma.loyaltyConfig.count(),
     ]);
-    const totalBusinesses = await this.prisma.tenant.count();
+    const totalBusinesses = await this.prisma.tenant.count({ where: realTenantWhere() });
     return {
       pointsIssued: issued._sum.amount ?? 0,
       pointsRedeemed: Math.abs(redeemed._sum.amount ?? 0),

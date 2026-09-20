@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AdminAuditService } from '../../common/admin-audit.service';
-import { dateRangeFor, fillDays, labelForDate, dayKey, planMonthlyAmount } from './admin-util';
+import { dateRangeFor, fillDays, labelForDate, dayKey, planMonthlyAmount, realTenantWhere, realUserWhere, isRecognizedPaidSubscription } from './admin-util';
 
 @Injectable()
 export class AdminAnalyticsService {
@@ -17,17 +17,17 @@ export class AdminAnalyticsService {
 
     const [tenants, users, subscriptions, customers, appointments, conversations] = await Promise.all([
       this.prisma.tenant.findMany({
-        where: { createdAt: { gte: start } },
+        where: realTenantWhere({ createdAt: { gte: start } }),
         select: { id: true, createdAt: true, onboardingComplete: true },
       }),
       this.prisma.user.findMany({
-        where: { createdAt: { gte: start } },
+        where: realUserWhere({ createdAt: { gte: start } }),
         select: { id: true, createdAt: true },
       }),
-      this.prisma.subscription.findMany({ where: { status: 'ACTIVE' } }),
-      this.prisma.customer.groupBy({ by: ['tenantId'] }),
-      this.prisma.appointment.groupBy({ by: ['tenantId'] }),
-      this.prisma.aiConversation.groupBy({ by: ['tenantId'] }),
+      this.prisma.subscription.findMany({ where: { status: 'ACTIVE', tenant: realTenantWhere() } }),
+      this.prisma.customer.groupBy({ by: ['tenantId'], where: { tenant: realTenantWhere() } }),
+      this.prisma.appointment.groupBy({ by: ['tenantId'], where: { tenant: realTenantWhere() } }),
+      this.prisma.aiConversation.groupBy({ by: ['tenantId'], where: { tenant: realTenantWhere() } }),
     ]);
 
     const activeSet = new Set(subscriptions.map((s) => s.tenantId));
@@ -47,7 +47,7 @@ export class AdminAnalyticsService {
       };
     });
 
-    const totalTenants = await this.prisma.tenant.count();
+    const totalTenants = await this.prisma.tenant.count({ where: realTenantWhere() });
     const onboardingCompleted = tenants.filter((t) => t.onboardingComplete).length;
     const activationRate =
       totalTenants > 0 ? Math.round((onboardingCompleted / totalTenants) * 1000) / 10 : 0;
@@ -63,16 +63,17 @@ export class AdminAnalyticsService {
     });
     if (referralVisits > 0) sources.push({ source: 'Referrals', count: referralVisits });
 
-    const mrr = subscriptions.reduce(
+    const paidSubs = subscriptions.filter((sub) => isRecognizedPaidSubscription(sub));
+    const mrr = paidSubs.reduce(
       (s, sub) => s + planMonthlyAmount(sub.plan),
       0,
     );
-    const totalActive = subscriptions.length;
+    const totalActive = paidSubs.length;
     const arpu = totalActive > 0 ? Math.round((mrr / totalActive) * 100) / 100 : 0;
     const ltv = arpu * 12 * 2; // heuristic: avg ARPU × 24 months (documented heuristic).
 
     const revenueByPlan: Record<string, number> = {};
-    for (const s of subscriptions) {
+    for (const s of paidSubs) {
       revenueByPlan[s.plan] = (revenueByPlan[s.plan] ?? 0) + planMonthlyAmount(s.plan);
     }
 
@@ -107,7 +108,7 @@ export class AdminAnalyticsService {
     );
 
     const canceled30d = await this.prisma.subscription.count({
-      where: { status: 'CANCELED', updatedAt: { gte: thirtyDaysAgo } },
+      where: { status: 'CANCELED', updatedAt: { gte: thirtyDaysAgo }, tenant: realTenantWhere() },
     });
     const churnRate =
       totalActive + canceled30d > 0 ? Math.round((canceled30d / (totalActive + canceled30d)) * 1000) / 10 : 0;
