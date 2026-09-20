@@ -11,5 +11,5 @@ require('reflect-metadata');
  * uses `src/main.ts` + `app.listen()` and never loads this file.
  */
 const handler = require('../dist/vercel-handler.js').default;
-handler.config = { maxDuration: 300 };
+handler.config = { maxDuration: 60 };
 module.exports = handler;

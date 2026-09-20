@@ -11,8 +11,10 @@
     "schema": "apps/api/prisma/schema.prisma"
   },
   "pnpm": {
-    "ignoredBuiltDependencies": [
-      "@prisma/client"
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "prisma",
+      "esbuild"
     ]
   },
   "scripts": {
