@@ -67,18 +67,33 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers["Content-Type"] = "application/json";
   }
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${apiBase()}${path}`, {
-    ...options,
-    headers,
-    cache: options.cache ?? "no-store",
-  });
+  const method = (options.method || "GET").toUpperCase();
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, {
+      ...options,
+      headers,
+      cache: options.cache ?? "no-store",
+    });
+  } catch (err) {
+    const retryable =
+      method === "GET" &&
+      err instanceof TypeError &&
+      /failed to fetch|networkerror|load failed/i.test(err.message);
+    if (!retryable) throw err;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    res = await fetch(`${apiBase()}${path}`, {
+      ...options,
+      headers,
+      cache: options.cache ?? "no-store",
+    });
+  }
   const ct = res.headers.get("content-type") || "";
   if (!res.ok) {
     let body: { error?: { code?: string; message?: string; details?: unknown } } = {};
     if (ct.includes("json")) { try { body = await res.json(); } catch {} }
     throw new ApiError(res.status, body.error?.code ?? "UNKNOWN", body.error?.message ?? `Request failed with status ${res.status}`, body.error?.details);
   }
-  const method = (options.method || "GET").toUpperCase();
   if (res.status === 204 || !ct.includes("json")) {
     notifyFromApiPath(path, method);
     return undefined as T;

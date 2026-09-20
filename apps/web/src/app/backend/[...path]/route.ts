@@ -16,6 +16,9 @@ const HOP_BY_HOP = new Set([
   "upgrade",
   "host",
   "content-length",
+  // Node fetch decompresses the upstream body. Forwarding these makes Chrome
+  // reject the response as TypeError: Failed to fetch (invalid gzip).
+  "content-encoding",
 ]);
 
 function apiOrigin(): string | null {
@@ -52,12 +55,8 @@ async function proxy(req: NextRequest, path: string[]) {
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value);
   });
 
-  const init: RequestInit = {
-    method: req.method,
-    headers,
-    redirect: "manual",
-    signal: AbortSignal.timeout(55_000),
-  };
+  headers.delete("accept-encoding");
+  const init: RequestInit = { method: req.method, headers, redirect: "manual" };
   if (req.method !== "GET" && req.method !== "HEAD") {
     init.body = req.body;
     (init as { duplex?: "half" }).duplex = "half";
@@ -88,7 +87,8 @@ async function proxy(req: NextRequest, path: string[]) {
   upstream.headers.forEach((value, key) => {
     if (!HOP_BY_HOP.has(key.toLowerCase())) out.set(key, value);
   });
-  return new NextResponse(upstream.body, { status: upstream.status, headers: out });
+  const body = await upstream.arrayBuffer();
+  return new NextResponse(body, { status: upstream.status, headers: out });
 }
 
 type Ctx = { params: { path: string[] } };
