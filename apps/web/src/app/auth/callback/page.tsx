@@ -2,11 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { supabase, isSupabaseConfigured, getMissingSupabaseConfig } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, ensureCanonicalAuthOrigin } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { CLIENT_OAUTH_SLUG_KEY, useClientAuth, destinationForClientUser } from "@/lib/client-auth";
-import { authFailurePath, authFailureReasonFromUnknown } from "@/lib/oauth-errors";
+import {
+  authFailurePath,
+  authFailureReasonFromUnknown,
+  detailFromUnknown,
+  rememberAuthFailure,
+} from "@/lib/oauth-errors";
 import type { AuthUser } from "@doloyal/shared";
 
 /**
@@ -15,6 +20,11 @@ import type { AuthUser } from "@doloyal/shared";
  * Owner Google sign-in lands on the dashboard.
  * Client Google sign-in (`?client=slug`) completes the customer session and
  * never opens the owner dashboard.
+ *
+ * `detectSessionInUrl` is disabled on the client, so this page is the only
+ * place that exchanges `?code=`. If that exchange still errors (code already
+ * used, race), we recover an existing session instead of sending the user to
+ * a generic Google failure.
  */
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -24,6 +34,7 @@ export default function AuthCallbackPage() {
 
   React.useEffect(() => {
     if (handled.current) return;
+    if (!ensureCanonicalAuthOrigin()) return;
 
     const finish = (path: string) => {
       if (handled.current) return;
@@ -31,7 +42,12 @@ export default function AuthCallbackPage() {
       router.replace(path);
     };
 
-    const fail = (clientSlug: string | null, reason: "error" | "unavailable" | "denied" | "oauth") => {
+    const fail = (
+      clientSlug: string | null,
+      reason: "error" | "unavailable" | "denied" | "oauth",
+      err?: unknown,
+    ) => {
+      rememberAuthFailure(detailFromUnknown(err, reason));
       finish(authFailurePath(clientSlug, reason));
     };
 
@@ -42,32 +58,45 @@ export default function AuthCallbackPage() {
 
     if (error) {
       console.error("[auth/callback] Cannot complete sign-in: OAuth error=", error);
-      fail(clientSlug, error === "access_denied" ? "denied" : "error");
+      fail(clientSlug, error === "access_denied" ? "denied" : "error", { code: error, message: error });
       return;
     }
 
     if (!isSupabaseConfigured()) {
       const missing = getMissingSupabaseConfig();
       console.error("[auth/callback] Cannot complete sign-in: missing Supabase env vars=", missing.join(", "));
-      fail(clientSlug, "error");
+      fail(clientSlug, "error", { code: "SUPABASE_UNCONFIGURED", message: missing.join(", ") });
       return;
     }
+
+    const sessionFromClient = async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    };
 
     (async () => {
       try {
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
-            console.error("exchangeCodeForSession failed:", exchangeError.message);
-            fail(clientSlug, "oauth");
-            return;
+            const existing = await sessionFromClient();
+            if (!existing?.access_token) {
+              console.error("exchangeCodeForSession failed:", exchangeError.message);
+              fail(clientSlug, "oauth", exchangeError);
+              return;
+            }
+            console.warn(
+              "[auth/callback] PKCE exchange reported",
+              exchangeError.message,
+              "but a session already exists; continuing.",
+            );
           }
         }
 
         if (clientSlug) {
-          const { data: { session } } = await supabase.auth.getSession();
+          const session = await sessionFromClient();
           if (!session?.access_token) {
-            fail(clientSlug, "error");
+            fail(clientSlug, "error", { code: "SESSION_MISSING", message: "No Supabase session after Google redirect." });
             return;
           }
           const result = await api.clientSupabaseExchange(session.access_token, clientSlug);
@@ -77,7 +106,7 @@ export default function AuthCallbackPage() {
             window.location.href = destinationForClientUser(clientSlug, result.user as AuthUser);
             return;
           }
-          fail(clientSlug, "error");
+          fail(clientSlug, "error", { code: "EXCHANGE_EMPTY", message: "API did not return a session." });
           return;
         }
 
@@ -86,10 +115,10 @@ export default function AuthCallbackPage() {
           finish("/app/dashboard");
           return;
         }
-        fail(clientSlug, "error");
+        fail(clientSlug, "error", { code: "EXCHANGE_EMPTY", message: "API did not return a Doloyal session." });
       } catch (err) {
         console.error("Auth callback error:", err);
-        fail(clientSlug, authFailureReasonFromUnknown(err));
+        fail(clientSlug, authFailureReasonFromUnknown(err), err);
       }
     })();
   }, [router, resolveSupabaseSession, setSession]);

@@ -13,6 +13,15 @@ const RESERVED = new Set([
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
   const hostname = host.split(":")[0]?.toLowerCase() || "";
+
+  // PKCE cookies/localStorage are origin-scoped. Always finish auth on www.
+  if (hostname === "doloyal.com" || hostname === "doloyal.ai") {
+    const url = request.nextUrl.clone();
+    url.hostname = hostname === "doloyal.ai" ? "www.doloyal.ai" : "www.doloyal.com";
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 308);
+  }
+
   const isLocalSub = hostname.endsWith(".localhost");
   const isProdSub =
     (hostname.endsWith(".doloyal.com") || hostname.endsWith(".doloyal.ai")) &&

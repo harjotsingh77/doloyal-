@@ -32,6 +32,9 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     persistSession: true,
     autoRefreshToken: true,
     flowType: 'pkce',
+    // The /auth/callback page exchanges `?code=` itself. Leaving the default
+    // (true) races that call and treats a used PKCE code as a Google failure.
+    detectSessionInUrl: false,
   },
 });
 
@@ -41,9 +44,20 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
  */
 export const PRODUCTION_APP_ORIGIN = 'https://www.doloyal.com';
 
+const MANAGED_AUTH_HOSTS = new Set([
+  'doloyal.com',
+  'www.doloyal.com',
+  'doloyal.ai',
+  'www.doloyal.ai',
+]);
+
+export function isManagedAuthHost(hostname: string): boolean {
+  return MANAGED_AUTH_HOSTS.has(hostname.toLowerCase());
+}
+
 export function getBrowserAuthOrigin(): string {
   if (typeof window === 'undefined') return '';
-  if (process.env.NODE_ENV === 'production') return PRODUCTION_APP_ORIGIN;
+  if (isManagedAuthHost(window.location.hostname)) return PRODUCTION_APP_ORIGIN;
   return window.location.origin;
 }
 
@@ -56,7 +70,7 @@ export function getBrowserAuthOrigin(): string {
  */
 export function ensureCanonicalAuthOrigin(): boolean {
   if (typeof window === 'undefined') return true;
-  if (process.env.NODE_ENV !== 'production') return true;
+  if (!isManagedAuthHost(window.location.hostname)) return true;
   if (window.location.origin === PRODUCTION_APP_ORIGIN) return true;
   window.location.replace(
     `${PRODUCTION_APP_ORIGIN}${window.location.pathname}${window.location.search}${window.location.hash}`,
