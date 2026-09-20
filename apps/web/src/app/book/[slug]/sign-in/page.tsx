@@ -11,6 +11,7 @@ import {
   ClientAuthShell,
   ClientSignInForm,
 } from "@/components/auth/client-auth-forms";
+import { messageForAuthQuery } from "@/lib/oauth-errors";
 
 export default function ClientSignInPage() {
   const params = useParams<{ slug: string }>();
@@ -45,14 +46,8 @@ export default function ClientSignInPage() {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error") || params.get("auth");
-    if (err) {
-      const messages: Record<string, string> = {
-        access_denied: "Google sign-in was cancelled or declined.",
-        auth_failed: "Google sign-in could not be completed. Please try again.",
-        error: "Google sign-in could not be completed. Please try again.",
-      };
-      setError(messages[err] || "Google sign-in could not be completed. Please try again.");
-    }
+    const message = messageForAuthQuery(err);
+    if (message) setError(message);
   }, []);
 
   if (user) {

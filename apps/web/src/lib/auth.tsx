@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "./api";
-import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl } from "./supabase";
+import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl, ensureCanonicalAuthOrigin } from "./supabase";
 import { getStaffAuthToken, isDoloyalAccessToken, purgeInvalidStaffSession } from "./access-token";
 
 interface Membership {
@@ -269,6 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = React.useCallback(() => {
     if (googleLoginInFlight.current) return;
+    if (!ensureCanonicalAuthOrigin()) return;
     if (!isSupabaseConfigured()) {
       const missing = getMissingSupabaseConfig();
       console.error(
@@ -312,21 +313,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * onAuthStateChange listener after a refresh.
    */
   const resolveSupabaseSession = React.useCallback(async (): Promise<AuthUser | null> => {
-    try {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
-      if (!session?.user) return null;
-      const result = await api.supabaseExchange(session.access_token);
-      if (result?.token && result?.user && isDoloyalAccessToken(result.token)) {
-        setAuth(result.token, result.user);
-        return result.user;
-      }
-    } catch {
-      // Do not store the Supabase JWT as doloyal_token. Nest verifies
-      // HS256 tokens signed with JWT_SECRET, so a GoTrue access token
-      // 401s every dashboard request as "Unauthorized".
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
+    if (!session?.user) return null;
+    const result = await api.supabaseExchange(session.access_token);
+    if (result?.token && result?.user && isDoloyalAccessToken(result.token)) {
+      setAuth(result.token, result.user);
+      return result.user;
     }
-    return getSavedUser();
+    return null;
   }, [setAuth]);
 
   // Keep the Doloyal session in sync with the Supabase session:

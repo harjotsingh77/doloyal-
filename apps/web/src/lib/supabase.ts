@@ -36,16 +36,48 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
 });
 
 /**
+ * Live production origin. Apex doloyal.com 308s to www; PKCE is origin-scoped,
+ * so OAuth must start and finish on www or the code verifier is lost.
+ */
+export const PRODUCTION_APP_ORIGIN = 'https://www.doloyal.com';
+
+export function getBrowserAuthOrigin(): string {
+  if (typeof window === 'undefined') return '';
+  if (process.env.NODE_ENV === 'production') return PRODUCTION_APP_ORIGIN;
+  return window.location.origin;
+}
+
+/**
+ * If production traffic is still on the apex origin, hop to www before
+ * starting Google OAuth so the PKCE verifier is stored on the same origin
+ * that receives `/auth/callback`.
+ *
+ * @returns false when a navigation was started (caller must stop).
+ */
+export function ensureCanonicalAuthOrigin(): boolean {
+  if (typeof window === 'undefined') return true;
+  if (process.env.NODE_ENV !== 'production') return true;
+  if (window.location.origin === PRODUCTION_APP_ORIGIN) return true;
+  window.location.replace(
+    `${PRODUCTION_APP_ORIGIN}${window.location.pathname}${window.location.search}${window.location.hash}`,
+  );
+  return false;
+}
+
+/**
  * Absolute URL Google OAuth redirects back to after authentication.
  * Local development: http://localhost:3000/auth/callback
- * Production:        https://doloyal.com/auth/callback
+ * Production:        https://www.doloyal.com/auth/callback
  *
- * The Supabase Auth project must have the matching redirect URL allow-listed
- * (and the Google OAuth client must allow the same URI).
+ * The Supabase Auth project must allow-list both:
+ *   https://www.doloyal.com/auth/callback
+ *   https://doloyal.com/auth/callback
+ * (apex still 308s to www, preserving `?code=`).
  */
 export function getAuthCallbackUrl(opts?: { clientSlug?: string }): string {
-  if (typeof window === 'undefined') return '';
-  const base = `${window.location.origin}/auth/callback`;
+  const origin = getBrowserAuthOrigin();
+  if (!origin) return '';
+  const base = `${origin}/auth/callback`;
   if (opts?.clientSlug) {
     return `${base}?client=${encodeURIComponent(opts.clientSlug)}`;
   }

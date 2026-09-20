@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { User, Mail, Phone, Lock, ArrowRight } from "lucide-react";
 import { Button, Input, Card, CardContent, Logo } from "@doloyal/ui";
 import { useAuth } from "@/lib/auth";
+import { messageForAuthQuery } from "@/lib/oauth-errors";
 
 function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -51,14 +52,8 @@ export default function SignUpPage() {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error") || params.get("auth");
-    if (err) {
-      const messages: Record<string, string> = {
-        access_denied: "Google sign-in was cancelled or declined.",
-        auth_failed: "Google sign-in could not be completed. Please try again.",
-        error: "Google sign-in could not be completed. Please try again.",
-      };
-      setError(messages[err] || "Google sign-in could not be completed. Please try again.");
-    }
+    const message = messageForAuthQuery(err);
+    if (message) setError(message);
   }, []);
 
   return (

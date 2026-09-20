@@ -31,10 +31,23 @@ export function normalizeDatabaseUrl(raw: string): string {
   return url.toString();
 }
 
+function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+export function isLocalhostDatabaseUrl(raw: string): boolean {
+  try {
+    return isLoopbackHost(new URL(raw).hostname);
+  } catch {
+    return /localhost|127\.0\.0\.1/.test(raw);
+  }
+}
+
 function isDirectSupabaseRuntimeUrl(url: URL): boolean {
   const host = url.hostname;
   const port = url.port || (url.protocol === 'postgresql:' || url.protocol === 'postgres:' ? '5432' : '');
   const looksLikePooler = host.includes('pooler.supabase.com');
+  if (isLoopbackHost(host)) return true;
   if (looksLikePooler && (port === '6543' || port === '')) return false;
   if (port === '6543') return false;
   if (host.startsWith('db.') && host.endsWith('.supabase.co') && port === '5432') return true;
@@ -66,6 +79,11 @@ export function validateVercelProductionEnv(): void {
 
   if (!['postgresql:', 'postgres:'].includes(runtime.protocol)) {
     throw new Error('DATABASE_URL must use the PostgreSQL protocol.');
+  }
+  if (isLocalhostDatabaseUrl(databaseUrl)) {
+    throw new Error(
+      'DATABASE_URL points at localhost, which is unreachable from Vercel. Set it to the Supabase transaction pooler on port 6543 (Dashboard → Database → Connect → Transaction pooler).',
+    );
   }
   if (isDirectSupabaseRuntimeUrl(runtime)) {
     throw new Error(

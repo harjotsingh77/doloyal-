@@ -7,7 +7,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter';
 import { LoggingInterceptor } from './common/logging.interceptor';
 import { TransformInterceptor } from './common/transform.interceptor';
 import { getAllowedOrigins } from './common/helpers';
-import { validateVercelProductionEnv } from './common/production-env';
+import { isLocalhostDatabaseUrl, validateVercelProductionEnv } from './common/production-env';
 
 /**
  * Shared Nest/Fastify bootstrap used by local `app.listen()` and the Vercel
@@ -16,14 +16,30 @@ import { validateVercelProductionEnv } from './common/production-env';
  */
 export async function createApp(): Promise<NestFastifyApplication> {
   const isProduction = process.env.NODE_ENV === 'production';
+  const onVercel = Boolean(process.env.VERCEL);
 
-  if (isProduction) {
-    if (process.env.VERCEL) validateVercelProductionEnv();
+  // Vercel copies of local .env often set NODE_ENV=development. Auth and JWT
+  // rules must still follow the hosting environment.
+  if (onVercel || isProduction) {
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret || jwtSecret === 'doloyal-jwt-secret-dev' || jwtSecret.length < 32) {
       throw new Error(
         'JWT_SECRET must be set to a strong random secret (>= 32 chars) in production.',
       );
+    }
+  }
+
+  if (onVercel) {
+    try {
+      validateVercelProductionEnv();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[boot] production database env is invalid:', message);
+      // Localhost is a known misconfig: keep the function alive so /health and
+      // /auth/* can return DATABASE_UNAVAILABLE instead of a boot crash.
+      if (!isLocalhostDatabaseUrl(process.env.DATABASE_URL || '')) {
+        throw err;
+      }
     }
   }
 

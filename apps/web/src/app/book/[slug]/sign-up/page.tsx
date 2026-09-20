@@ -11,6 +11,7 @@ import {
   ClientAuthShell,
   ClientSignUpForm,
 } from "@/components/auth/client-auth-forms";
+import { messageForAuthQuery } from "@/lib/oauth-errors";
 
 export default function ClientSignUpPage() {
   const params = useParams<{ slug: string }>();
@@ -45,9 +46,8 @@ export default function ClientSignUpPage() {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error") || params.get("auth");
-    if (err) {
-      setError("Google sign-in could not be completed. Please try again.");
-    }
+    const message = messageForAuthQuery(err);
+    if (message) setError(message);
   }, []);
 
   if (user) {

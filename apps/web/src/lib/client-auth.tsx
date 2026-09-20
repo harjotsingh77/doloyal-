@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { AuthUser, ClientPortal } from "@doloyal/shared";
 import { api } from "./api";
-import { supabase, isSupabaseConfigured, getAuthCallbackUrl, getMissingSupabaseConfig } from "./supabase";
+import { supabase, isSupabaseConfigured, getAuthCallbackUrl, getMissingSupabaseConfig, ensureCanonicalAuthOrigin } from "./supabase";
 import { toast } from "sonner";
 
 const TOKEN_KEY = "doloyal_client_token";
@@ -163,6 +163,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
   const googleInFlight = React.useRef(false);
   const loginWithGoogle = React.useCallback((slug: string) => {
     if (googleInFlight.current) return;
+    if (!ensureCanonicalAuthOrigin()) return;
     if (!isSupabaseConfigured()) {
       console.error("[client-auth] Google sign-in disabled:", getMissingSupabaseConfig());
       toast.error("Google sign-in is not configured yet. Please try again later.");

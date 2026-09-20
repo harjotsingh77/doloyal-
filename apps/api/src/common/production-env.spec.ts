@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { isAuthProduction, normalizeDatabaseUrl, validateVercelProductionEnv } from './production-env';
+import { isAuthProduction, isLocalhostDatabaseUrl, normalizeDatabaseUrl, validateVercelProductionEnv } from './production-env';
 
 const original = { ...process.env };
 
@@ -63,5 +63,27 @@ describe('validateVercelProductionEnv', () => {
       'postgresql://postgres.ref:password@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
     expect(() => validateVercelProductionEnv()).not.toThrow();
     expect(process.env.DATABASE_URL).toContain('connection_limit=1');
+  });
+
+  it('rejects localhost, which is unreachable from Vercel', () => {
+    validEnv();
+    process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/doloyal';
+    expect(() => validateVercelProductionEnv()).toThrow(/localhost/);
+  });
+
+  it('rejects 127.0.0.1 the same way', () => {
+    validEnv();
+    process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/doloyal';
+    expect(() => validateVercelProductionEnv()).toThrow(/localhost/);
+  });
+});
+
+describe('isLocalhostDatabaseUrl', () => {
+  it('detects loopback hosts', () => {
+    expect(isLocalhostDatabaseUrl('postgresql://postgres:postgres@localhost:5432/doloyal')).toBe(true);
+    expect(isLocalhostDatabaseUrl('postgresql://postgres:postgres@127.0.0.1:5432/doloyal')).toBe(true);
+    expect(
+      isLocalhostDatabaseUrl('postgresql://postgres.ref:x@aws-0-ap-south-1.pooler.supabase.com:6543/postgres'),
+    ).toBe(false);
   });
 });
