@@ -66,6 +66,35 @@ function uid() {
   return crypto.randomUUID();
 }
 
+function redactedDatabaseTarget(url?: string): string {
+  if (!url?.trim()) return 'UNSET';
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) parsed.password = '***';
+    return parsed.toString();
+  } catch {
+    return `set but unparseable (${url.length} chars)`;
+  }
+}
+
+function formatPrismaError(err: unknown): string {
+  const e = err as {
+    name?: string;
+    code?: string;
+    message?: string;
+    clientVersion?: string;
+    meta?: unknown;
+  };
+  const parts = [
+    e?.name,
+    e?.code ? `code=${e.code}` : '',
+    e?.message,
+    e?.clientVersion ? `clientVersion=${e.clientVersion}` : '',
+    e?.meta ? `meta=${JSON.stringify(e.meta)}` : '',
+  ].filter(Boolean);
+  return parts.join(' | ') || String(err);
+}
+
 function matchWhere(record: any, where: any): boolean {
   if (!where) return true;
   for (const [key, val] of Object.entries(where)) {
@@ -207,24 +236,41 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private stores = new Map<string, Map<string, any>>();
 
   constructor() {
-    const url = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/doloyal';
+    const url = process.env.DATABASE_URL?.trim();
+    const isManaged = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+    if (!url && isManaged) {
+      throw new Error(
+        'DATABASE_URL is missing at runtime. Set it on the Vercel API project to the Supabase transaction pooler URL (port 6543). This app does not read POSTGRES_URL or SUPABASE_DB_URL.',
+      );
+    }
     super({
-      datasources: { db: { url } },
+      datasources: {
+        db: { url: url || 'postgresql://postgres:postgres@localhost:5432/doloyal' },
+      },
     });
     this.applyTenantMiddleware();
   }
 
   async onModuleInit() {
-    const maxAttempts = 8;
+    const maxAttempts = process.env.VERCEL ? 2 : 8;
+    let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         await this.$connect();
         this.logger.log('Connected to database');
         this.inMemory = false;
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
+        lastError = err;
+        const detail = formatPrismaError(err);
+        console.error(
+          `[prisma] connection attempt ${attempt}/${maxAttempts} failed. ` +
+            `DATABASE_URL=${redactedDatabaseTarget(process.env.DATABASE_URL)}`,
+        );
+        console.error('[prisma] underlying error:', detail);
+        console.error('[prisma] stack:', err instanceof Error ? err.stack : err);
         this.logger.warn(
-          `Database connection attempt ${attempt}/${maxAttempts} failed: ${err?.message || err}`,
+          `Database connection attempt ${attempt}/${maxAttempts} failed: ${detail}`,
         );
         if (attempt < maxAttempts) {
           await new Promise((r) => setTimeout(r, 750 * attempt));
@@ -239,10 +285,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       process.env.DOLOYAL_ALLOW_IN_MEMORY_DB === 'true' &&
       process.env.NODE_ENV !== 'production';
     if (!allowed) {
+      console.error(
+        '[prisma] giving up. DATABASE_URL=' +
+          redactedDatabaseTarget(process.env.DATABASE_URL),
+      );
+      console.error('[prisma] last underlying error:', formatPrismaError(lastError));
+      console.error(
+        '[prisma] stack:',
+        lastError instanceof Error ? lastError.stack : lastError,
+      );
       this.logger.error(
         'Database unreachable after retries. Refusing to start. Fix DATABASE_URL or run `pnpm db:up`.',
       );
-      throw new Error('Database connection failed and in-memory fallback is disabled');
+      if (lastError instanceof Error) throw lastError;
+      throw lastError ?? new Error('Database connection failed');
     }
 
     this.logger.warn('Database unreachable — starting LIMITED in-memory demo mode (no tenant isolation).');
