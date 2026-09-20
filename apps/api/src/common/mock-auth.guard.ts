@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { PrismaService } from './prisma.service';
 import { IS_PUBLIC_KEY } from '../modules/auth/jwt-auth.guard';
 import { permissionsForRole } from '@doloyal/shared';
+import { isAuthProduction } from './production-env';
 
 @Injectable()
 export class MockAuthGuard implements CanActivate {
@@ -38,10 +39,10 @@ export class MockAuthGuard implements CanActivate {
 
     const clerkKey = this.config?.get<string>('CLERK_SECRET_KEY') || process.env.CLERK_SECRET_KEY;
 
-    // Production must never grant unauthenticated/demo access. Any protected
-    // request without a valid token is rejected.
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) {
+    // Production (including Vercel with a copied local NODE_ENV) must never
+    // grant unauthenticated/demo access. Any protected request without a
+    // valid token is rejected.
+    if (isAuthProduction()) {
       if (clerkKey) return this.handleClerkAuth(context);
       throw new UnauthorizedException('Authentication required');
     }
@@ -54,7 +55,7 @@ export class MockAuthGuard implements CanActivate {
 
   private async handleMockAuth(context: ExecutionContext): Promise<boolean> {
     // Defense in depth: mock/demo auth is a development convenience only.
-    if (process.env.NODE_ENV === 'production') {
+    if (isAuthProduction()) {
       throw new UnauthorizedException('Authentication required');
     }
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { normalizeDatabaseUrl, validateVercelProductionEnv } from './production-env';
+import { isAuthProduction, normalizeDatabaseUrl, validateVercelProductionEnv } from './production-env';
 
 const original = { ...process.env };
 
@@ -15,6 +15,20 @@ function validEnv() {
 
 afterEach(() => {
   process.env = { ...original };
+});
+
+describe('isAuthProduction', () => {
+  it('is true on Vercel production even when NODE_ENV was copied from local', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.VERCEL_ENV = 'production';
+    expect(isAuthProduction()).toBe(true);
+  });
+
+  it('is false for local development', () => {
+    process.env.NODE_ENV = 'development';
+    delete process.env.VERCEL_ENV;
+    expect(isAuthProduction()).toBe(false);
+  });
 });
 
 describe('normalizeDatabaseUrl', () => {

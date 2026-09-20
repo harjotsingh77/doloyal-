@@ -76,11 +76,6 @@ export default function AuthCallbackPage() {
           finish("/app/dashboard");
           return;
         }
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          finish("/app/dashboard");
-          return;
-        }
         finish("/sign-in?auth=error");
       } catch (err) {
         console.error("Auth callback error:", err);

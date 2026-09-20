@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "./api";
 import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl } from "./supabase";
+import { getStaffAuthToken, isDoloyalAccessToken, purgeInvalidStaffSession } from "./access-token";
 
 interface Membership {
   id: string;
@@ -57,8 +58,7 @@ const AuthContext = React.createContext<AuthContextValue | null>(null);
 /* ── localStorage helpers (synchronous, SSR-safe) ────────────────────── */
 
 function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("doloyal_token");
+  return getStaffAuthToken();
 }
 
 function setToken(token: string | null) {
@@ -133,10 +133,16 @@ export const DEMO_MODE = process.env.NODE_ENV !== "production";
  * demo session so localhost still works without keys.
  */
 function getInitialUser(): AuthUser | null {
-  const saved = getSavedUser();
-  if (saved) return saved;
+  if (!DEMO_MODE) purgeInvalidStaffSession();
 
   const token = getToken();
+  const saved = getSavedUser();
+  if (!DEMO_MODE && !token) {
+    if (saved) saveUser(null);
+    return null;
+  }
+  if (saved) return saved;
+
   if (!token) {
     if (!DEMO_MODE) return null;
     // First-ever visit (dev only): provision a demo session synchronously
@@ -197,6 +203,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setAuth = React.useCallback(
     (token: string, userData: AuthUser) => {
+      if (!DEMO_MODE && !isDoloyalAccessToken(token)) {
+        return;
+      }
       setToken(token);
       saveUser(userData);
       setUser(userData);
@@ -296,39 +305,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
   }, [setIsLoading]);
 
-function buildAuthUserFromSupabase(sbUser: any): AuthUser {
-  const meta = sbUser.user_metadata || {};
-  const fullName = meta.full_name || meta.name || "";
-  const nameParts = fullName.trim().split(" ");
-  const firstName = meta.given_name || nameParts[0] || sbUser.email?.split("@")[0] || "User";
-  const lastName = meta.family_name || nameParts.slice(1).join(" ") || "";
-  const avatarUrl = meta.avatar_url || meta.picture || undefined;
-  const email = sbUser.email || "";
-
-  // Fallback identity only — admin flags are never granted client-side. The
-  // real session must come from the backend bridge (/auth/supabase/exchange).
-  return {
-    id: sbUser.id,
-    externalId: sbUser.id,
-    email,
-    firstName,
-    lastName,
-    avatarUrl,
-    isAdmin: false,
-    memberships: [
-      {
-        id: `m-${sbUser.id}`,
-        userId: sbUser.id,
-        tenantId: "demo-tenant-id",
-        role: "OWNER",
-        createdAt: sbUser.created_at || new Date().toISOString(),
-      },
-    ],
-    activeTenantId: "demo-tenant-id",
-    activeRole: "OWNER",
-  };
-}
-
   /**
    * Bridge the current Supabase session into a Doloyal API session
    * (`doloyal_token` + user cache). Used by the OAuth callback page so the
@@ -340,23 +316,17 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
       const { data } = await supabase.auth.getSession();
       const session = data.session;
       if (!session?.user) return null;
-      try {
-        const result = await api.supabaseExchange(session.access_token);
-        if (result?.token && result?.user) {
-          setAuth(result.token, result.user);
-          return result.user;
-        }
-      } catch {
-        // Fallback to client-constructed AuthUser if backend exchange API is unavailable
+      const result = await api.supabaseExchange(session.access_token);
+      if (result?.token && result?.user && isDoloyalAccessToken(result.token)) {
+        setAuth(result.token, result.user);
+        return result.user;
       }
-      const fallbackUser = buildAuthUserFromSupabase(session.user);
-      setAuth(session.access_token, fallbackUser);
-      return fallbackUser;
     } catch {
-      const s = getSavedUser();
-      if (s) return s;
+      // Do not store the Supabase JWT as doloyal_token. Nest verifies
+      // HS256 tokens signed with JWT_SECRET, so a GoTrue access token
+      // 401s every dashboard request as "Unauthorized".
     }
-    return null;
+    return getSavedUser();
   }, [setAuth]);
 
   // Keep the Doloyal session in sync with the Supabase session:
@@ -375,21 +345,21 @@ function buildAuthUserFromSupabase(sbUser: any): AuthUser {
       const { data } = await supabase.auth.getUser(accessToken);
       const sbUser = data.user;
       if (!sbUser || !sbUser.email) return;
-      if (cached && cached.email !== "demo@doloyal.ai" && cached.email === sbUser.email) {
+      if (
+        cached &&
+        cached.email !== "demo@doloyal.ai" &&
+        cached.email === sbUser.email &&
+        isDoloyalAccessToken(getToken())
+      ) {
         return; // already bridged to this Supabase user
       }
       try {
         const result = await api.supabaseExchange(accessToken);
-        if (!cancelled && result?.token && result?.user) {
+        if (!cancelled && result?.token && result?.user && isDoloyalAccessToken(result.token)) {
           setAuth(result.token, result.user);
-          return;
         }
       } catch {
-        // Keep cached user or fallback to client-constructed AuthUser
-      }
-      if (!cancelled) {
-        const fallbackUser = buildAuthUserFromSupabase(sbUser);
-        setAuth(accessToken, fallbackUser);
+        // Keep a valid Doloyal session; never persist the Supabase JWT.
       }
     };
 

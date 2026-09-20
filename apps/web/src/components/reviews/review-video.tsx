@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Pause, Play, Volume2, VolumeX, Maximize } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-base";
+import { getStaffAuthToken } from "@/lib/access-token";
 
 export function reviewPublicMediaUrl(mediaUrl: string | null | undefined): string | null {
   if (!mediaUrl) return null;
@@ -13,7 +14,7 @@ export function reviewPublicMediaUrl(mediaUrl: string | null | undefined): strin
 }
 
 async function authBlobUrl(path: string): Promise<string | null> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+  const token = getStaffAuthToken();
   const res = await fetch(reviewPublicMediaUrl(path)!, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });

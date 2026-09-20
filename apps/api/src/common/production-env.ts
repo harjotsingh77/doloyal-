@@ -5,6 +5,14 @@ function requireEnv(name: string): string {
 }
 
 /**
+ * Auth must follow the hosting environment, not a copied local NODE_ENV.
+ * Vercel sets VERCEL_ENV=production even when NODE_ENV was pasted as development.
+ */
+export function isAuthProduction(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+}
+
+/**
  * Adds serverless-safe Prisma/Supabase query params without logging secrets.
  * Transaction-mode PgBouncer needs pgbouncer=true, a single Prisma connection,
  * and TLS. Missing any of these is a common Vercel boot failure.

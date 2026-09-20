@@ -29,6 +29,7 @@ import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
 import { supabase } from "./supabase";
+import { getClientAuthToken, getStaffAuthToken } from "./access-token";
 
 function apiBase(): string {
   return getApiBaseUrl();
@@ -52,8 +53,8 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   assertApiBaseUrlConfigured();
-  const staffToken = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
-  const clientToken = typeof window !== "undefined" ? localStorage.getItem("doloyal_client_token") : null;
+  const staffToken = getStaffAuthToken();
+  const clientToken = getClientAuthToken();
   const isPublicPath = path.startsWith("/public/");
   const useClientToken = path.startsWith("/auth/client") || path.startsWith("/client/");
   const token = isPublicPath ? null : useClientToken ? clientToken : staffToken;
@@ -121,7 +122,7 @@ function isMutationMockKey(mockKey: string) {
 }
 
 async function withFallback<T>(apiCall: () => Promise<T>, mockKey: string, ...mockArgs: any[]): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+  const token = getStaffAuthToken();
   const allowMock = DEMO_MODE && isDemoSessionToken(token);
 
   try {
@@ -299,7 +300,7 @@ export const api = {
     }
 
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
@@ -367,7 +368,7 @@ export const api = {
   importCustomers: (file: File) =>
     withFallback(async () => {
       assertApiBaseUrlConfigured();
-      const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+      const token = getStaffAuthToken();
       const form = new FormData();
       form.append("file", file);
       const headers: Record<string, string> = {};
@@ -408,7 +409,7 @@ export const api = {
   exportCustomers: () =>
     withFallback(async () => {
       assertApiBaseUrlConfigured();
-      const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+      const token = getStaffAuthToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`${apiBase()}/customers/export`, { headers });
@@ -744,7 +745,7 @@ export const api = {
   /** Subscribe to referral realtime events (SSE). Returns an EventSource. */
   subscribeReferralEvents: () => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const base = apiBase();
     const url = `${base}/referrals/events`;
     // EventSource cannot set Authorization headers in browsers; token query fallback for SSE.
@@ -841,7 +842,7 @@ export const api = {
   /** Upload a project file as multipart → stored as a data-URL in the DB. */
   uploadWebsiteProjectFile: async (projectId: string, file: File, category = "CHAT_ATTACHMENT") => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
@@ -864,7 +865,7 @@ export const api = {
   /** Subscribe to website-services realtime events (SSE). */
   subscribeWebsiteProjectEvents: () => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const base = apiBase();
     const withAuth = token
       ? `${base}/website-projects/events?access_token=${encodeURIComponent(token)}`
@@ -927,7 +928,7 @@ export const api = {
 
   adminUploadWebsiteProjectFile: async (projectId: string, file: File, category = "REFERENCE") => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
@@ -950,7 +951,7 @@ export const api = {
   /** Subscribe to admin website-services realtime events (SSE). */
   subscribeAdminWebsiteProjectEvents: () => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const base = apiBase();
     const withAuth = token
       ? `${base}/admin/website-projects/events?access_token=${encodeURIComponent(token)}`
@@ -1318,7 +1319,7 @@ export const api = {
     path: "/assistant/chat/stream" | "/assistant/regenerate" = "/assistant/chat/stream",
   ) => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "text/event-stream" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const controller = new AbortController();
@@ -1680,7 +1681,7 @@ export const api = {
     }
 
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${apiBase()}/reviews/video`, { method: "POST", headers, body: form });
@@ -1799,7 +1800,7 @@ export const api = {
   uploadTenantImage: (file: File, kind: "logo" | "cover" | "favicon") =>
     withFallback(async () => {
       assertApiBaseUrlConfigured();
-      const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+      const token = getStaffAuthToken();
       const form = new FormData();
       form.append("file", file);
       form.append("kind", kind);
@@ -1991,7 +1992,7 @@ export const api = {
 
   exportStaff: async (format: "csv" | "xlsx" = "csv") => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(`${apiBase()}/staff/export?format=${format}`, { headers });
@@ -2008,7 +2009,7 @@ export const api = {
 
   uploadStaffPhoto: async (id: string, file: File) => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
@@ -2517,7 +2518,7 @@ export const api = {
 
   uploadSupportTicketFile: async (ticketId: string, file: File) => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
@@ -2541,7 +2542,7 @@ export const api = {
   /** Subscribe to customer support realtime events (SSE). */
   subscribeSupportEvents: () => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const base = apiBase();
     const withAuth = token
       ? `${base}/support/events?access_token=${encodeURIComponent(token)}`
@@ -2667,7 +2668,7 @@ export const api = {
 
   adminUploadSupportTicketFile: async (ticketId: string, file: File) => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
@@ -2691,7 +2692,7 @@ export const api = {
   /** Subscribe to admin support realtime events (SSE). */
   subscribeAdminSupportEvents: () => {
     assertApiBaseUrlConfigured();
-    const token = typeof window !== "undefined" ? localStorage.getItem("doloyal_token") : null;
+    const token = getStaffAuthToken();
     const base = apiBase();
     const withAuth = token
       ? `${base}/admin/support/events?access_token=${encodeURIComponent(token)}`
