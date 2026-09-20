@@ -34,6 +34,15 @@ export class DashboardService {
     const prevPeriodTo = range.prevTo;
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    // Overview fans out ~35 Prisma queries. On Vercel that takes ~10s even for
+    // an empty tenant, and the Next.js /backend proxy drops the socket first
+    // (browser: "Failed to fetch"). New accounts have no activity — return
+    // zeros without the fan-out.
+    const occupied = await this.hasTenantActivity(tenantId);
+    if (!occupied) {
+      return this.emptyOverview(now, range);
+    }
+
     const [
       periodInvoices,
       todayInvoices,
@@ -389,6 +398,88 @@ export class DashboardService {
         prismaActivityToShared(a as any),
       ),
     };
+  }
+
+  private async hasTenantActivity(tenantId: string): Promise<boolean> {
+    const [customer, invoice, appointment, order] = await Promise.all([
+      this.prisma.customer.findFirst({ where: { tenantId }, select: { id: true } }),
+      this.prisma.invoice.findFirst({ where: { tenantId }, select: { id: true } }),
+      this.prisma.appointment.findFirst({ where: { tenantId }, select: { id: true } }),
+      this.prisma.clientOrder.findFirst({ where: { tenantId }, select: { id: true } }).catch(() => null),
+    ]);
+    return Boolean(customer || invoice || appointment || order);
+  }
+
+  private emptyOverview(
+    now: Date,
+    range: ReturnType<typeof resolveOverviewRange>,
+  ) {
+    const zeroKpis = {
+      todayRevenue: 0,
+      periodRevenue: 0,
+      todayCustomers: 0,
+      repeatCustomers: 0,
+      newCustomers: 0,
+      inactiveCustomers: 0,
+      activeRewards: 0,
+      pointsRedeemed30d: 0,
+      membershipSales30d: 0,
+      outstandingPoints: 0,
+      walletHolders: 0,
+      pointsIssued30d: 0,
+      redemptionRatePct: 0,
+      campaignRevenue: 0,
+      campaignCustomers: 0,
+      campaignReached: 0,
+      campaignsSent: 0,
+      appointmentsToday: 0,
+      appointmentsInPeriod: 0,
+      pendingReviews: 0,
+      monthlyGrowthPct: null as number | null,
+      totalCustomers: 0,
+      orderCount: 0,
+      orderRevenue: 0,
+      approvedReviews: 0,
+      averageRating: 0,
+      previousPeriodRevenue: 0,
+      previousTotalCustomers: 0,
+      previousRepeatCustomers: 0,
+      previousNewCustomers: 0,
+      previousInactiveCustomers: 0,
+      previousPointsRedeemed: 0,
+      previousOrderCount: 0,
+      previousOrderRevenue: 0,
+      previousApprovedReviews: 0,
+      previousAverageRating: 0,
+      previousAppointmentsInPeriod: 0,
+      previousMembershipSales: 0,
+    };
+    const trend = this.zeroTrend(range.currentFrom, range.currentTo);
+    return {
+      generatedAt: now.toISOString(),
+      period: {
+        from: range.currentFromYmd,
+        to: range.currentToYmd,
+      },
+      kpis: zeroKpis,
+      revenueTrend: trend,
+      customerTrend: trend.map((point) => ({ ...point })),
+      topServices: [] as TopServiceRow[],
+      topCustomers: [],
+      topRewards: [],
+      recentActivity: [],
+    };
+  }
+
+  private zeroTrend(from: Date, to: Date) {
+    const points: { date: string; revenue: number; customers: number }[] = [];
+    const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+    const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()));
+    while (cursor.getTime() <= end.getTime()) {
+      points.push({ date: cursor.toISOString().slice(0, 10), revenue: 0, customers: 0 });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return points;
   }
 
   /**
