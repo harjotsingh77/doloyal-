@@ -14,16 +14,22 @@ export function isAuthProduction(): boolean {
 
 /**
  * Adds serverless-safe Prisma/Supabase query params without logging secrets.
- * Transaction-mode PgBouncer needs pgbouncer=true, a single Prisma connection,
- * and TLS. Missing any of these is a common Vercel boot failure.
+ * Transaction-mode PgBouncer needs pgbouncer=true and TLS. A single Prisma
+ * connection times out on dashboard overview (dozens of parallel queries,
+ * Vercel iad1 → Supabase ap-southeast-1). Cap at 5 so Nano's pool of 15
+ * survives a few concurrent function instances.
  */
 export function normalizeDatabaseUrl(raw: string): string {
   const url = new URL(raw);
   if (url.searchParams.get('pgbouncer') !== 'true') {
     url.searchParams.set('pgbouncer', 'true');
   }
-  if (url.searchParams.get('connection_limit') !== '1') {
-    url.searchParams.set('connection_limit', '1');
+  const parsedLimit = Number(url.searchParams.get('connection_limit'));
+  const connectionLimit =
+    Number.isFinite(parsedLimit) && parsedLimit >= 5 ? Math.min(parsedLimit, 10) : 5;
+  url.searchParams.set('connection_limit', String(connectionLimit));
+  if (!url.searchParams.get('pool_timeout')) {
+    url.searchParams.set('pool_timeout', '20');
   }
   if (!url.searchParams.get('sslmode')) {
     url.searchParams.set('sslmode', 'require');

@@ -32,14 +32,22 @@ describe('isAuthProduction', () => {
 });
 
 describe('normalizeDatabaseUrl', () => {
-  it('adds pgbouncer, connection_limit, and sslmode when missing', () => {
+  it('adds pgbouncer, connection_limit, pool_timeout, and sslmode when missing', () => {
     const out = normalizeDatabaseUrl(
       'postgresql://postgres.ref:password@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
     );
     const url = new URL(out);
     expect(url.searchParams.get('pgbouncer')).toBe('true');
-    expect(url.searchParams.get('connection_limit')).toBe('1');
+    expect(url.searchParams.get('connection_limit')).toBe('5');
+    expect(url.searchParams.get('pool_timeout')).toBe('20');
     expect(url.searchParams.get('sslmode')).toBe('require');
+  });
+
+  it('raises a too-small connection_limit so dashboard overview can run', () => {
+    const out = normalizeDatabaseUrl(
+      'postgresql://postgres.ref:password@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?connection_limit=1',
+    );
+    expect(new URL(out).searchParams.get('connection_limit')).toBe('5');
   });
 });
 
@@ -62,7 +70,7 @@ describe('validateVercelProductionEnv', () => {
     process.env.DATABASE_URL =
       'postgresql://postgres.ref:password@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
     expect(() => validateVercelProductionEnv()).not.toThrow();
-    expect(process.env.DATABASE_URL).toContain('connection_limit=1');
+    expect(process.env.DATABASE_URL).toContain('connection_limit=5');
   });
 
   it('rejects localhost, which is unreachable from Vercel', () => {
