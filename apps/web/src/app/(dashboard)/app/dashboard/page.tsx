@@ -39,6 +39,7 @@ import type { DashboardMetricDetail, DashboardMetricId, DashboardOverview } from
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { useResource } from "@/lib/use-resource";
+import { prefetchWorkspace } from "@/lib/prefetch-workspace";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
 
 const toYMD = (d: Date | string) => {
@@ -155,6 +156,10 @@ export default function DashboardPage() {
     scopes: ["dashboard"],
     enabled: Boolean(openMetric),
   });
+  React.useEffect(() => {
+    if (data) prefetchWorkspace();
+  }, [data]);
+
   const detail = openMetric ? detailQuery.data ?? null : null;
   const detailLoading = Boolean(openMetric) && detailQuery.isFetching && !detailQuery.data;
   const detailError = detailQuery.error
@@ -208,7 +213,7 @@ export default function DashboardPage() {
     };
   }, [data, fromDate, toDate]);
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <h3 className="text-lg font-semibold">Failed to load dashboard</h3>

@@ -1,11 +1,14 @@
 "use client";
 
+import * as React from "react";
 import { keepPreviousData, useQuery, type QueryKey } from "@tanstack/react-query";
 import type { AppDataScope } from "./data-sync";
+import { getStaffAuthToken } from "./access-token";
+import { readQuerySnapshot, writeQuerySnapshot } from "./api-cache";
 
 /**
- * Page data that survives client-side navigation.
- * Fresh for 90s, kept for 10 minutes, invalidated when a matching mutation fires.
+ * Page data that paints from the last visit immediately, then refreshes.
+ * The snapshot is read in useLayoutEffect so a return visit does not sit on a skeleton.
  */
 export function useResource<T>(options: {
   queryKey: QueryKey;
@@ -14,13 +17,29 @@ export function useResource<T>(options: {
   enabled?: boolean;
   keepPrevious?: boolean;
 }) {
-  return useQuery({
+  const keyText = JSON.stringify(options.queryKey);
+  const [cached, setCached] = React.useState<T | undefined>(undefined);
+
+  React.useLayoutEffect(() => {
+    const snap = readQuerySnapshot<T>(options.queryKey, getStaffAuthToken());
+    setCached(snap?.data);
+  }, [keyText]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const query = useQuery({
     queryKey: options.queryKey,
-    queryFn: options.queryFn,
+    queryFn: async () => {
+      const data = await options.queryFn();
+      writeQuerySnapshot(options.queryKey, getStaffAuthToken(), data);
+      setCached(data);
+      return data;
+    },
     enabled: options.enabled ?? true,
     staleTime: 90_000,
-    gcTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
     placeholderData: options.keepPrevious ? keepPreviousData : undefined,
     meta: { scopes: options.scopes },
   });
+
+  const data = (query.data !== undefined ? query.data : cached) as T | undefined;
+  return { ...query, data };
 }

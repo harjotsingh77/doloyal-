@@ -28,7 +28,7 @@ import type { ApiResponse, Paginated } from "@doloyal/shared";
 import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
-import { beginGetCache, isCacheableGet, readGetCache, writeGetCache } from "./api-cache";
+import { beginGetCache, isCacheableGet, readGetCache, readStaleCache, trackInflight, writeGetCache } from "./api-cache";
 import { supabase } from "./supabase";
 import { getClientAuthToken, getStaffAuthToken } from "./access-token";
 
@@ -69,9 +69,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const method = (options.method || "GET").toUpperCase();
-  if (method === "GET" && isCacheableGet(path)) {
+  const revalidate = options.cache === "reload";
+  if (!revalidate && method === "GET" && isCacheableGet(path)) {
     const cached = readGetCache<T>(path, token);
     if (cached !== undefined) return cached;
+    const stale = readStaleCache<T>(path, token);
+    if (stale !== undefined) {
+      void trackInflight(path, token, () => request<T>(path, { ...options, cache: "reload" }))
+        .then(() => {
+          if (typeof window === "undefined") return;
+          window.dispatchEvent(new CustomEvent("doloyal:cache-refreshed", { detail: { path } }));
+        })
+        .catch(() => undefined);
+      return stale;
+    }
   }
   const cacheGeneration = method === "GET" ? beginGetCache(path) : 0;
   let res: Response;

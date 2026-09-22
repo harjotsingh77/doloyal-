@@ -307,7 +307,6 @@ export default function AppointmentsPage() {
 
   const loadAppointments = React.useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const params: { status?: string; from?: string; to?: string } = {};
       if (statusFilter !== "ALL") params.status = statusFilter;

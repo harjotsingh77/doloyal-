@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { api } from "./api";
 import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl, ensureCanonicalAuthOrigin } from "./supabase";
 import { getStaffAuthToken, isDoloyalAccessToken, purgeInvalidStaffSession } from "./access-token";
+import { clearPageCache } from "./api-cache";
 
 interface Membership {
   id: string;
@@ -249,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearAuth = React.useCallback(() => {
+    clearPageCache();
     setToken(null);
     saveUser(null);
     setUser(null);

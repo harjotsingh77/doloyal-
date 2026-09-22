@@ -137,7 +137,7 @@ export default function AnalyticsPage() {
       : "Failed to load details"
     : null;
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <h3 className="text-lg font-semibold">Failed to load analytics</h3>

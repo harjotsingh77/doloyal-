@@ -90,7 +90,6 @@ export default function RewardsPage() {
 
   const load = React.useCallback(async () => {
     try {
-      setLoading(true);
       const category = tab !== "HISTORY" && tab !== "ALL" ? tab : undefined;
       const [ov, list, progs, reds] = await Promise.all([
         api.getRewardsOverview(),

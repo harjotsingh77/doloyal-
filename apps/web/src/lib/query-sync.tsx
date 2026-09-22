@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useQueryClient, type Query } from "@tanstack/react-query";
 import type { AppDataScope } from "./data-sync";
+import { scopesForCachedPath } from "./api-cache";
 
 const EVENT = "doloyal:data-changed";
 
@@ -25,8 +26,20 @@ export function QuerySync() {
         predicate: (query) => queryMatches(query, scopes),
       });
     };
+    const onRefresh = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path || "";
+      const scopes = scopesForCachedPath(path);
+      if (!scopes.length) return;
+      void queryClient.invalidateQueries({
+        predicate: (query) => queryMatches(query, scopes),
+      });
+    };
     window.addEventListener(EVENT, onChange);
-    return () => window.removeEventListener(EVENT, onChange);
+    window.addEventListener("doloyal:cache-refreshed", onRefresh);
+    return () => {
+      window.removeEventListener(EVENT, onChange);
+      window.removeEventListener("doloyal:cache-refreshed", onRefresh);
+    };
   }, [queryClient]);
 
   return null;

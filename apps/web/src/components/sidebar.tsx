@@ -40,6 +40,7 @@ import { useBranch } from "@/lib/branch-context";
 import { useAuth } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant-query";
 import { getBusinessDisplayName, getBrandLogo, getBrandShortName } from "@/lib/branding";
+import { prefetchHref } from "@/lib/prefetch-workspace";
 
 /**
  * Explicit icon registry for nav items referenced by name in
@@ -246,6 +247,9 @@ export const Sidebar = React.memo(function Sidebar({
                       <Link
                         href={item.badge === "soon" ? "#" : href}
                         prefetch={item.badge === "soon" ? undefined : true}
+                        onMouseEnter={() => {
+                          if (item.badge !== "soon") prefetchHref(item.href);
+                        }}
                         onClick={(e) => {
                           if (item.badge === "soon") e.preventDefault();
                           if (hasChildren && !collapsed) {
