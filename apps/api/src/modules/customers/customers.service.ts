@@ -18,6 +18,45 @@ import {
 import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
 
+const DAY_MS = 86_400_000;
+
+/** floor((now - t) / day) <= days  <=>  t > now - (days + 1) days */
+function visitedSince(days: number) {
+  return new Date(Date.now() - (days + 1) * DAY_MS);
+}
+
+function loyaltyBandWhere(band: string) {
+  const vip = { OR: [{ totalSpent: { gte: 50000 } }, { pointsBalance: { gte: 5000 } }] };
+  const loyal = { OR: [{ totalSpent: { gte: 10000 } }, { totalVisits: { gte: 20 } }] };
+  const growing = { OR: [{ totalSpent: { gte: 2000 } }, { totalVisits: { gte: 5 } }] };
+  if (band === 'VIP') return vip;
+  if (band === 'LOYAL') return { NOT: vip, OR: loyal.OR };
+  if (band === 'GROWING') return { NOT: { OR: [vip, loyal] }, OR: growing.OR };
+  if (band === 'NEW') return { NOT: { OR: [vip, loyal, growing] } };
+  return { AND: [{ totalSpent: { gt: 0 } }, { totalSpent: { lt: 0 } }] };
+}
+
+function churnRiskWhere(risk: string) {
+  const within30 = visitedSince(30);
+  const within60 = visitedSince(60);
+  const within90 = visitedSince(90);
+  if (risk === 'LOW') {
+    return { lastVisitAt: { gt: within30 }, totalVisits: { gt: 0 } };
+  }
+  if (risk === 'MEDIUM') {
+    return {
+      AND: [
+        { lastVisitAt: { gt: within60 } },
+        { NOT: { AND: [{ lastVisitAt: { gt: within30 } }, { totalVisits: { gt: 0 } }] } },
+      ],
+    };
+  }
+  if (risk === 'HIGH') {
+    return { lastVisitAt: { gt: within90, lte: within60 } };
+  }
+  return { OR: [{ lastVisitAt: null }, { lastVisitAt: { lte: within90 } }] };
+}
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -34,43 +73,49 @@ export class CustomersService {
     limit?: number;
     cursor?: string;
   }) {
-    const limit = query.limit || 50;
-    const where: any = { tenantId };
+    const limit = Math.min(query.limit || 50, 100);
+    const and: Record<string, unknown>[] = [];
 
     if (query.search) {
       const search = query.search;
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search } },
-        { email: { contains: search, mode: 'insensitive' } },
-      ];
+      and.push({
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
 
+    if (query.band) and.push(loyaltyBandWhere(query.band));
+    if (query.churnRisk) and.push(churnRiskWhere(query.churnRisk));
+
+    const where: Record<string, unknown> = { tenantId };
     if (query.tags) {
       const tags = query.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
       if (tags.length) where.tags = { hasSome: tags };
     }
+    if (and.length) where.AND = and;
 
-    const customers = await this.prisma.customer.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    });
+    const [total, customers] = await Promise.all([
+      this.prisma.customer.count({ where: where as any }),
+      this.prisma.customer.findMany({
+        where: where as any,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      }),
+    ]);
 
-    const filtered = customers
-      .map(prismaCustomerToShared)
-      .filter((customer) => !query.band || customer.loyaltyBand === query.band)
-      .filter((customer) => !query.churnRisk || customer.churnRisk === query.churnRisk);
-    const cursorIndex = query.cursor ? filtered.findIndex((customer) => customer.id === query.cursor) + 1 : 0;
-    const page = filtered.slice(cursorIndex, cursorIndex + limit);
-    const hasMore = cursorIndex + limit < filtered.length;
-    const nextCursor = hasMore ? page[page.length - 1]?.id || null : null;
+    const hasMore = customers.length > limit;
+    const page = customers.slice(0, limit).map(prismaCustomerToShared);
 
     return {
       items: page,
-      nextCursor,
+      nextCursor: hasMore ? page[page.length - 1]?.id || null : null,
       hasMore,
-      total: filtered.length,
+      total,
     };
   }
 

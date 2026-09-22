@@ -38,7 +38,7 @@ import {
   EmptyState,
 } from "@doloyal/ui";
 import { api } from "@/lib/api";
-import { useAppSync } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 
 type Channel = "SMS" | "EMAIL" | "WHATSAPP";
 type Status = "DRAFT" | "SCHEDULED" | "PAUSED" | "SENDING" | "COMPLETED" | "FAILED";
@@ -82,6 +82,8 @@ const API_STATUS_TO_UI: Record<string, Status> = {
   FAILED: "FAILED",
 };
 
+const EMPTY_CAMPAIGNS: Campaign[] = [];
+
 const STATUS_LABEL: Record<Status, string> = {
   DRAFT: "Draft",
   SCHEDULED: "Scheduled",
@@ -92,9 +94,6 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [newName, setNewName] = React.useState("");
   const [newSubject, setNewSubject] = React.useState("");
@@ -106,36 +105,34 @@ export default function CampaignsPage() {
   const [sendingId, setSendingId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const load = React.useCallback(async () => {
-    try {
+  const campaignsQuery = useResource<Campaign[]>({
+    queryKey: ["campaigns"],
+    queryFn: async () => {
       const rows = await api.listCampaigns();
-      setCampaigns(
-        rows.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          channel: c.channel as Channel,
-          audience: (c.audience || "All") as Audience,
-          audienceSize: c.recipients || 0,
-          sentCount: c.sentCount || 0,
-          failedCount: c.failedCount || 0,
-          openRate: c.openRate || 0,
-          redeemRate: c.redeemRate || 0,
-          status: API_STATUS_TO_UI[c.status] || "DRAFT",
-          scheduleDate: c.scheduleDate ? String(c.scheduleDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
-        })),
-      );
-    } catch (err: any) {
-      setError(err?.message || "Failed to load campaigns");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  useAppSync(["campaigns", "customers", "dashboard"], () => void load());
+      return rows.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        channel: c.channel as Channel,
+        audience: (c.audience || "All") as Audience,
+        audienceSize: c.recipients || 0,
+        sentCount: c.sentCount || 0,
+        failedCount: c.failedCount || 0,
+        openRate: c.openRate || 0,
+        redeemRate: c.redeemRate || 0,
+        status: API_STATUS_TO_UI[c.status] || "DRAFT",
+        scheduleDate: c.scheduleDate ? String(c.scheduleDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      }));
+    },
+    scopes: ["campaigns", "customers", "dashboard"],
+  });
+  const campaigns = campaignsQuery.data ?? EMPTY_CAMPAIGNS;
+  const loading = campaignsQuery.isLoading && campaigns.length === 0;
+  const error = campaignsQuery.error
+    ? campaignsQuery.error instanceof Error
+      ? campaignsQuery.error.message
+      : "Failed to load campaigns"
+    : null;
+  const load = React.useCallback(() => campaignsQuery.refetch(), [campaignsQuery]);
 
   const showToast = (type: "success" | "error", text: string) => {
     setToast({ type, text });
@@ -159,9 +156,7 @@ export default function CampaignsPage() {
     try {
       const nextStatus = target.status === "PAUSED" ? "SCHEDULED" : "PAUSED";
       await api.setCampaignStatus(id, nextStatus);
-      setCampaigns((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, status: nextStatus } : c)),
-      );
+      await load();
     } catch (err: any) {
       showToast("error", err?.message || "Failed to update campaign");
     }

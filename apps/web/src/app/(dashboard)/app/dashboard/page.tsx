@@ -38,7 +38,7 @@ import {
 import type { DashboardMetricDetail, DashboardMetricId, DashboardOverview } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
-import { useAppSync } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
 
 const toYMD = (d: Date | string) => {
@@ -128,84 +128,40 @@ function DateRangePicker({
 export default function DashboardPage() {
   const router = useRouter();
   const { format: fmt, formatCompact: fmtCompact } = useCurrency();
-  const [data, setData] = React.useState<DashboardOverview | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [retryToken, setRetryToken] = React.useState(0);
 
   const defaultEnd = new Date();
   const defaultStart = new Date(defaultEnd.getTime() - 30 * 86400000);
   const [fromDate, setFromDate] = React.useState<string>(toYMD(defaultStart));
   const [toDate, setToDate] = React.useState<string>(toYMD(defaultEnd));
   const [openMetric, setOpenMetric] = React.useState<DashboardMetricId | null>(null);
-  const [detail, setDetail] = React.useState<DashboardMetricDetail | null>(null);
-  const [detailLoading, setDetailLoading] = React.useState(false);
-  const [detailError, setDetailError] = React.useState<string | null>(null);
-  const detailCache = React.useRef(new Map<string, DashboardMetricDetail>());
 
-  React.useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        setError(null);
-        if (!data) setLoading(true);
-        const overview = await api.getDashboardOverview({ from: fromDate, to: toDate });
-        if (!cancelled) setData(overview);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load dashboard");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [retryToken, fromDate, toDate]);
+  const overviewQuery = useResource<DashboardOverview>({
+    queryKey: ["dashboard-overview", fromDate, toDate],
+    queryFn: () => api.getDashboardOverview({ from: fromDate, to: toDate }),
+    scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "invoices", "loyalty", "appointments"],
+    keepPrevious: true,
+  });
+  const data = overviewQuery.data ?? null;
+  const loading = overviewQuery.isLoading && !data;
+  const error = overviewQuery.error
+    ? overviewQuery.error instanceof Error
+      ? overviewQuery.error.message
+      : "Failed to load dashboard"
+    : null;
 
-  React.useEffect(() => {
-    detailCache.current.clear();
-  }, [fromDate, toDate]);
-
-  React.useEffect(() => {
-    if (!openMetric) return;
-    const key = `${openMetric}:${fromDate}:${toDate}`;
-    const cached = detailCache.current.get(key);
-    if (cached) {
-      setDetail(cached);
-      setDetailLoading(false);
-      setDetailError(null);
-      return;
-    }
-    let cancelled = false;
-    setDetail(null);
-    setDetailLoading(true);
-    setDetailError(null);
-    api
-      .getDashboardMetricDetail(openMetric, { from: fromDate, to: toDate })
-      .then((result) => {
-        if (cancelled) return;
-        detailCache.current.set(key, result);
-        setDetail(result);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setDetailError(err instanceof Error ? err.message : "Failed to load details");
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [openMetric, fromDate, toDate]);
-
-  useAppSync(
-    ["dashboard", "customers", "orders", "reviews", "campaigns", "invoices", "loyalty", "appointments"],
-    () => setRetryToken((t) => t + 1),
-  );
+  const detailQuery = useResource<DashboardMetricDetail>({
+    queryKey: ["dashboard-metric", openMetric, fromDate, toDate],
+    queryFn: () => api.getDashboardMetricDetail(openMetric as DashboardMetricId, { from: fromDate, to: toDate }),
+    scopes: ["dashboard"],
+    enabled: Boolean(openMetric),
+  });
+  const detail = openMetric ? detailQuery.data ?? null : null;
+  const detailLoading = Boolean(openMetric) && detailQuery.isFetching && !detailQuery.data;
+  const detailError = detailQuery.error
+    ? detailQuery.error instanceof Error
+      ? detailQuery.error.message
+      : "Failed to load details"
+    : null;
 
   const dynamicMetrics = React.useMemo(() => {
     if (!data) return null;
@@ -260,7 +216,7 @@ export default function DashboardPage() {
           {error}
         </p>
         <button
-          onClick={() => setRetryToken((t) => t + 1)}
+          onClick={() => void overviewQuery.refetch()}
           className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
         >
           Try again

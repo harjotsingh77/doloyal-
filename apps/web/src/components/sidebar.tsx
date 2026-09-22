@@ -33,7 +33,6 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { APP_NAV_GROUPS } from "@doloyal/shared";
 import { cn } from "@doloyal/ui";
 import { Badge } from "@doloyal/ui";
@@ -266,11 +265,7 @@ export const Sidebar = React.memo(function Sidebar({
                         )}
                       >
                         {active && !collapsed && (
-                          <motion.div
-                            layoutId="sidebar-active"
-                            className="absolute inset-0 rounded-[0.625rem] bg-[rgb(var(--color-primary)/0.1)]"
-                            transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                          />
+                          <span className="absolute inset-0 rounded-[0.625rem] bg-[rgb(var(--color-primary)/0.1)]" />
                         )}
                         <span className="relative z-10">
                           <DynamicIcon
@@ -324,15 +319,8 @@ export const Sidebar = React.memo(function Sidebar({
                         </button>
                       )}
                     </div>
-                    <AnimatePresence initial={false}>
-                      {nestedOpen && item.children ? (
-                        <motion.ul
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.18 }}
-                          className="mt-1 ml-4 overflow-hidden border-l border-[rgb(var(--color-border))] pl-2"
-                        >
+                    {nestedOpen && item.children ? (
+                        <ul className="mt-1 ml-4 overflow-hidden border-l border-[rgb(var(--color-border))] pl-2">
                           {item.children.map((child) => {
                             const childHref = resolveHref(child.href);
                             const childActive = isActive(child.href);
@@ -366,9 +354,8 @@ export const Sidebar = React.memo(function Sidebar({
                               </li>
                             );
                           })}
-                        </motion.ul>
+                        </ul>
                       ) : null}
-                    </AnimatePresence>
                   </li>
                 );
               })}
@@ -440,29 +427,17 @@ export const Sidebar = React.memo(function Sidebar({
         {sidebarContent}
       </aside>
 
-      <AnimatePresence>
-        {mobileOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={onMobileClose}
-            />
-            <motion.aside
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="relative h-full w-64 shadow-2xl z-10"
-            >
-              {sidebarContent}
-            </motion.aside>
-          </div>
-        )}
-      </AnimatePresence>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={onMobileClose}
+          />
+          <aside className="relative h-full w-64 shadow-2xl z-10">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
     </>
   );
 });

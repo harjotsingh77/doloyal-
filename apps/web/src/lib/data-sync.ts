@@ -1,4 +1,5 @@
 import * as React from "react";
+import { invalidateGetCache } from "./api-cache";
 
 export type AppDataScope =
   | "dashboard"
@@ -54,6 +55,7 @@ function bindCrossTab() {
   if (!ch) return;
   ch.onmessage = (event) => {
     const scopes = Array.isArray(event.data?.scopes) ? event.data.scopes : ["all"];
+    invalidateGetCache(scopes);
     window.dispatchEvent(new CustomEvent(EVENT, { detail: { scopes } }));
   };
 }
@@ -71,6 +73,8 @@ export function notifyAppChange(scopes: AppDataScope[]) {
   if (typeof window === "undefined") return;
   bindCrossTab();
   const unique = Array.from(new Set(scopes.length ? scopes : (["all"] as AppDataScope[])));
+  // Drop cached GETs before listeners refetch, so they cannot read the pre-mutation payload.
+  invalidateGetCache(unique);
   window.dispatchEvent(new CustomEvent(EVENT, { detail: { scopes: unique } }));
   getChannel()?.postMessage({ scopes: unique });
 }
@@ -108,15 +112,24 @@ export function useAppSync(scopes: AppDataScope[], reload: () => void) {
     };
 
     window.addEventListener(EVENT, onChange);
-    const onFocus = () => {
-      if (Date.now() < suppressFocusReloadUntil) return;
-      reloadRef.current();
+    // Refetch only after the tab was actually away. Focusing the window to
+    // pick a file, or clicking back from another app for a moment, must not
+    // throw away the page and wait on the API again.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (!hiddenAt || Date.now() < suppressFocusReloadUntil) return;
+      if (Date.now() - hiddenAt >= 45_000) reloadRef.current();
+      hiddenAt = 0;
     };
-    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (timer) clearTimeout(timer);
       window.removeEventListener(EVENT, onChange);
-      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [scopesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }
@@ -141,7 +154,7 @@ export function useCommerceLive(
     const poll = () => {
       if (document.visibilityState === "visible") reloadRef.current();
     };
-    const interval = window.setInterval(poll, slug ? 10_000 : 15_000);
+    const interval = window.setInterval(poll, slug ? 30_000 : 45_000);
     return () => {
       window.clearInterval(interval);
     };

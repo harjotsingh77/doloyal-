@@ -753,6 +753,10 @@ model Customer {
   @@index([tenantId, phone])
   @@index([tenantId, email])
   @@index([tenantId, dob])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, lastVisitAt])
+  @@index([tenantId, status])
+  @@index([tenantId, totalSpent])
   @@index([userId])
 }
 
@@ -906,6 +910,8 @@ model Invoice {
   items    InvoiceItem[]
 
   @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, customerId])
 }
 
 model InvoiceItem {
@@ -919,6 +925,9 @@ model InvoiceItem {
 
   invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([serviceId])
 }
 
 model LoyaltyConfig {
@@ -951,6 +960,9 @@ model PointsLedger {
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, customerId])
 }
 
 model Reward {
@@ -1119,6 +1131,8 @@ model Campaign {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   emailLogs EmailLog[]
+
+  @@index([tenantId, status, sentAt])
 }
 
 model Activity {
@@ -1132,6 +1146,8 @@ model Activity {
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
 }
 
 model LoyaltyChallenge {
@@ -1765,6 +1781,8 @@ model Notification {
   customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
+  @@index([tenantId, type, status])
+  @@index([tenantId, customerId])
   @@index([appointmentId])
 }
 
@@ -2098,6 +2116,7 @@ model EmailLog {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
+  @@index([tenantId, campaignId, createdAt])
   @@index([customerId])
 }
 

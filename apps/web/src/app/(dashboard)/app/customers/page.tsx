@@ -43,18 +43,17 @@ import type { Customer, CustomerQuery, Paginated } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { useCommerceLive } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 
 export default function CustomersPage() {
   const router = useRouter();
-  const [customers, setCustomers] = React.useState<Customer[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [bandFilter, setBandFilter] = React.useState<string>("ALL");
   const [churnFilter, setChurnFilter] = React.useState<string>("ALL");
-  const [cursor, setCursor] = React.useState<string | null>(null);
-  const [hasMore, setHasMore] = React.useState(false);
+  const [extra, setExtra] = React.useState<Customer[]>([]);
+  const [extraCursor, setExtraCursor] = React.useState<string | null>(null);
+  const [extraHasMore, setExtraHasMore] = React.useState(false);
   const [addDialogOpen, setAddDialogOpen] = React.useState(false);
   const [addName, setAddName] = React.useState("");
   const [addPhone, setAddPhone] = React.useState("");
@@ -70,41 +69,61 @@ export default function CustomersPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const loadCustomers = React.useCallback(
-    async (cursorVal?: string, opts?: { silent?: boolean }) => {
-      try {
-        if (!opts?.silent) setLoading(true);
-        setError(null);
-        const params: CustomerQuery = { limit: 50 };
-        if (debouncedSearch) params.search = debouncedSearch;
-        if (bandFilter && bandFilter !== "ALL") params.band = bandFilter as Customer["loyaltyBand"];
-        if (churnFilter && churnFilter !== "ALL")
-          params.churnRisk = churnFilter as Customer["churnRisk"];
-        if (cursorVal) params.cursor = cursorVal;
+  const listParams = React.useMemo(() => {
+    const params: CustomerQuery = { limit: 50 };
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (bandFilter && bandFilter !== "ALL") params.band = bandFilter as Customer["loyaltyBand"];
+    if (churnFilter && churnFilter !== "ALL")
+      params.churnRisk = churnFilter as Customer["churnRisk"];
+    return params;
+  }, [debouncedSearch, bandFilter, churnFilter]);
 
-        const result = await api.listCustomers(params);
-        if (cursorVal) {
-          setCustomers((prev) => [...prev, ...result.items]);
-        } else {
-          setCustomers(result.items);
-        }
-        setCursor(result.nextCursor);
-        setHasMore(result.hasMore);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load customers");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [debouncedSearch, bandFilter, churnFilter],
-  );
+  const listQuery = useResource<Paginated<Customer>>({
+    queryKey: ["customers", debouncedSearch, bandFilter, churnFilter],
+    queryFn: () => api.listCustomers(listParams),
+    scopes: ["customers", "orders", "loyalty", "reviews"],
+    keepPrevious: true,
+  });
 
   React.useEffect(() => {
-    setCursor(null);
-    loadCustomers();
-  }, [loadCustomers]);
+    setExtra([]);
+    setExtraCursor(null);
+    setExtraHasMore(false);
+  }, [debouncedSearch, bandFilter, churnFilter]);
 
-  useCommerceLive(["customers", "orders", "loyalty", "reviews"], () => loadCustomers(undefined, { silent: true }));
+  const customers = React.useMemo(
+    () => [...(listQuery.data?.items ?? []), ...extra],
+    [listQuery.data, extra],
+  );
+  const loading = listQuery.isLoading && customers.length === 0;
+  const error = listQuery.error
+    ? listQuery.error instanceof Error
+      ? listQuery.error.message
+      : "Failed to load customers"
+    : null;
+  const cursor = extra.length ? extraCursor : listQuery.data?.nextCursor ?? null;
+  const hasMore = extra.length ? extraHasMore : Boolean(listQuery.data?.hasMore);
+
+  const loadCustomers = React.useCallback(
+    async (cursorVal?: string) => {
+      if (!cursorVal) {
+        setExtra([]);
+        setExtraCursor(null);
+        setExtraHasMore(false);
+        await listQuery.refetch();
+        return;
+      }
+      const result = await api.listCustomers({ ...listParams, cursor: cursorVal });
+      setExtra((prev) => [...prev, ...result.items]);
+      setExtraCursor(result.nextCursor);
+      setExtraHasMore(result.hasMore);
+    },
+    [listParams, listQuery],
+  );
+
+  useCommerceLive(["customers", "orders", "loyalty", "reviews"], () => {
+    void listQuery.refetch();
+  });
 
   const handleAddCustomer = async () => {
     if (!addName.trim() || !addPhone.trim()) {

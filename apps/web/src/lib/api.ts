@@ -28,6 +28,7 @@ import type { ApiResponse, Paginated } from "@doloyal/shared";
 import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
+import { beginGetCache, isCacheableGet, readGetCache, writeGetCache } from "./api-cache";
 import { supabase } from "./supabase";
 import { getClientAuthToken, getStaffAuthToken } from "./access-token";
 
@@ -68,6 +69,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const method = (options.method || "GET").toUpperCase();
+  if (method === "GET" && isCacheableGet(path)) {
+    const cached = readGetCache<T>(path, token);
+    if (cached !== undefined) return cached;
+  }
+  const cacheGeneration = method === "GET" ? beginGetCache(path) : 0;
   let res: Response;
   try {
     res = await fetch(`${apiBase()}${path}`, {
@@ -104,6 +110,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, err.code, err.message, err.details);
   }
   notifyFromApiPath(path, method);
+  if (method === "GET") writeGetCache(path, token, envelope.data, cacheGeneration);
   return envelope.data as T;
 }
 

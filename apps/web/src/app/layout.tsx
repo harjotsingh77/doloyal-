@@ -51,25 +51,28 @@ export default function RootLayout({
         {/* CookieHub Consent Banner */}
         <Script
           src="https://cdn.cookiehub.eu/c2/845e0a11.js"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <Script id="cookiehub-init" strategy="afterInteractive">
+        <Script id="cookiehub-init" strategy="lazyOnload">
           {`
-            document.addEventListener("DOMContentLoaded", function(event) {
+            function startCookiehub() {
               var cpm = {};
-              if (window.cookiehub) {
-                window.cookiehub.load(cpm);
-              }
-            });
+              if (window.cookiehub) window.cookiehub.load(cpm);
+            }
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", startCookiehub);
+            } else {
+              startCookiehub();
+            }
           `}
         </Script>
 
         {/* Google Analytics (gtag.js) */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-CHEX55XDZD"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script id="google-analytics" strategy="lazyOnload">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}

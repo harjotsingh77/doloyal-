@@ -15,13 +15,18 @@ import { useLoyaltyFeatures } from "@/lib/loyalty-features-context";
 import { FeatureConfigureDrawer } from "@/components/loyalty/configure-drawer";
 import { getLoyaltyModule } from "@/components/loyalty/modules/registry";
 import { api } from "@/lib/api";
-import { useAppSync } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 
 export default function LoyaltyPage() {
   const { features, enabledKeys, loading, isEnabled, updateConfig, refresh } =
     useLoyaltyFeatures();
   const [configureKey, setConfigureKey] = React.useState<string | null>(null);
-  const [overview, setOverview] = React.useState<any>(null);
+  const overviewQuery = useResource({
+    queryKey: ["loyalty-overview", Array.from(enabledKeys).sort().join(",")],
+    queryFn: () => api.getLoyaltyOverview().catch(() => null),
+    scopes: ["loyalty", "rewards", "customers", "orders"],
+  });
+  const overview = overviewQuery.data ?? null;
 
   const ordered = React.useMemo(() => {
     const defs = getOrderedLoyaltyPageFeatures(enabledKeys);
@@ -33,20 +38,6 @@ export default function LoyaltyPage() {
   const configureFeature = configureKey
     ? features.find((f) => f.key === configureKey) || null
     : null;
-
-  React.useEffect(() => {
-    api
-      .getLoyaltyOverview()
-      .then(setOverview)
-      .catch(() => setOverview(null));
-  }, [enabledKeys]);
-
-  useAppSync(["loyalty", "rewards", "customers", "orders"], () => {
-    api
-      .getLoyaltyOverview()
-      .then(setOverview)
-      .catch(() => setOverview(null));
-  });
 
   const navItems = ordered.map((f) => ({
     id: f.sectionId || f.key,

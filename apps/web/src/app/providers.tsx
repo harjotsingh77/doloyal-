@@ -10,6 +10,7 @@ import { ClientAuthProvider } from "@/lib/client-auth";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { BranchProvider } from "@/lib/branch-context";
 import { ThemeInitializer } from "@/components/theme-initializer";
+import { QuerySync } from "@/lib/query-sync";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(
@@ -17,9 +18,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 8_000,
+            staleTime: 90_000,
+            gcTime: 10 * 60_000,
             retry: 1,
-            refetchOnWindowFocus: true,
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: true,
           },
         },
       }),
@@ -35,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <ThemeInitializer />
       <QueryClientProvider client={queryClient}>
+        <QuerySync />
         <TooltipProvider delayDuration={200}>
           <AuthProvider>
             <ClientAuthProvider>

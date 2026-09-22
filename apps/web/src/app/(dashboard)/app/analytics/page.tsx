@@ -37,7 +37,7 @@ import { compareValues } from "@doloyal/shared";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
-import { useAppSync } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
 
 const HEALTH_LABEL: Record<"healthy" | "fair" | "at_risk", string> = {
@@ -82,11 +82,7 @@ const RANGES = [
 export default function AnalyticsPage() {
   const router = useRouter();
   const { format: fmt, formatCompact: fmtCompact } = useCurrency();
-  const [data, setData] = React.useState<DashboardOverview | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [range, setRange] = React.useState("30");
-  const [retryToken, setRetryToken] = React.useState(0);
   const [customFrom, setCustomFrom] = React.useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -97,101 +93,49 @@ export default function AnalyticsPage() {
   });
   const [openMetric, setOpenMetric] = React.useState<DashboardMetricId | null>(null);
   const [openPanel, setOpenPanel] = React.useState<"services" | "health" | null>(null);
-  const [health, setHealth] = React.useState<BusinessHealthInsight | null>(null);
-  const [detail, setDetail] = React.useState<DashboardMetricDetail | null>(null);
-  const [detailLoading, setDetailLoading] = React.useState(false);
-  const [detailError, setDetailError] = React.useState<string | null>(null);
-  const detailCache = React.useRef(new Map<string, DashboardMetricDetail>());
+
+  const overviewParams =
+    range === "custom"
+      ? { from: customFrom, to: customTo }
+      : { days: range };
+
+  const overviewQuery = useResource<DashboardOverview>({
+    queryKey: ["analytics-overview", range, customFrom, customTo],
+    queryFn: () => api.getDashboardOverview(overviewParams),
+    scopes: ["dashboard", "customers", "orders", "products", "reviews", "campaigns", "invoices", "loyalty", "appointments", "rewards"],
+    keepPrevious: true,
+  });
+  const healthQuery = useResource<BusinessHealthInsight>({
+    queryKey: ["analytics-health", range, customFrom, customTo],
+    queryFn: () => api.getBusinessHealth(overviewParams),
+    scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "loyalty", "appointments"],
+    keepPrevious: true,
+  });
+  const data = overviewQuery.data ?? null;
+  const health = healthQuery.data ?? null;
+  const loading = overviewQuery.isLoading && !data;
+  const error = overviewQuery.error
+    ? overviewQuery.error instanceof Error
+      ? overviewQuery.error.message
+      : "Failed to load analytics"
+    : null;
 
   const fromDate = data?.period?.from || (range === "custom" ? customFrom : "");
   const toDate = data?.period?.to || (range === "custom" ? customTo : "");
 
-  React.useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const overview = await api.getDashboardOverview({
-          days: range === "custom" ? undefined : range,
-          from: range === "custom" ? customFrom : undefined,
-          to: range === "custom" ? customTo : undefined,
-        });
-        if (!cancelled) setData(overview);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load analytics");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [range, customFrom, customTo, retryToken]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    const params =
-      range === "custom"
-        ? { from: customFrom, to: customTo }
-        : { days: range };
-    api
-      .getBusinessHealth(params)
-      .then((insight) => {
-        if (!cancelled) setHealth(insight);
-      })
-      .catch(() => {
-        if (!cancelled) setHealth(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [range, customFrom, customTo, retryToken]);
-
-  React.useEffect(() => {
-    detailCache.current.clear();
-  }, [range, customFrom, customTo]);
-
-  React.useEffect(() => {
-    if (!openMetric || !fromDate || !toDate) return;
-    const key = `${openMetric}:${fromDate}:${toDate}`;
-    const cached = detailCache.current.get(key);
-    if (cached) {
-      setDetail(cached);
-      setDetailLoading(false);
-      setDetailError(null);
-      return;
-    }
-    let cancelled = false;
-    setDetail(null);
-    setDetailLoading(true);
-    setDetailError(null);
-    api
-      .getDashboardMetricDetail(openMetric, { from: fromDate, to: toDate })
-      .then((result) => {
-        if (cancelled) return;
-        detailCache.current.set(key, result);
-        setDetail(result);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setDetailError(err instanceof Error ? err.message : "Failed to load details");
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [openMetric, fromDate, toDate]);
-
-  useAppSync(
-    ["dashboard", "customers", "orders", "products", "reviews", "campaigns", "invoices", "loyalty", "appointments", "rewards"],
-    () => setRetryToken((t) => t + 1),
-  );
+  const detailQuery = useResource<DashboardMetricDetail>({
+    queryKey: ["analytics-metric", openMetric, fromDate, toDate],
+    queryFn: () => api.getDashboardMetricDetail(openMetric as DashboardMetricId, { from: fromDate, to: toDate }),
+    scopes: ["dashboard"],
+    enabled: Boolean(openMetric && fromDate && toDate),
+  });
+  const detail = openMetric ? detailQuery.data ?? null : null;
+  const detailLoading = Boolean(openMetric) && detailQuery.isFetching && !detailQuery.data;
+  const detailError = detailQuery.error
+    ? detailQuery.error instanceof Error
+      ? detailQuery.error.message
+      : "Failed to load details"
+    : null;
 
   if (error) {
     return (
@@ -201,7 +145,7 @@ export default function AnalyticsPage() {
           {error}
         </p>
         <button
-          onClick={() => setRetryToken((t) => t + 1)}
+          onClick={() => void overviewQuery.refetch()}
           className="mt-5 text-sm font-medium text-[rgb(var(--color-primary))] hover:underline"
         >
           Try again
