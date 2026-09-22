@@ -43,12 +43,20 @@ import {
 import type { CatalogProduct, CatalogProductSummary, ProductCategory, ProductQuery } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 import { ProductFormDialog } from "./product-form-dialog";
 import { productImageSrc } from "./product-editor";
 import { useCommerceLive } from "@/lib/data-sync";
 
 const ALL = "__all__";
+
+type ProductsBoot = {
+  products: CatalogProduct[];
+  total: number;
+  summary: CatalogProductSummary;
+  categories: ProductCategory[];
+};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -96,11 +104,6 @@ function ProductThumb({ product }: { product: CatalogProduct }) {
 export default function ProductsPage() {
   const router = useRouter();
   const { format: fmt } = useCurrency();
-  const [summary, setSummary] = React.useState<CatalogProductSummary | null>(null);
-  const [products, setProducts] = React.useState<CatalogProduct[]>([]);
-  const [categories, setCategories] = React.useState<ProductCategory[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [categoryId, setCategoryId] = React.useState(ALL);
@@ -109,7 +112,6 @@ export default function ProductsPage() {
   const [sort, setSort] = React.useState<NonNullable<ProductQuery["sort"]>>("updatedAt");
   const [order, setOrder] = React.useState<"asc" | "desc">("desc");
   const [page, setPage] = React.useState(1);
-  const [total, setTotal] = React.useState(0);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const pageSize = 20;
 
@@ -123,10 +125,9 @@ export default function ProductsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
-    try {
-      if (!opts?.silent) setLoading(true);
-      setError(null);
+  const bootQuery = useResource<ProductsBoot>({
+    queryKey: ["products-page", debouncedSearch, categoryId, status, stock, sort, order, page],
+    queryFn: async () => {
       const query: ProductQuery = {
         search: debouncedSearch || undefined,
         categoryId: categoryId === ALL ? undefined : categoryId,
@@ -142,24 +143,35 @@ export default function ProductsPage() {
         api.getProductSummary(),
         api.listProductCategories(),
       ]);
-      setProducts(list.items);
-      setTotal(list.total);
-      setSummary(stats);
-      setCategories(cats);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, categoryId, status, stock, sort, order, page]);
+      return {
+        products: list.items,
+        total: list.total,
+        summary: stats,
+        categories: cats,
+      };
+    },
+    scopes: ["products", "orders", "dashboard"],
+    keepPrevious: true,
+  });
+
+  const products = bootQuery.data?.products ?? [];
+  const total = bootQuery.data?.total ?? 0;
+  const summary = bootQuery.data?.summary ?? null;
+  const categories = bootQuery.data?.categories ?? [];
+  const loading = bootQuery.isLoading && !bootQuery.data;
+  const error = bootQuery.error && !bootQuery.data
+    ? bootQuery.error instanceof Error
+      ? bootQuery.error.message
+      : "Failed to load products"
+    : null;
+
+  const load = React.useCallback(async (_opts?: { silent?: boolean }) => {
+    await bootQuery.refetch();
+  }, [bootQuery]);
 
   React.useEffect(() => {
     setPage(1);
   }, [debouncedSearch, categoryId, status, stock, sort, order]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
 
   useCommerceLive(["products", "orders"], () => void load({ silent: true }));
 
@@ -488,7 +500,9 @@ export default function ProductsPage() {
         onOpenChange={setFormOpen}
         product={editing}
         categories={categories}
-        onCategoriesChange={setCategories}
+        onCategoriesChange={() => {
+          void load();
+        }}
         onSaved={() => void load()}
       />
 

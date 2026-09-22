@@ -27,10 +27,13 @@ export class AppointmentsService {
     const appointments = await this.prisma.appointment.findMany({
       where,
       orderBy: { startTime: 'desc' },
-      include: { customer: true, staff: true },
+      include: {
+        customer: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
+        staff: { select: { id: true, name: true } },
+      },
       take: 100,
     });
-    return appointments.map(prismaAppointmentToShared);
+    return appointments.map((a) => prismaAppointmentToShared(a as any));
   }
 
   async create(tenantId: string, data: {

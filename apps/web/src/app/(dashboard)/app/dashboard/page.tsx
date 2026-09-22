@@ -161,8 +161,9 @@ export default function DashboardPage() {
   }, [data]);
 
   const detail = openMetric ? detailQuery.data ?? null : null;
-  const detailLoading = Boolean(openMetric) && detailQuery.isFetching && !detailQuery.data;
-  const detailError = detailQuery.error
+  // Prefer last snapshot over skeleton — background refetch must not blank the modal.
+  const detailLoading = Boolean(openMetric) && !detail && detailQuery.isFetching;
+  const detailError = detailQuery.error && !detail
     ? detailQuery.error instanceof Error
       ? detailQuery.error.message
       : "Failed to load details"

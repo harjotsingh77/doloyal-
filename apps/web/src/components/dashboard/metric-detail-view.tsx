@@ -117,7 +117,7 @@ export function MetricDetailView({
           </div>
         </DialogHeader>
 
-        {loading ? (
+        {loading && !data ? (
           <div className="space-y-4">
             <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
               Loading {title.toLowerCase()} details...
@@ -130,7 +130,7 @@ export function MetricDetailView({
             </div>
             <Skeleton className="h-52 w-full" />
           </div>
-        ) : error ? (
+        ) : error && !data ? (
           <EmptyState title="Couldn't load details" description={error} />
         ) : !data ? (
           <EmptyState title="No data available for this period" />

@@ -23,16 +23,16 @@ let hydrated = false;
 let diskTimer: ReturnType<typeof setTimeout> | null = null;
 
 const PREFIXES: Record<Exclude<AppDataScope, "all">, string[]> = {
-  dashboard: ["/dashboard", "/assistant/business-health", "/memberships", "/referrals"],
+  dashboard: ["/dashboard", "/assistant/business-health", "/memberships", "/referrals", "/feature-flags"],
   customers: ["/customers"],
   orders: ["/orders"],
   products: ["/products"],
   reviews: ["/reviews", "/public/reviews"],
   campaigns: ["/campaigns"],
   invoices: ["/invoices"],
-  loyalty: ["/loyalty"],
+  loyalty: ["/loyalty", "/feature-flags"],
   rewards: ["/rewards"],
-  appointments: ["/appointments"],
+  appointments: ["/appointments", "/booking-links"],
 };
 
 function pathnameOf(path: string) {

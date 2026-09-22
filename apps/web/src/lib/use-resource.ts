@@ -8,7 +8,8 @@ import { readQuerySnapshot, writeQuerySnapshot } from "./api-cache";
 
 /**
  * Page data that paints from the last visit immediately, then refreshes.
- * The snapshot is read in useLayoutEffect so a return visit does not sit on a skeleton.
+ * Snapshot is read synchronously on first render (and again in useLayoutEffect
+ * when the key changes) so a return visit does not sit on a skeleton.
  */
 export function useResource<T>(options: {
   queryKey: QueryKey;
@@ -18,7 +19,10 @@ export function useResource<T>(options: {
   keepPrevious?: boolean;
 }) {
   const keyText = JSON.stringify(options.queryKey);
-  const [cached, setCached] = React.useState<T | undefined>(undefined);
+  const [cached, setCached] = React.useState<T | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    return readQuerySnapshot<T>(options.queryKey, getStaffAuthToken())?.data;
+  });
 
   React.useLayoutEffect(() => {
     const snap = readQuerySnapshot<T>(options.queryKey, getStaffAuthToken());

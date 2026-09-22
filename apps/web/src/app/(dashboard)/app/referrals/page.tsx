@@ -66,6 +66,7 @@ import type {
   ReferralLeaderboardRow,
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/use-resource";
 import { getAppBaseUrl } from "@/lib/api-base";
 import { useCurrency } from "@/lib/currency-context";
 
@@ -173,7 +174,7 @@ export default function ReferralsPage() {
   const [range, setRange] = React.useState("30d");
   const [customFrom, setCustomFrom] = React.useState("");
   const [customTo, setCustomTo] = React.useState("");
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [overview, setOverview] = React.useState<ReferralOverview | null>(null);
@@ -197,40 +198,68 @@ export default function ReferralsPage() {
     return { range: range === "custom" ? "30d" : range };
   }, [range, customFrom, customTo]);
 
+  const referralBoot = useResource<{
+    overview: ReferralOverview;
+    analytics: any;
+    funnel: ReferralFunnelStage[];
+    leaderboard: ReferralLeaderboardRow[];
+    campaigns: ReferralCampaign[];
+    links: ReferralLink[];
+    conversions: ReferralConversionRow[];
+  }>({
+    queryKey: ["referrals-page", rangeParams, search],
+    queryFn: async () => {
+      const [ov, an, fn, lb, camps, ln, conv] = await Promise.all([
+        api.getReferralOverview(rangeParams),
+        api.getReferralAnalytics(rangeParams),
+        api.getReferralFunnel(rangeParams),
+        api.getReferralLeaderboard(),
+        api.listReferralCampaigns(),
+        api.listReferralLinks(),
+        api.listReferralConversions({ search: search || undefined, pageSize: 30 }),
+      ]);
+      return {
+        overview: ov,
+        analytics: an,
+        funnel: Array.isArray(fn) ? fn : [],
+        leaderboard: Array.isArray(lb) ? lb : [],
+        campaigns: (camps || []).map((c: any) => ({
+          ...c,
+          startsAt: c.startsAt?.toISOString?.() || c.startsAt,
+          endsAt: c.endsAt?.toISOString?.() || c.endsAt,
+          createdAt: c.createdAt?.toISOString?.() || c.createdAt,
+          updatedAt: c.updatedAt?.toISOString?.() || c.updatedAt,
+        })),
+        links: ln || [],
+        conversions: conv?.items || [],
+      };
+    },
+    scopes: ["dashboard", "customers", "loyalty"],
+    keepPrevious: true,
+  });
+  const displayLoading = referralBoot.isLoading && !overview && !referralBoot.data;
+
+  React.useEffect(() => {
+    const d = referralBoot.data;
+    if (!d) return;
+    setOverview(d.overview);
+    setAnalytics(d.analytics);
+    setFunnel(d.funnel);
+    setLeaderboard(d.leaderboard);
+    setCampaigns(d.campaigns);
+    setLinks(d.links);
+    setConversions(d.conversions);
+    setLoading(false);
+    setError(null);
+  }, [referralBoot.data]);
+
   const load = React.useCallback(
     async (opts?: { soft?: boolean }) => {
       try {
         if (opts?.soft) setRefreshing(true);
-        else setLoading(true);
+        else if (!overview && !referralBoot.data) setLoading(true);
         setError(null);
-        const [ov, an, fn, lb, camps, ln, conv] = await Promise.all([
-          api.getReferralOverview(rangeParams),
-          api.getReferralAnalytics(rangeParams),
-          api.getReferralFunnel(rangeParams),
-          api.getReferralLeaderboard(),
-          api.listReferralCampaigns(),
-          api.listReferralLinks(),
-          api.listReferralConversions({ search: search || undefined, pageSize: 30 }),
-        ]);
-        setOverview(ov);
-        setAnalytics(an);
-        setFunnel(Array.isArray(fn) ? fn : []);
-        setLeaderboard(Array.isArray(lb) ? lb : []);
-        setCampaigns(
-          (camps || []).map((c: any) => ({
-            ...c,
-            startsAt: c.startsAt?.toISOString?.() || c.startsAt,
-            endsAt: c.endsAt?.toISOString?.() || c.endsAt,
-            createdAt: c.createdAt?.toISOString?.() || c.createdAt,
-            updatedAt: c.updatedAt?.toISOString?.() || c.updatedAt,
-          })),
-        );
-        setLinks(ln || []);
-        setConversions(conv?.items || []);
-        if (an?.summary && !an.summary.topCustomer && lb?.[0]?.name) {
-          an.summary.topCustomer = lb[0].name;
-          setAnalytics({ ...an });
-        }
+        await referralBoot.refetch();
       } catch (e: unknown) {
         const msg = safeMessage(e, "Unable to load referral analytics. Please try again.");
         setError(msg);
@@ -240,11 +269,10 @@ export default function ReferralsPage() {
         setRefreshing(false);
       }
     },
-    [rangeParams, search],
+    [overview, referralBoot],
   );
 
   React.useEffect(() => {
-    void load();
     const t = setInterval(() => {
       if (document.visibilityState === "visible") void load({ soft: true });
     }, 15000);
@@ -469,7 +497,7 @@ export default function ReferralsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard title="Referrals & Conversions Over Time">
-          {loading ? (
+          {displayLoading ? (
             <Skeleton className="h-[240px] w-full rounded-xl" />
           ) : hasChartData ? (
             <ResponsiveContainer width="100%" height={260}>
@@ -495,7 +523,7 @@ export default function ReferralsPage() {
         </ChartCard>
 
         <ChartCard title="Referral Funnel">
-          {loading ? (
+          {displayLoading ? (
             <div className="space-y-3 pt-2">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-8 w-full rounded-lg" />
@@ -540,7 +568,7 @@ export default function ReferralsPage() {
           <h2 className="text-lg font-bold text-slate-900">Referral Analytics</h2>
           <p className="text-xs text-slate-500">ROI and performance calculated from live referral activity.</p>
         </div>
-        {loading ? (
+        {displayLoading ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-20 rounded-2xl" />
@@ -605,7 +633,7 @@ export default function ReferralsPage() {
           </Button>
         </div>
 
-        {loading ? (
+        {displayLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-48 rounded-2xl" />
@@ -778,7 +806,7 @@ export default function ReferralsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {displayLoading ? (
                 <TableRow>
                   <TableCell colSpan={10} className="py-8">
                     <Skeleton className="h-24 w-full" />

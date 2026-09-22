@@ -50,8 +50,8 @@ import {
   type CreateRewardInput,
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
-import { useAppSync } from "@/lib/data-sync";
 import { useCurrency } from "@/lib/currency-context";
+import { useResource } from "@/lib/use-resource";
 
 const TABS: Array<{ key: RewardCategory | "HISTORY"; label: string }> = [
   ...REWARD_CATEGORIES.map((key) => ({ key, label: REWARD_CATEGORY_LABELS[key] })),
@@ -74,47 +74,57 @@ function statusColor(status: string) {
   return "default";
 }
 
+type RewardsBoot = {
+  overview: RewardsOverview | null;
+  rewards: Reward[];
+  programs: RewardProgramConfig[];
+  redemptions: RewardRedemption[];
+};
+
 export default function RewardsPage() {
   const { format } = useCurrency();
   const [tab, setTab] = React.useState<string>("STANDARD");
-  const [loading, setLoading] = React.useState(true);
-  const [overview, setOverview] = React.useState<RewardsOverview | null>(null);
-  const [rewards, setRewards] = React.useState<Reward[]>([]);
-  const [programs, setPrograms] = React.useState<RewardProgramConfig[]>([]);
-  const [redemptions, setRedemptions] = React.useState<RewardRedemption[]>([]);
   const [search, setSearch] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Reward | null>(null);
   const [programDraft, setProgramDraft] = React.useState<Record<string, unknown>>({});
   const [savingProgram, setSavingProgram] = React.useState(false);
 
-  const load = React.useCallback(async () => {
-    try {
-      const category = tab !== "HISTORY" && tab !== "ALL" ? tab : undefined;
+  const category = tab !== "HISTORY" && tab !== "ALL" ? tab : undefined;
+  const bootQuery = useResource<RewardsBoot>({
+    queryKey: ["rewards-page", tab, search],
+    queryFn: async () => {
       const [ov, list, progs, reds] = await Promise.all([
         api.getRewardsOverview(),
         tab === "HISTORY"
-          ? Promise.resolve([])
+          ? Promise.resolve([] as Reward[])
           : api.listRewards({ category, search: search || undefined }),
         api.listRewardPrograms(),
         api.getRedemptions({ page: 1, pageSize: 50, search: search || undefined }),
       ]);
-      setOverview(ov);
-      setRewards(list as Reward[]);
-      setPrograms(progs);
-      setRedemptions(reds.items || []);
+      return {
+        overview: ov,
+        rewards: list as Reward[],
+        programs: progs,
+        redemptions: reds.items || [],
+      };
+    },
+    scopes: ["rewards", "loyalty", "customers"],
+    keepPrevious: true,
+  });
+
+  const overview = bootQuery.data?.overview ?? null;
+  const rewards = bootQuery.data?.rewards ?? [];
+  const programs = bootQuery.data?.programs ?? [];
+  const redemptions = bootQuery.data?.redemptions ?? [];
+  const loading = bootQuery.isLoading && !bootQuery.data;
+  const load = React.useCallback(async () => {
+    try {
+      await bootQuery.refetch();
     } catch (e: any) {
       toast.error(e?.message || "Failed to load rewards");
-    } finally {
-      setLoading(false);
     }
-  }, [tab, search]);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  useAppSync(["rewards", "loyalty", "customers"], () => void load());
+  }, [bootQuery]);
 
   React.useEffect(() => {
     if (!PROGRAM_TABS.has(tab)) return;

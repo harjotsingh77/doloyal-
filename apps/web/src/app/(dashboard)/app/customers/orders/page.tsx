@@ -54,11 +54,19 @@ import type {
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 import { OrderFormDialog } from "./order-form-dialog";
 import { useCommerceLive } from "@/lib/data-sync";
 
 const ALL = "__all__";
+
+type OrdersBoot = {
+  orders: ClientOrder[];
+  total: number;
+  summary: ClientOrderSummary;
+  products: CatalogProduct[];
+};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -82,11 +90,6 @@ function paymentVariant(status: ClientOrderPaymentStatus): "success" | "warning"
 export default function OrdersPage() {
   const router = useRouter();
   const { format: fmt } = useCurrency();
-  const [summary, setSummary] = React.useState<ClientOrderSummary | null>(null);
-  const [orders, setOrders] = React.useState<ClientOrder[]>([]);
-  const [products, setProducts] = React.useState<CatalogProduct[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [productId, setProductId] = React.useState(ALL);
@@ -95,7 +98,6 @@ export default function OrdersPage() {
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
   const [page, setPage] = React.useState(1);
-  const [total, setTotal] = React.useState(0);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const pageSize = 20;
 
@@ -113,10 +115,9 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
-    try {
-      if (!opts?.silent) setLoading(true);
-      setError(null);
+  const bootQuery = useResource<OrdersBoot>({
+    queryKey: ["orders-page", debouncedSearch, productId, status, paymentStatus, from, to, page],
+    queryFn: async () => {
       const query: ClientOrderQuery = {
         search: debouncedSearch || undefined,
         productId: productId === ALL ? undefined : productId,
@@ -132,24 +133,35 @@ export default function OrdersPage() {
         api.getOrderSummary(),
         api.listProducts({ limit: 100 }),
       ]);
-      setOrders(list.items);
-      setTotal(list.total);
-      setSummary(stats);
-      setProducts(catalog.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load orders");
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, productId, status, paymentStatus, from, to, page]);
+      return {
+        orders: list.items,
+        total: list.total,
+        summary: stats,
+        products: catalog.items,
+      };
+    },
+    scopes: ["orders", "products", "customers", "dashboard"],
+    keepPrevious: true,
+  });
+
+  const orders = bootQuery.data?.orders ?? [];
+  const total = bootQuery.data?.total ?? 0;
+  const summary = bootQuery.data?.summary ?? null;
+  const products = bootQuery.data?.products ?? [];
+  const loading = bootQuery.isLoading && !bootQuery.data;
+  const error = bootQuery.error && !bootQuery.data
+    ? bootQuery.error instanceof Error
+      ? bootQuery.error.message
+      : "Failed to load orders"
+    : null;
+
+  const load = React.useCallback(async (_opts?: { silent?: boolean }) => {
+    await bootQuery.refetch();
+  }, [bootQuery]);
 
   React.useEffect(() => {
     setPage(1);
   }, [debouncedSearch, productId, status, paymentStatus, from, to]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
 
   useCommerceLive(["orders", "customers", "products"], () => void load({ silent: true }));
 

@@ -130,8 +130,8 @@ export default function AnalyticsPage() {
     enabled: Boolean(openMetric && fromDate && toDate),
   });
   const detail = openMetric ? detailQuery.data ?? null : null;
-  const detailLoading = Boolean(openMetric) && detailQuery.isFetching && !detailQuery.data;
-  const detailError = detailQuery.error
+  const detailLoading = Boolean(openMetric) && !detail && detailQuery.isFetching;
+  const detailError = detailQuery.error && !detail
     ? detailQuery.error instanceof Error
       ? detailQuery.error.message
       : "Failed to load details"

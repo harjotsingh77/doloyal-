@@ -10,24 +10,23 @@ import {
 import type { CreateMembershipTierInput, MembershipTier } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 
 export default function MembershipsPage() {
   const { format } = useCurrency();
-  const [tiers, setTiers] = React.useState<MembershipTier[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const tiersQuery = useResource<MembershipTier[]>({
+    queryKey: ["membership-tiers"],
+    queryFn: () => api.getTiers(),
+    scopes: ["dashboard"],
+  });
+  const tiers = tiersQuery.data ?? [];
+  const loading = tiersQuery.isLoading && tiers.length === 0;
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [name, setName] = React.useState<"SILVER" | "GOLD" | "PLATINUM">("SILVER");
   const [price, setPrice] = React.useState("0");
   const [benefits, setBenefits] = React.useState("");
-
-  const load = React.useCallback(async () => {
-    try { setLoading(true); setTiers(await api.getTiers()); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "Could not load membership tiers"); }
-    finally { setLoading(false); }
-  }, []);
-  React.useEffect(() => { load(); }, [load]);
 
   const createTier = async () => {
     const parsedPrice = Number(price);
@@ -41,7 +40,7 @@ export default function MembershipsPage() {
       };
       await api.createTier(input);
       setOpen(false); setName("SILVER"); setPrice("0"); setBenefits("");
-      await load(); toast.success("Membership tier created");
+      await tiersQuery.refetch(); toast.success("Membership tier created");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Could not create membership tier"); }
     finally { setSaving(false); }
   };

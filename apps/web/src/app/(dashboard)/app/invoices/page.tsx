@@ -50,6 +50,7 @@ import type { Invoice, CreateInvoiceInput, Customer } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useAppSync } from "@/lib/data-sync";
 import { useCurrency } from "@/lib/currency-context";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 
 /* ───────── Invoice Template Definitions ───────── */
@@ -635,14 +636,44 @@ type ActiveTab = "invoices" | "templates";
 
 export default function InvoicesPage() {
   const { format: fmt } = useCurrency();
-  const [invoices, setInvoices] = React.useState<Invoice[]>([]);
-  const [customers, setCustomers] = React.useState<Customer[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [activeTab, setActiveTab] = React.useState<ActiveTab>("invoices");
+
+  const bootQuery = useResource<{ invoices: Invoice[]; customers: Customer[] }>({
+    queryKey: ["invoices-page", statusFilter],
+    queryFn: async () => {
+      const params: { status?: string } = {};
+      if (statusFilter !== "ALL") params.status = statusFilter;
+      const [custResult, invResult] = await Promise.all([
+        api.listCustomers({ limit: 200 }),
+        api.listInvoices(params),
+      ]);
+      return { invoices: invResult, customers: custResult.items };
+    },
+    scopes: ["invoices", "customers", "dashboard"],
+    keepPrevious: true,
+  });
+
+  const customers = bootQuery.data?.customers ?? [];
+  const invoices = React.useMemo(() => {
+    const rows = bootQuery.data?.invoices ?? [];
+    if (!debouncedSearch) return rows;
+    const q = debouncedSearch.toLowerCase();
+    return rows.filter((inv) => inv.customerName.toLowerCase().includes(q));
+  }, [bootQuery.data, debouncedSearch]);
+  const loading = bootQuery.isLoading && !bootQuery.data;
+  const error =
+    bootQuery.error && !bootQuery.data
+      ? bootQuery.error instanceof Error
+        ? bootQuery.error.message
+        : "Failed to load invoices"
+      : null;
+
+  const loadData = React.useCallback(async () => {
+    await bootQuery.refetch();
+  }, [bootQuery]);
 
   // Custom Templates State & Builder
   const [allTemplates, setAllTemplates] = React.useState<InvoiceTemplate[]>(() => {
@@ -913,33 +944,7 @@ export default function InvoicesPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const loadData = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const custResult = await api.listCustomers({ limit: 200 });
-      setCustomers(custResult.items);
-      const params: { status?: string } = {};
-      if (statusFilter !== "ALL") params.status = statusFilter;
-      const invResult = await api.listInvoices(params);
-      const filtered = debouncedSearch
-        ? invResult.filter((inv) =>
-            inv.customerName.toLowerCase().includes(debouncedSearch.toLowerCase()),
-          )
-        : invResult;
-      setInvoices(filtered);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load invoices");
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, statusFilter]);
-
-  React.useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useAppSync(["invoices", "customers", "dashboard"], () => loadData());
+  useAppSync(["invoices", "customers", "dashboard"], () => void loadData());
 
   const handleViewInvoice = async (id: string) => {
     try {

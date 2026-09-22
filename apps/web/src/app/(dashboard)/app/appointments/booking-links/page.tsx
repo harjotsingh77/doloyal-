@@ -77,6 +77,7 @@ import {
 } from "@doloyal/ui";
 import type { BookingLink, BookingLinkAnalytics } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 
 /* ── SaaS Color System & Tokens ────────────────────────────────────────── */
@@ -316,9 +317,17 @@ export default function BookingLinksPage() {
   const router = useRouter();
 
   // State Management
-  const [links, setLinks] = React.useState<BookingLink[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const linksQuery = useResource<BookingLink[]>({
+    queryKey: ["booking-links"],
+    queryFn: () => api.listBookingLinks(),
+    scopes: ["appointments"],
+  });
+  const [links, setLinks] = React.useState<BookingLink[]>(() => linksQuery.data ?? []);
+  const loading = linksQuery.isLoading && links.length === 0;
   const [refreshing, setRefreshing] = React.useState(false);
+  React.useEffect(() => {
+    if (linksQuery.data) setLinks(linksQuery.data);
+  }, [linksQuery.data]);
   const [error, setError] = React.useState<string | null>(null);
   const [staffList, setStaffList] = React.useState<{ id: string; name: string }[]>([]);
 
@@ -401,22 +410,18 @@ export default function BookingLinksPage() {
   const fetchBookingLinks = React.useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
-      else {
-        setLoading(true);
-        setError(null);
-      }
+      else setError(null);
       const data = await api.listBookingLinks(isRefresh ? { bustCache: true } : undefined);
       setLinks(Array.isArray(data) ? data : []);
       if (isRefresh) toast.success("Booking links refreshed");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load booking links";
       if (isRefresh) toast.error(message);
-      else setError(message);
+      else if (!links.length) setError(message);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [links.length]);
 
   React.useEffect(() => {
     void fetchBookingLinks();

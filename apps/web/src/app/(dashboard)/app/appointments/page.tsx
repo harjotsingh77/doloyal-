@@ -80,7 +80,7 @@ import { relativeTime } from "@doloyal/shared";
 import type { Appointment, AppointmentDetail } from "@doloyal/shared";
 import type { BookingSource, PaymentStatus, AppointmentStatusExtended } from "@doloyal/shared";
 import { api } from "@/lib/api";
-import { useAppSync } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 
 type ViewMode = "table" | "kanban" | "calendar" | "timeline";
@@ -262,11 +262,8 @@ function getDurationMinutes(start: string, end: string): number {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function AppointmentsPage() {
-  const [appointments, setAppointments] = React.useState<Appointment[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [highlightedIds, setHighlightedIds] = React.useState<Set<string>>(new Set());
+  const prevIdsRef = React.useRef<Set<string>>(new Set());
 
   // View state
   const [viewMode, setViewMode] = React.useState<ViewMode>("table");
@@ -302,32 +299,30 @@ export default function AppointmentsPage() {
   const [updating, setUpdating] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
 
-  // Staff list for filter
-  const [staffList, setStaffList] = React.useState<string[]>([]);
-
-  const loadAppointments = React.useCallback(async () => {
-    try {
-      setError(null);
+  const listQuery = useResource<Appointment[]>({
+    queryKey: ["appointments", statusFilter, dateFrom, dateTo],
+    queryFn: async () => {
       const params: { status?: string; from?: string; to?: string } = {};
       if (statusFilter !== "ALL") params.status = statusFilter;
       if (dateFrom) params.from = dateFrom;
       if (dateTo) params.to = dateTo;
-      const result = await api.listAppointments(params);
-      setAppointments((prev) => {
-        const prevIds = new Set(prev.map((a) => a.id));
-        const newIds = new Set(result.map((a) => a.id));
-        const diff = new Set<string>();
-        result.forEach((a) => { if (!prevIds.has(a.id)) diff.add(a.id); });
-        if (diff.size > 0) setHighlightedIds(diff);
-        return result;
-      });
-      setLastUpdated(new Date());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load appointments");
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, dateFrom, dateTo]);
+      return api.listAppointments(params);
+    },
+    scopes: ["appointments", "customers"],
+    keepPrevious: true,
+  });
+  const appointments = listQuery.data ?? [];
+  const loading = listQuery.isLoading && appointments.length === 0;
+  const error = listQuery.error && appointments.length === 0
+    ? listQuery.error instanceof Error
+      ? listQuery.error.message
+      : "Failed to load appointments"
+    : null;
+  const lastUpdated = listQuery.dataUpdatedAt ? new Date(listQuery.dataUpdatedAt) : null;
+
+  const loadAppointments = React.useCallback(async () => {
+    await listQuery.refetch();
+  }, [listQuery]);
 
   const handleManualRefresh = React.useCallback(async () => {
     setIsSpinning(true);
@@ -364,22 +359,29 @@ export default function AppointmentsPage() {
   }, []);
 
   React.useEffect(() => {
-    loadAppointments();
     loadCustomers();
-  }, [loadAppointments, loadCustomers]);
-
-  useAppSync(["appointments", "customers"], () => {
-    loadAppointments();
-    loadCustomers();
-  });
+  }, [loadCustomers]);
 
   // Poll every 30s
   React.useEffect(() => {
     const interval = setInterval(() => {
-      loadAppointments();
+      void listQuery.refetch();
     }, 30000);
     return () => clearInterval(interval);
-  }, [loadAppointments]);
+  }, [listQuery]);
+
+  React.useEffect(() => {
+    const nextIds = new Set(appointments.map((a) => a.id));
+    const prev = prevIdsRef.current;
+    if (prev.size) {
+      const diff = new Set<string>();
+      nextIds.forEach((id) => {
+        if (!prev.has(id)) diff.add(id);
+      });
+      if (diff.size) setHighlightedIds(diff);
+    }
+    prevIdsRef.current = nextIds;
+  }, [appointments]);
 
   // Clear highlights after 3s
   React.useEffect(() => {
@@ -390,9 +392,9 @@ export default function AppointmentsPage() {
   }, [highlightedIds]);
 
   // Derive staff list from appointments
-  React.useEffect(() => {
+  const staffList = React.useMemo(() => {
     const names = new Set(appointments.map((a) => a.staffName).filter(Boolean));
-    setStaffList(Array.from(names) as string[]);
+    return Array.from(names) as string[];
   }, [appointments]);
 
   const handleStatusUpdate = React.useCallback(

@@ -165,12 +165,16 @@ export class DashboardMetricsService {
     if (!isDashboardMetricId(metric)) {
       throw new BadRequestException('Unknown dashboard metric');
     }
+    const metricId = metric as DashboardMetricId;
     const now = new Date();
     const fallbackTo = toYmd(now);
     const range = resolveComparisonRange(from || fallbackTo, to || fallbackTo);
-    const ctx = await this.loadContext(tenantId, range);
+    // Load only the tables this metric needs — the previous path always
+    // pulled every customer plus 6 other full windows (~7 queries) even for
+    // a simple revenue card.
+    const ctx = await this.loadContext(tenantId, range, metricId);
 
-    switch (metric as DashboardMetricId) {
+    switch (metricId) {
       case 'revenue':
         return this.revenueDetail(ctx);
       case 'customers':
@@ -200,77 +204,254 @@ export class DashboardMetricsService {
     }
   }
 
-  private async loadContext(tenantId: string, range: DateRangeComparison): Promise<MetricContext> {
+  /** Which datasets each metric actually reads. */
+  private needsFor(metric: DashboardMetricId): {
+    invoices: boolean;
+    orders: boolean;
+    allCustomers: boolean;
+    points: boolean;
+    reviews: boolean;
+    appointments: boolean;
+    memberships: boolean;
+    buyerCustomers: boolean;
+  } {
+    switch (metric) {
+      case 'revenue':
+        return {
+          invoices: true,
+          orders: true,
+          allCustomers: false,
+          points: false,
+          reviews: false,
+          appointments: false,
+          memberships: false,
+          buyerCustomers: true,
+        };
+      case 'ai_revenue':
+      case 'ai_retention':
+      case 'customers':
+      case 'repeat_rate':
+        return {
+          invoices: true,
+          orders: true,
+          allCustomers: true,
+          points: false,
+          reviews: false,
+          appointments: metric === 'ai_revenue' || metric === 'ai_retention',
+          memberships: false,
+          buyerCustomers: false,
+        };
+      case 'new_customers':
+      case 'inactive':
+        return {
+          invoices: false,
+          orders: false,
+          allCustomers: true,
+          points: false,
+          reviews: false,
+          appointments: false,
+          memberships: false,
+          buyerCustomers: false,
+        };
+      case 'points':
+        return {
+          invoices: false,
+          orders: false,
+          allCustomers: false,
+          points: true,
+          reviews: false,
+          appointments: false,
+          memberships: false,
+          buyerCustomers: true,
+        };
+      case 'orders':
+        return {
+          invoices: false,
+          orders: true,
+          allCustomers: false,
+          points: false,
+          reviews: false,
+          appointments: false,
+          memberships: false,
+          buyerCustomers: true,
+        };
+      case 'reviews':
+        return {
+          invoices: false,
+          orders: false,
+          allCustomers: false,
+          points: false,
+          reviews: true,
+          appointments: false,
+          memberships: false,
+          buyerCustomers: false,
+        };
+      case 'appointments':
+        return {
+          invoices: false,
+          orders: false,
+          allCustomers: false,
+          points: false,
+          reviews: false,
+          appointments: true,
+          memberships: false,
+          buyerCustomers: true,
+        };
+      case 'memberships':
+        return {
+          invoices: false,
+          orders: false,
+          allCustomers: false,
+          points: false,
+          reviews: false,
+          appointments: false,
+          memberships: true,
+          buyerCustomers: false,
+        };
+      default:
+        return {
+          invoices: true,
+          orders: true,
+          allCustomers: true,
+          points: true,
+          reviews: true,
+          appointments: true,
+          memberships: true,
+          buyerCustomers: false,
+        };
+    }
+  }
+
+  private async loadContext(
+    tenantId: string,
+    range: DateRangeComparison,
+    metric: DashboardMetricId,
+  ): Promise<MetricContext> {
     const windowFrom = range.prevFrom;
     const windowTo = range.currentTo;
-    const [
-      invoices,
-      orders,
-      customers,
-      points,
-      reviews,
-      appointments,
-      memberships,
-    ] = await Promise.all([
-      this.prisma.invoice.findMany({
-        where: { tenantId, status: 'PAID', createdAt: { gte: windowFrom, lte: windowTo } },
-        select: { customerId: true, total: true, createdAt: true },
-      }),
-      this.prisma.clientOrder.findMany({
-        where: { tenantId, orderDate: { gte: windowFrom, lte: windowTo } },
-        select: {
-          id: true,
-          customerId: true,
-          total: true,
-          status: true,
-          paymentStatus: true,
-          orderDate: true,
-          orderNumber: true,
-        },
-      }).catch(() => [] as OrderRow[]),
-      this.prisma.customer.findMany({
-        where: { tenantId },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          createdAt: true,
-          lastVisitAt: true,
-          totalSpent: true,
-          status: true,
-        },
-      }),
-      this.prisma.pointsLedger.findMany({
-        where: { tenantId, amount: { lt: 0 }, createdAt: { gte: windowFrom, lte: windowTo } },
-        select: { customerId: true, amount: true, createdAt: true, reason: true },
-      }),
-      this.prisma.review.findMany({
-        where: { tenantId, publishedAt: { gte: windowFrom, lte: windowTo } },
-        select: {
-          id: true,
-          rating: true,
-          status: true,
-          body: true,
-          authorName: true,
-          publishedAt: true,
-          customerId: true,
-        },
-      }).catch(() => [] as ReviewRow[]),
-      this.prisma.appointment.findMany({
-        where: { tenantId, startTime: { gte: windowFrom, lte: windowTo } },
-        select: { id: true, status: true, startTime: true, serviceName: true, customerId: true },
-      }),
-      this.prisma.customerMembership.findMany({
-        where: { customer: { tenantId } },
-        select: {
-          assignedAt: true,
-          customerId: true,
-          tier: { select: { name: true, price: true, validityDays: true } },
-        },
-      }).catch(() => [] as MembershipRow[]),
-    ]);
+    const needs = this.needsFor(metric);
+    const empty: MetricContext = {
+      range,
+      invoices: [],
+      orders: [],
+      customers: [],
+      points: [],
+      reviews: [],
+      appointments: [],
+      memberships: [],
+    };
 
-    return { range, invoices, orders, customers, points, reviews, appointments, memberships };
+    const [invoices, orders, allCustomers, points, reviews, appointments, memberships] =
+      await Promise.all([
+        needs.invoices
+          ? this.prisma.invoice.findMany({
+              where: { tenantId, status: 'PAID', createdAt: { gte: windowFrom, lte: windowTo } },
+              select: { customerId: true, total: true, createdAt: true },
+            })
+          : Promise.resolve([] as InvoiceRow[]),
+        needs.orders
+          ? this.prisma.clientOrder
+              .findMany({
+                where: { tenantId, orderDate: { gte: windowFrom, lte: windowTo } },
+                select: {
+                  id: true,
+                  customerId: true,
+                  total: true,
+                  status: true,
+                  paymentStatus: true,
+                  orderDate: true,
+                  orderNumber: true,
+                },
+              })
+              .catch(() => [] as OrderRow[])
+          : Promise.resolve([] as OrderRow[]),
+        needs.allCustomers
+          ? this.prisma.customer.findMany({
+              where: { tenantId },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                createdAt: true,
+                lastVisitAt: true,
+                totalSpent: true,
+                status: true,
+              },
+            })
+          : Promise.resolve([] as CustomerRow[]),
+        needs.points
+          ? this.prisma.pointsLedger.findMany({
+              where: { tenantId, amount: { lt: 0 }, createdAt: { gte: windowFrom, lte: windowTo } },
+              select: { customerId: true, amount: true, createdAt: true, reason: true },
+            })
+          : Promise.resolve([] as PointsRow[]),
+        needs.reviews
+          ? this.prisma.review
+              .findMany({
+                where: { tenantId, publishedAt: { gte: windowFrom, lte: windowTo } },
+                select: {
+                  id: true,
+                  rating: true,
+                  status: true,
+                  body: true,
+                  authorName: true,
+                  publishedAt: true,
+                  customerId: true,
+                },
+              })
+              .catch(() => [] as ReviewRow[])
+          : Promise.resolve([] as ReviewRow[]),
+        needs.appointments
+          ? this.prisma.appointment.findMany({
+              where: { tenantId, startTime: { gte: windowFrom, lte: windowTo } },
+              select: { id: true, status: true, startTime: true, serviceName: true, customerId: true },
+            })
+          : Promise.resolve([] as AppointmentRow[]),
+        needs.memberships
+          ? this.prisma.customerMembership
+              .findMany({
+                where: { customer: { tenantId } },
+                select: {
+                  assignedAt: true,
+                  customerId: true,
+                  tier: { select: { name: true, price: true, validityDays: true } },
+                },
+              })
+              .catch(() => [] as MembershipRow[])
+          : Promise.resolve([] as MembershipRow[]),
+      ]);
+
+    let customers = allCustomers;
+    if (needs.buyerCustomers && !needs.allCustomers) {
+      const ids = new Set<string>();
+      for (const row of invoices) ids.add(row.customerId);
+      for (const row of orders) ids.add(row.customerId);
+      for (const row of points) ids.add(row.customerId);
+      for (const row of appointments) ids.add(row.customerId);
+      if (ids.size) {
+        customers = await this.prisma.customer.findMany({
+          where: { tenantId, id: { in: Array.from(ids) } },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            createdAt: true,
+            lastVisitAt: true,
+            totalSpent: true,
+            status: true,
+          },
+        });
+      }
+    }
+
+    empty.invoices = invoices;
+    empty.orders = orders;
+    empty.customers = customers;
+    empty.points = points;
+    empty.reviews = reviews;
+    empty.appointments = appointments;
+    empty.memberships = memberships;
+    return empty;
   }
 
   private qualifyingOrders(rows: OrderRow[], from: Date, to: Date) {

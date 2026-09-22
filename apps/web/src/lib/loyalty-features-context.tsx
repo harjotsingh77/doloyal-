@@ -4,6 +4,9 @@ import * as React from "react";
 import { api } from "@/lib/api";
 import type { FeatureFlagState, FeatureFlagCatalogResponse } from "@doloyal/shared";
 import { isCoreLoyaltyFeature } from "@doloyal/shared";
+import { useResource } from "@/lib/use-resource";
+import { getStaffAuthToken } from "@/lib/access-token";
+import { writeQuerySnapshot } from "@/lib/api-cache";
 
 type FeaturesContextValue = {
   features: FeatureFlagState[];
@@ -17,30 +20,38 @@ type FeaturesContextValue = {
 };
 
 const FeaturesContext = React.createContext<FeaturesContextValue | null>(null);
+const FLAGS_KEY = ["loyalty-feature-flags"] as const;
 
 export function LoyaltyFeaturesProvider({ children }: { children: React.ReactNode }) {
-  const [features, setFeatures] = React.useState<FeatureFlagState[]>([]);
-  const [enabledKeys, setEnabledKeys] = React.useState<Set<string>>(new Set(["program_settings", "leaderboard"]));
-  const [loading, setLoading] = React.useState(true);
+  const catalogQuery = useResource<FeatureFlagCatalogResponse>({
+    queryKey: FLAGS_KEY,
+    queryFn: () => api.getFeatureFlags(),
+    scopes: ["loyalty"],
+  });
 
-  const applyCatalog = React.useCallback((catalog: FeatureFlagCatalogResponse) => {
-    setFeatures(catalog.features);
-    setEnabledKeys(new Set(catalog.enabledKeys));
+  const [local, setLocal] = React.useState<FeatureFlagCatalogResponse | null>(null);
+
+  React.useEffect(() => {
+    if (catalogQuery.data) setLocal(catalogQuery.data);
+  }, [catalogQuery.data]);
+
+  const catalog = local ?? catalogQuery.data ?? null;
+  const features = catalog?.features ?? [];
+  const enabledKeys = React.useMemo(
+    () => new Set(catalog?.enabledKeys ?? ["program_settings", "leaderboard"]),
+    [catalog],
+  );
+  const loading = catalogQuery.isLoading && !catalog;
+
+  const applyCatalog = React.useCallback((next: FeatureFlagCatalogResponse) => {
+    setLocal(next);
+    writeQuerySnapshot(FLAGS_KEY, getStaffAuthToken(), next);
   }, []);
 
   const refresh = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      const catalog = await api.getFeatureFlags();
-      applyCatalog(catalog);
-    } finally {
-      setLoading(false);
-    }
-  }, [applyCatalog]);
-
-  React.useEffect(() => {
-    refresh();
-  }, [refresh]);
+    const result = await catalogQuery.refetch();
+    if (result.data) applyCatalog(result.data);
+  }, [catalogQuery, applyCatalog]);
 
   const isEnabled = React.useCallback(
     (key: string) => isCoreLoyaltyFeature(key) || enabledKeys.has(key),
@@ -49,18 +60,18 @@ export function LoyaltyFeaturesProvider({ children }: { children: React.ReactNod
 
   const toggle = React.useCallback(
     async (key: string, enabled: boolean) => {
-      const catalog = await api.toggleFeatureFlag(key, enabled);
-      applyCatalog(catalog);
-      return catalog;
+      const next = await api.toggleFeatureFlag(key, enabled);
+      applyCatalog(next);
+      return next;
     },
     [applyCatalog],
   );
 
   const updateConfig = React.useCallback(
     async (key: string, config: Record<string, unknown>) => {
-      const catalog = await api.updateFeatureConfig(key, config);
-      applyCatalog(catalog);
-      return catalog;
+      const next = await api.updateFeatureConfig(key, config);
+      applyCatalog(next);
+      return next;
     },
     [applyCatalog],
   );

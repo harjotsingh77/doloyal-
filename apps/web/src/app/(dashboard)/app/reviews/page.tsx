@@ -31,6 +31,7 @@ import { api, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { ReviewVideoPlayer, captureVideoThumbnail } from "@/components/reviews/review-video";
 import { useAppSync } from "@/lib/data-sync";
+import { useResource } from "@/lib/use-resource";
 
 function Stars({ value, size = "md" }: { value: number; size?: "sm" | "md" }) {
   const cls = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
@@ -77,17 +78,14 @@ function emptyCopy(filter: ReviewFilter): { title: string; description: string }
 }
 
 export default function ReviewsPage() {
-  const [summary, setSummary] = React.useState<ReviewSummary | null>(null);
-  const [reviews, setReviews] = React.useState<Review[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [listLoading, setListLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
   const [filter, setFilter] = React.useState<ReviewFilter>("ALL");
   const [rating, setRating] = React.useState<number | "ALL">("ALL");
-  const [cursor, setCursor] = React.useState<string | null>(null);
-  const [hasMore, setHasMore] = React.useState(false);
+  const [extra, setExtra] = React.useState<Review[]>([]);
+  const [extraCursor, setExtraCursor] = React.useState<string | null>(null);
+  const [extraHasMore, setExtraHasMore] = React.useState(false);
+  const [listLoading, setListLoading] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
   const [viewReview, setViewReview] = React.useState<Review | null>(null);
   const [rejectTarget, setRejectTarget] = React.useState<Review | null>(null);
@@ -99,68 +97,88 @@ export default function ReviewsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const loadSummary = React.useCallback(async () => {
-    setSummary(await api.getReviewSummary());
-  }, []);
+  const bootQuery = useResource<{
+    summary: ReviewSummary;
+    reviews: Review[];
+    hasMore: boolean;
+    cursor: string | null;
+  }>({
+    queryKey: ["reviews-page", debounced, filter, rating],
+    queryFn: async () => {
+      const [summary, page] = await Promise.all([
+        api.getReviewSummary(),
+        api.listReviews({
+          search: debounced || undefined,
+          filter,
+          rating: rating === "ALL" ? undefined : rating,
+          limit: 30,
+        }),
+      ]);
+      return {
+        summary,
+        reviews: page.items,
+        hasMore: page.hasMore,
+        cursor: page.nextCursor,
+      };
+    },
+    scopes: ["reviews", "customers", "dashboard"],
+    keepPrevious: true,
+  });
+
+  React.useEffect(() => {
+    setExtra([]);
+    setExtraCursor(null);
+    setExtraHasMore(false);
+  }, [debounced, filter, rating]);
+
+  const summary = bootQuery.data?.summary ?? null;
+  const reviews = React.useMemo(
+    () => [...(bootQuery.data?.reviews ?? []), ...extra],
+    [bootQuery.data, extra],
+  );
+  const cursor = extra.length ? extraCursor : bootQuery.data?.cursor ?? null;
+  const hasMore = extra.length ? extraHasMore : Boolean(bootQuery.data?.hasMore);
+  const loading = bootQuery.isLoading && !bootQuery.data;
+  const error =
+    bootQuery.error && !bootQuery.data
+      ? bootQuery.error instanceof Error
+        ? bootQuery.error.message
+        : "Could not load reviews."
+      : null;
 
   const loadList = React.useCallback(
     async (nextCursor?: string | null, append = false) => {
-      const page = await api.listReviews({
-        search: debounced || undefined,
-        filter,
-        rating: rating === "ALL" ? undefined : rating,
-        cursor: nextCursor || undefined,
-        limit: 30,
-      });
-      setReviews((prev) => (append ? [...prev, ...page.items] : page.items));
-      setHasMore(page.hasMore);
-      setCursor(page.nextCursor);
-    },
-    [debounced, filter, rating],
-  );
-
-  React.useEffect(() => {
-    let cancelled = false;
-    async function boot() {
-      setLoading(true);
-      setError(null);
-      try {
-        await loadSummary();
-        if (!cancelled) await loadList();
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load reviews.");
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (!append || !nextCursor) {
+        setExtra([]);
+        setExtraCursor(null);
+        setExtraHasMore(false);
+        await bootQuery.refetch();
+        return;
       }
-    }
-    void boot();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadSummary]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  React.useEffect(() => {
-    if (loading) return;
-    let cancelled = false;
-    async function refresh() {
       setListLoading(true);
       try {
-        if (!cancelled) await loadList();
-      } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : "Could not load reviews.");
+        const page = await api.listReviews({
+          search: debounced || undefined,
+          filter,
+          rating: rating === "ALL" ? undefined : rating,
+          cursor: nextCursor || undefined,
+          limit: 30,
+        });
+        setExtra((prev) => [...prev, ...page.items]);
+        setExtraHasMore(page.hasMore);
+        setExtraCursor(page.nextCursor);
       } finally {
-        if (!cancelled) setListLoading(false);
+        setListLoading(false);
       }
-    }
-    void refresh();
-    return () => {
-      cancelled = true;
-    };
-  }, [debounced, filter, rating]); // eslint-disable-line react-hooks/exhaustive-deps
+    },
+    [bootQuery, debounced, filter, rating],
+  );
 
   const refreshAll = async () => {
-    await loadSummary();
-    await loadList();
+    setExtra([]);
+    setExtraCursor(null);
+    setExtraHasMore(false);
+    await bootQuery.refetch();
   };
 
   useAppSync(["reviews", "customers"], () => {
@@ -209,8 +227,7 @@ export default function ReviewsPage() {
           action={
             <Button
               onClick={() => {
-                setLoading(true);
-                void loadSummary().then(() => loadList()).finally(() => setLoading(false));
+                void refreshAll();
               }}
             >
               Try again
