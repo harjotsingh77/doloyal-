@@ -110,6 +110,8 @@ export default function AnalyticsPage() {
     queryFn: () => api.getBusinessHealth(overviewParams),
     scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "loyalty", "appointments"],
     keepPrevious: true,
+    // Let overview claim the connection pool first so the page can paint.
+    enabled: Boolean(overviewQuery.data) || !overviewQuery.isLoading,
   });
   const data = overviewQuery.data ?? null;
   const health = healthQuery.data ?? null;

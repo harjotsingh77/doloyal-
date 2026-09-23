@@ -121,92 +121,64 @@ export class LoyaltyService {
     const twoMonthsAgo = new Date(now);
     twoMonthsAgo.setDate(twoMonthsAgo.getDate() - 60);
 
-    const [
-      totalMembers,
-      activeMembers,
-      prevActive,
-      pointsIssuedAgg,
-      pointsRedeemedAgg,
-      prevIssued,
-      prevRedeemed,
-      revenueAgg,
-      prevRevenue,
-      repeatCustomers,
-      totalWithVisits,
-      referralCount,
-      avgLtv,
-    ] = await Promise.all([
-      this.prisma.customer.count({ where: { tenantId } }),
-      this.prisma.customer.count({
-        where: { tenantId, lastVisitAt: { gte: monthAgo } },
-      }),
-      this.prisma.customer.count({
-        where: { tenantId, lastVisitAt: { gte: twoMonthsAgo, lt: monthAgo } },
-      }),
-      this.prisma.pointsLedger.aggregate({
-        where: { tenantId, amount: { gt: 0 }, createdAt: { gte: monthAgo } },
-        _sum: { amount: true },
-      }),
-      this.prisma.pointsLedger.aggregate({
-        where: { tenantId, amount: { lt: 0 }, createdAt: { gte: monthAgo } },
-        _sum: { amount: true },
-      }),
-      this.prisma.pointsLedger.aggregate({
-        where: {
-          tenantId,
-          amount: { gt: 0 },
-          createdAt: { gte: twoMonthsAgo, lt: monthAgo },
-        },
-        _sum: { amount: true },
-      }),
-      this.prisma.pointsLedger.aggregate({
-        where: {
-          tenantId,
-          amount: { lt: 0 },
-          createdAt: { gte: twoMonthsAgo, lt: monthAgo },
-        },
-        _sum: { amount: true },
-      }),
-      this.prisma.invoice.aggregate({
-        where: { tenantId, createdAt: { gte: monthAgo }, status: 'PAID' as any },
-        _sum: { total: true },
-      }),
-      this.prisma.invoice.aggregate({
-        where: {
-          tenantId,
-          createdAt: { gte: twoMonthsAgo, lt: monthAgo },
-          status: 'PAID' as any,
-        },
-        _sum: { total: true },
-      }),
-      this.prisma.customer.count({
-        where: { tenantId, totalVisits: { gte: 2 } },
-      }),
-      this.prisma.customer.count({
-        where: { tenantId, totalVisits: { gte: 1 } },
-      }),
+    const [customerRow, pointsRow, invoiceRow, referralCount] = await Promise.all([
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COUNT(*)::float8 AS "totalMembers",
+          COUNT(*) FILTER (WHERE "lastVisitAt" >= ${monthAgo})::float8 AS "activeMembers",
+          COUNT(*) FILTER (WHERE "lastVisitAt" >= ${twoMonthsAgo} AND "lastVisitAt" < ${monthAgo})::float8 AS "prevActive",
+          COUNT(*) FILTER (WHERE "totalVisits" >= 2)::float8 AS "repeatCustomers",
+          COUNT(*) FILTER (WHERE "totalVisits" >= 1)::float8 AS "totalWithVisits",
+          COALESCE(AVG("totalSpent"), 0)::float8 AS "avgLtv"
+        FROM "Customer"
+        WHERE "tenantId" = ${tenantId}
+      `,
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COALESCE(SUM(amount) FILTER (WHERE amount > 0 AND "createdAt" >= ${monthAgo}), 0)::float8 AS issued,
+          COALESCE(SUM(amount) FILTER (WHERE amount < 0 AND "createdAt" >= ${monthAgo}), 0)::float8 AS redeemed,
+          COALESCE(SUM(amount) FILTER (WHERE amount > 0 AND "createdAt" >= ${twoMonthsAgo} AND "createdAt" < ${monthAgo}), 0)::float8 AS "prevIssued",
+          COALESCE(SUM(amount) FILTER (WHERE amount < 0 AND "createdAt" >= ${twoMonthsAgo} AND "createdAt" < ${monthAgo}), 0)::float8 AS "prevRedeemed"
+        FROM "PointsLedger"
+        WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${twoMonthsAgo}
+      `,
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COALESCE(SUM(total) FILTER (WHERE "createdAt" >= ${monthAgo}), 0)::float8 AS revenue,
+          COALESCE(SUM(total) FILTER (WHERE "createdAt" >= ${twoMonthsAgo} AND "createdAt" < ${monthAgo}), 0)::float8 AS "prevRevenue"
+        FROM "Invoice"
+        WHERE "tenantId" = ${tenantId}
+          AND status = 'PAID'::"InvoiceStatus"
+          AND "createdAt" >= ${twoMonthsAgo}
+      `,
       this.prisma.loyaltyReferral.count({
         where: { tenantId, status: { in: ['COMPLETED', 'REWARDED'] } },
       }),
-      this.prisma.customer.aggregate({
-        where: { tenantId },
-        _avg: { totalSpent: true },
-      }),
     ]);
+    const num = (row: Record<string, unknown> | undefined, key: string) => Number(row?.[key] ?? 0) || 0;
+    const customers = customerRow[0];
+    const points = pointsRow[0];
+    const invoices = invoiceRow[0];
+    const totalMembers = num(customers, 'totalMembers');
+    const activeMembers = num(customers, 'activeMembers');
+    const prevActive = num(customers, 'prevActive');
+    const repeatCustomers = num(customers, 'repeatCustomers');
+    const totalWithVisits = num(customers, 'totalWithVisits');
+    const avgSpent = num(customers, 'avgLtv');
 
     const pct = (cur: number, prev: number) =>
       prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 1000) / 10;
 
-    const issued = pointsIssuedAgg._sum.amount || 0;
-    const redeemed = Math.abs(pointsRedeemedAgg._sum.amount || 0);
-    const prevIss = prevIssued._sum.amount || 0;
-    const prevRed = Math.abs(prevRedeemed._sum.amount || 0);
-    const revenue = revenueAgg._sum.total || 0;
-    const prevRev = prevRevenue._sum.total || 0;
+    const issued = num(points, 'issued');
+    const redeemed = Math.abs(num(points, 'redeemed'));
+    const prevIss = num(points, 'prevIssued');
+    const prevRed = Math.abs(num(points, 'prevRedeemed'));
+    const revenue = num(invoices, 'revenue');
+    const prevRev = num(invoices, 'prevRevenue');
     const repeatRate =
       totalWithVisits > 0 ? Math.round((repeatCustomers / totalWithVisits) * 1000) / 10 : 0;
-    const referralRevenue = Math.round(referralCount * ((avgLtv._avg.totalSpent || 0) * 0.4));
-    const clv = Math.round((avgLtv._avg.totalSpent || 0) * 100) / 100;
+    const referralRevenue = Math.round(referralCount * (avgSpent * 0.4));
+    const clv = Math.round(avgSpent * 100) / 100;
 
     const kpis = [
       {
@@ -490,6 +462,17 @@ export class LoyaltyService {
     else if (period === 'yearly') since.setFullYear(since.getFullYear() - 1);
     else since.setFullYear(2000);
 
+    const orderBy =
+      metric === 'visits'
+        ? { totalVisits: 'desc' as const }
+        : metric === 'spend'
+          ? { totalSpent: 'desc' as const }
+          : metric === 'referrals'
+            ? { referralsMade: { _count: 'desc' as const } }
+            : metric === 'rewards'
+              ? { redemptions: { _count: 'desc' as const } }
+              : { pointsBalance: 'desc' as const };
+
     const customers = await this.prisma.customer.findMany({
       where: { tenantId },
       include: {
@@ -497,25 +480,11 @@ export class LoyaltyService {
         badges: { include: { badge: true } },
         _count: { select: { redemptions: true, referralsMade: true } },
       },
-      take: 200,
+      orderBy,
+      take: limit,
     });
 
-    const sorted = [...customers].sort((a, b) => {
-      switch (metric) {
-        case 'visits':
-          return b.totalVisits - a.totalVisits;
-        case 'spend':
-          return b.totalSpent - a.totalSpent;
-        case 'referrals':
-          return b._count.referralsMade - a._count.referralsMade;
-        case 'rewards':
-          return b._count.redemptions - a._count.redemptions;
-        default:
-          return b.pointsBalance - a.pointsBalance;
-      }
-    });
-
-    return sorted.slice(0, limit).map((c, i) => ({
+    return customers.map((c, i) => ({
       rank: i + 1,
       customerId: c.id,
       name: `${c.firstName} ${c.lastName}`.trim(),

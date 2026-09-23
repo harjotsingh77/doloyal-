@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { listBranches, type BranchRecord } from "./branches";
+import { useResource } from "./use-resource";
 
 export type WorkspaceMode = "global" | "branch";
 
@@ -24,32 +25,28 @@ interface BranchContextValue {
 }
 
 const SELECTED_ID_KEY = "doloyal_selected_branch_id";
+const BRANCHES_KEY = ["branches"] as const;
 
 const BranchContext = React.createContext<BranchContextValue | null>(null);
 
 export function BranchProvider({ children }: { children: React.ReactNode }) {
-  const [branches, setBranches] = React.useState<BranchRecord[]>([]);
-  const [loading, setLoading] = React.useState(true);
   const [selectedId, setSelectedId] = React.useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(SELECTED_ID_KEY);
   });
 
-  const refresh = React.useCallback(async () => {
-    try {
-      const rows = await listBranches();
-      setBranches(rows);
-    } catch {
-      // Surface empty state; the branches page shows its own error/retry UI.
-      setBranches([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const branchesQuery = useResource<BranchRecord[]>({
+    queryKey: BRANCHES_KEY,
+    queryFn: () => listBranches(),
+    scopes: ["dashboard"],
+  });
 
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const branches = branchesQuery.data ?? [];
+  const loading = branchesQuery.isLoading && branches.length === 0;
+
+  const refresh = React.useCallback(async () => {
+    await branchesQuery.refetch();
+  }, [branchesQuery]);
 
   // Keep in sync across tabs.
   React.useEffect(() => {
@@ -102,13 +99,23 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       exitBranch,
       workspaceBase,
     }),
-    [mode, branches, loading, selectedBranch, refresh, enterBranch, enterBranchById, exitBranch, workspaceBase],
+    [
+      mode,
+      branches,
+      loading,
+      selectedBranch,
+      refresh,
+      enterBranch,
+      enterBranchById,
+      exitBranch,
+      workspaceBase,
+    ],
   );
 
   return <BranchContext.Provider value={value}>{children}</BranchContext.Provider>;
 }
 
-export function useBranch(): BranchContextValue {
+export function useBranch() {
   const ctx = React.useContext(BranchContext);
   if (!ctx) throw new Error("useBranch must be used within BranchProvider");
   return ctx;

@@ -45,5 +45,13 @@ export function useResource<T>(options: {
   });
 
   const data = (query.data !== undefined ? query.data : cached) as T | undefined;
-  return { ...query, data };
+  const waiting = data === undefined;
+  return {
+    ...query,
+    data,
+    // Snapshot counts as loaded so remounts do not flash a full-page skeleton.
+    isLoading: query.isLoading && waiting,
+    isPending: query.isPending && waiting,
+    isFetching: query.isFetching,
+  };
 }

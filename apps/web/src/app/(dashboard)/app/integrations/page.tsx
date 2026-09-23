@@ -41,6 +41,7 @@ import {
 } from "@doloyal/ui";
 import { api } from "@/lib/api";
 import { getApiBaseUrl } from "@/lib/api-base";
+import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 import { IntegrationCard } from "@/components/integrations/integration-card";
 import { getBrandIcon } from "@/components/integrations/brand-icons";
@@ -78,9 +79,50 @@ function displayDescription(type: string, backendDescription: string): string {
 }
 
 export default function IntegrationsPage() {
-  const [providers, setProviders] = React.useState<any[]>([]);
-  const [integrations, setIntegrations] = React.useState<Record<string, any>>({});
-  const [loading, setLoading] = React.useState(true);
+  const bootQuery = useResource<{
+    providers: any[];
+    integrations: Record<string, any>;
+  }>({
+    queryKey: ["integrations-boot"],
+    queryFn: async () => {
+      const [provs, list] = await Promise.all([
+        api.listIntegrationProviders().catch(() => []),
+        api.listIntegrations().catch(() => []),
+      ]);
+      const validProvs = Array.isArray(provs) ? provs : [];
+      const providers = validProvs.filter(
+        (p: any) => p && p.type !== "SMS" && p.type !== "sms" && p.name !== "SMS Provider",
+      );
+      const map: Record<string, any> = {};
+      if (Array.isArray(list)) {
+        for (const i of list) {
+          if (i?.type) map[i.type.toLowerCase()] = i;
+        }
+      }
+      return { providers, integrations: map };
+    },
+    scopes: ["dashboard"],
+  });
+
+  const providers = bootQuery.data?.providers ?? [];
+  const [integrationsOverride, setIntegrationsOverride] = React.useState<Record<string, any> | null>(null);
+  const integrations = integrationsOverride ?? bootQuery.data?.integrations ?? {};
+  const loading = bootQuery.isLoading && !bootQuery.data;
+
+  React.useEffect(() => {
+    if (bootQuery.data) setIntegrationsOverride(null);
+  }, [bootQuery.data]);
+
+  const setIntegrations = React.useCallback(
+    (updater: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
+      setIntegrationsOverride((prev) => {
+        const base = prev ?? bootQuery.data?.integrations ?? {};
+        return typeof updater === "function" ? updater(base) : updater;
+      });
+    },
+    [bootQuery.data],
+  );
+
   const [search, setSearch] = React.useState("");
   const [categoryFilter, setCategoryFilter] = React.useState("all");
   const [connectDialog, setConnectDialog] = React.useState<string | null>(null);
@@ -110,33 +152,20 @@ export default function IntegrationsPage() {
   const [newDomain, setNewDomain] = React.useState("");
   const [creatingDomain, setCreatingDomain] = React.useState(false);
 
-  const loadAll = async () => {
+  const loadAll = React.useCallback(async () => {
     try {
-      setLoading(true);
-      const [provs, list] = await Promise.all([
-        api.listIntegrationProviders().catch(() => []),
-        api.listIntegrations().catch(() => []),
-      ]);
-      const validProvs = Array.isArray(provs) ? provs : [];
-      setProviders(validProvs.filter((p: any) => p && p.type !== "SMS" && p.type !== "sms" && p.name !== "SMS Provider"));
-      const map: Record<string, any> = {};
-      if (Array.isArray(list)) {
-        for (const i of list) {
-          if (i?.type) map[i.type.toLowerCase()] = i;
-        }
-      }
-      setIntegrations(map);
+      await bootQuery.refetch();
     } catch (err) {
       console.error("Failed to load integrations:", err);
       toast.error("Failed to load integrations");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [bootQuery]);
 
   React.useEffect(() => {
-    loadAll();
-  }, []);
+    if (bootQuery.error) {
+      toast.error("Failed to load integrations");
+    }
+  }, [bootQuery.error]);
 
   const loadAllRef = React.useRef<() => Promise<void>>(async () => {});
   React.useEffect(() => {

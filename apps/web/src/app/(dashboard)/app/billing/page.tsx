@@ -69,6 +69,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { convertAmount, formatCurrency } from "@/lib/currency";
+import { useResource } from "@/lib/use-resource";
 
 /* ─── Presentation helpers ─────────────────────────────────────────────── */
 
@@ -199,12 +200,6 @@ export default function BillingPage() {
   const { user } = useAuth();
   const isOwner = user?.activeRole === "OWNER";
 
-  const [tenant, setTenant] = React.useState<Tenant | null>(null);
-  const [sub, setSub] = React.useState<BillingSubscription | null>(null);
-  const [history, setHistory] = React.useState<BillingHistoryEntry[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
   const [changeOpen, setChangeOpen] = React.useState(false);
   const [targetPlanId, setTargetPlanId] = React.useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = React.useState(false);
@@ -214,32 +209,54 @@ export default function BillingPage() {
 
   const historyRef = React.useRef<HTMLDivElement>(null);
 
-  const load = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  type BillingBoot = {
+    sub: BillingSubscription | null;
+    tenant: Tenant | null;
+    history: BillingHistoryEntry[];
+  };
+
+  const bootQuery = useResource<BillingBoot>({
+    queryKey: ["billing-boot"],
+    queryFn: async () => {
       const [nextSub, nextTenant, nextHistory] = await Promise.all([
         api.getSubscription().catch(() => null),
         api.getTenant(),
         api.getBillingHistory().catch(() => []),
       ]);
-      if (!nextSub) {
-        setError("No active subscription was found for this account. Please contact support.");
-        return;
-      }
-      setSub(nextSub);
-      setTenant(nextTenant);
-      setHistory(nextHistory);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load billing information");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return {
+        sub: nextSub,
+        tenant: nextTenant,
+        history: nextHistory,
+      };
+    },
+    scopes: ["dashboard"],
+  });
+
+  const sub = bootQuery.data?.sub ?? null;
+  const [tenantOverride, setTenantOverride] = React.useState<Tenant | null>(null);
+  const tenant = tenantOverride ?? bootQuery.data?.tenant ?? null;
+  const history = bootQuery.data?.history ?? [];
+  const loading = bootQuery.isLoading && !bootQuery.data;
+  const error =
+    bootQuery.error
+      ? bootQuery.error instanceof Error
+        ? bootQuery.error.message
+        : "Could not load billing information"
+      : bootQuery.data && !bootQuery.data.sub
+        ? "No active subscription was found for this account. Please contact support."
+        : null;
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    if (bootQuery.data?.tenant) setTenantOverride(null);
+  }, [bootQuery.data?.tenant]);
+
+  const setTenant = React.useCallback((next: Tenant) => {
+    setTenantOverride(next);
+  }, []);
+
+  const load = React.useCallback(async () => {
+    await bootQuery.refetch();
+  }, [bootQuery]);
 
   const run = React.useCallback(
     async (action: () => Promise<unknown>, successMessage: string) => {

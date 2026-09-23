@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { ArrowLeft, BookOpen, Clock, TriangleAlert } from "lucide-react";
 import { Badge, Button, Card, Skeleton } from "@doloyal/ui";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/use-resource";
 import { CreateTicketDialog } from "@/components/support/create-ticket-dialog";
 
 type Article = Awaited<ReturnType<typeof api.getHelpArticle>>;
@@ -13,38 +14,32 @@ type Article = Awaited<ReturnType<typeof api.getHelpArticle>>;
 export default function HelpArticlePage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
-
-  const [article, setArticle] = React.useState<Article | null>(null);
-  const [related, setRelated] = React.useState<Article[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
 
-  React.useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const [articleRes, relatedRes] = await Promise.all([
-          api.getHelpArticle(slug),
-          api.listHelpArticles({ limit: 50 }),
-        ]);
-        if (!active) return;
-        setArticle(articleRes);
-        setRelated(
-          relatedRes.articles
-            .filter((a) => a.id !== articleRes.id && a.category === articleRes.category)
-            .slice(0, 4),
-        );
-      } catch {
-        if (active) setError(true);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [slug]);
+  const articleQuery = useResource<{
+    article: Article;
+    related: Awaited<ReturnType<typeof api.listHelpArticles>>["articles"];
+  }>({
+    queryKey: ["help-article", slug],
+    queryFn: async () => {
+      const [articleRes, relatedRes] = await Promise.all([
+        api.getHelpArticle(slug),
+        api.listHelpArticles({ limit: 50 }),
+      ]);
+      return {
+        article: articleRes,
+        related: relatedRes.articles
+          .filter((a) => a.id !== articleRes.id && a.category === articleRes.category)
+          .slice(0, 4),
+      };
+    },
+    scopes: ["dashboard"],
+  });
+
+  const article = articleQuery.data?.article ?? null;
+  const related = articleQuery.data?.related ?? [];
+  const loading = articleQuery.isLoading && !articleQuery.data;
+  const error = !!articleQuery.error;
 
   if (loading) {
     return (

@@ -18,6 +18,9 @@ import { Badge, Button, Card, Skeleton } from "@doloyal/ui";
 import { SUPPORT_STATUS_LABELS } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useResource } from "@/lib/use-resource";
+import { getStaffAuthToken } from "@/lib/access-token";
+import { writeQuerySnapshot } from "@/lib/api-cache";
 
 type Message = Awaited<ReturnType<typeof api.getSupportTicketMessages>>["messages"][number];
 type Ticket = Awaited<ReturnType<typeof api.getSupportTicket>>;
@@ -97,41 +100,53 @@ export default function SupportTicketConversationPage() {
   const { user } = useAuth();
   const ticketId = params.ticketId;
 
-  const [ticket, setTicket] = React.useState<Ticket | null>(null);
-  const [messages, setMessages] = React.useState<Message[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
+  const [ticketLocal, setTicketLocal] = React.useState<Ticket | null>(null);
+  const [messagesLocal, setMessagesLocal] = React.useState<Message[] | null>(null);
   const [text, setText] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const [sending, setSending] = React.useState(false);
   const endRef = React.useRef<HTMLDivElement>(null);
 
-  const load = React.useCallback(async () => {
-    try {
+  const ticketKey = React.useMemo(() => ["support-ticket", ticketId] as const, [ticketId]);
+
+  const ticketQuery = useResource<{ ticket: Ticket; messages: Message[] }>({
+    queryKey: ticketKey,
+    queryFn: async () => {
       const [ticketRes, conv] = await Promise.all([
         api.getSupportTicket(ticketId),
         api.getSupportTicketMessages(ticketId),
       ]);
-      setTicket(ticketRes);
-      setMessages(conv.messages);
-      setError(false);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [ticketId]);
+      return { ticket: ticketRes, messages: conv.messages };
+    },
+    scopes: ["dashboard"],
+  });
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    if (ticketQuery.data) {
+      setTicketLocal(ticketQuery.data.ticket);
+      setMessagesLocal(ticketQuery.data.messages);
+    }
+  }, [ticketQuery.data]);
+
+  const ticket = ticketLocal ?? ticketQuery.data?.ticket ?? null;
+  const messages = messagesLocal ?? ticketQuery.data?.messages ?? [];
+  const loading = ticketQuery.isLoading && !ticket;
+  const error = !!ticketQuery.error && !ticket;
+
+  const load = React.useCallback(async () => {
+    const result = await ticketQuery.refetch();
+    if (result.data) {
+      setTicketLocal(result.data.ticket);
+      setMessagesLocal(result.data.messages);
+    }
+  }, [ticketQuery]);
 
   // Mark as read once loaded.
   React.useEffect(() => {
-    if (!loading && !error) {
+    if (!loading && !error && ticket) {
       void api.markSupportTicketRead(ticketId).catch(() => {});
     }
-  }, [loading, error, ticketId]);
+  }, [loading, error, ticketId, ticket]);
 
   // Autoscroll on new messages.
   React.useEffect(() => {
@@ -174,7 +189,14 @@ export default function SupportTicketConversationPage() {
       } else {
         sent = await api.sendSupportTicketMessage(ticketId, { message: content });
       }
-      setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
+      setMessagesLocal((prev) => {
+        const base = prev ?? messages;
+        const next = base.some((m) => m.id === sent.id) ? base : [...base, sent];
+        if (ticket) {
+          writeQuerySnapshot(ticketKey, getStaffAuthToken(), { ticket, messages: next });
+        }
+        return next;
+      });
       setText("");
       setFile(null);
       void api.markSupportTicketRead(ticketId).catch(() => {});

@@ -1406,35 +1406,102 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
     query?: { days?: string; from?: string; to?: string },
   ): Promise<BusinessHealthInsight> {
     const range = resolveOverviewRange(query);
-    const snapshot = await this.gatherHealthSnapshot(
+    const cacheKey = `${tenantId}:${range.currentFromYmd}:${range.currentToYmd}`;
+    const cached = this.healthCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) return cached.result;
+
+    // Fast path: lean metrics for the rule score (no LLM, fewer queries).
+    const lean = await this.gatherLeanHealthSnapshot(
       tenantId,
       range.currentFrom,
       range.currentTo,
       range.prevFrom,
       range.prevTo,
     );
-    const fingerprint = JSON.stringify(snapshot);
-    const cacheKey = `${tenantId}:${range.currentFromYmd}:${range.currentToYmd}`;
-    const cached = this.healthCache.get(cacheKey);
-    const now = Date.now();
-    if (cached && cached.fingerprint === fingerprint && cached.expiresAt > now) {
-      return cached.result;
-    }
-
-    let result = this.ruleBasedHealth(snapshot, range.currentFromYmd, range.currentToYmd);
-    try {
-      const ai = await this.analyzeHealthWithAi(snapshot, range.currentFromYmd, range.currentToYmd);
-      if (ai) result = ai;
-    } catch (err: any) {
-      this.logger.warn(`Business health AI failed, using rules: ${err?.message || err}`);
-    }
-
+    const fingerprint = JSON.stringify(lean);
+    const result = this.ruleBasedHealth(lean, range.currentFromYmd, range.currentToYmd);
     this.healthCache.set(cacheKey, {
       fingerprint,
       result,
       expiresAt: now + 60_000,
     });
+
+    // Score from the lean snapshot only. The full 20+ query snapshot used to
+    // run in the background and steal the connection pool from the page the
+    // user was opening next.
     return result;
+  }
+
+  /** Only the fields ruleBasedHealth reads — keeps analytics health off the LLM path. */
+  private async gatherLeanHealthSnapshot(
+    tenantId: string,
+    from: Date,
+    to: Date,
+    prevFrom: Date,
+    prevTo: Date,
+  ): Promise<HealthSnapshot> {
+    const period = { gte: from, lte: to };
+    const prev = { gte: prevFrom, lte: prevTo };
+    const [
+      customersNew,
+      inactiveCustomers,
+      paidInvoiceAgg,
+      prevPaidInvoiceAgg,
+      repeatGroups,
+      rewardsActive,
+      reviewsApproved,
+      reviewRating,
+      campaignsSent,
+    ] = await Promise.all([
+      this.prisma.customer.count({ where: { tenantId, createdAt: period } }),
+      this.prisma.customer.count({
+        where: { tenantId, lastVisitAt: { lt: from, not: null }, status: 'ACTIVE' },
+      }),
+      this.prisma.invoice.aggregate({
+        where: { tenantId, status: 'PAID', createdAt: period },
+        _sum: { total: true },
+      }),
+      this.prisma.invoice.aggregate({
+        where: { tenantId, status: 'PAID', createdAt: prev },
+        _sum: { total: true },
+      }),
+      this.prisma.invoice.groupBy({
+        by: ['customerId'],
+        where: { tenantId, status: 'PAID', createdAt: period },
+        _count: { id: true },
+        having: { id: { _count: { gte: 2 } } },
+      }),
+      this.prisma.reward.count({ where: { tenantId, status: 'ACTIVE' as any } }),
+      this.prisma.review
+        .count({ where: { tenantId, status: 'APPROVED', publishedAt: period } })
+        .catch(() => 0),
+      this.prisma.review
+        .aggregate({
+          where: { tenantId, status: 'APPROVED', publishedAt: period },
+          _avg: { rating: true },
+        })
+        .catch(() => ({ _avg: { rating: 0 } })),
+      this.prisma.campaign.count({ where: { tenantId, sentAt: period } }).catch(() => 0),
+    ]);
+
+    const revenue = paidInvoiceAgg._sum.total || 0;
+    const prevRevenue = prevPaidInvoiceAgg._sum.total || 0;
+    const repeatCustomers = repeatGroups.length;
+    const repeatDenom = repeatCustomers + customersNew;
+    const repeatRate = repeatDenom > 0 ? (repeatCustomers / repeatDenom) * 100 : 0;
+    const revenueChangePct =
+      prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue > 0 ? 100 : 0;
+
+    return {
+      repeatRate: Math.round(repeatRate * 10) / 10,
+      revenueChangePct: Math.round(revenueChangePct * 10) / 10,
+      rewardsActive: Number(rewardsActive) || 0,
+      inactiveCustomers,
+      averageRating: Math.round(((reviewRating._avg?.rating as number) || 0) * 10) / 10,
+      campaignsSent: Number(campaignsSent) || 0,
+      reviewsApproved: Number(reviewsApproved) || 0,
+    };
   }
 
   private async gatherHealthSnapshot(

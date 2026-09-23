@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen, Search } from "lucide-react";
 import { Badge, Button, Card, Input, PageHeader, Skeleton } from "@doloyal/ui";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/use-resource";
 
 type Article = Awaited<ReturnType<typeof api.listHelpArticles>>["articles"][number];
 
@@ -15,37 +16,27 @@ function HelpArticlesContent() {
   const search = searchParams.get("search") ?? "";
 
   const [query, setQuery] = React.useState(search);
-  const [articles, setArticles] = React.useState<Article[]>([]);
-  const [categories, setCategories] = React.useState<string[]>([]);
   const [activeCategory, setActiveCategory] = React.useState("");
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
-
   const debouncedQuery = React.useDeferredValue(query.trim());
 
-  React.useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(false);
-    (async () => {
-      try {
-        const res = await api.listHelpArticles({
-          search: debouncedQuery || undefined,
-          category: activeCategory || undefined,
-        });
-        if (!active) return;
-        setArticles(res.articles);
-        setCategories(res.categories);
-      } catch {
-        if (active) setError(true);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [debouncedQuery, activeCategory]);
+  const articlesQuery = useResource<{
+    articles: Article[];
+    categories: string[];
+  }>({
+    queryKey: ["help-articles", debouncedQuery, activeCategory],
+    queryFn: () =>
+      api.listHelpArticles({
+        search: debouncedQuery || undefined,
+        category: activeCategory || undefined,
+      }),
+    scopes: ["dashboard"],
+    keepPrevious: true,
+  });
+
+  const articles = articlesQuery.data?.articles ?? [];
+  const categories = articlesQuery.data?.categories ?? [];
+  const loading = articlesQuery.isLoading && !articlesQuery.data;
+  const error = !!articlesQuery.error;
 
   const grouped = React.useMemo(() => {
     const map = new Map<string, Article[]>();

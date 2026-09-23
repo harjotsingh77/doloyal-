@@ -13,6 +13,7 @@ import type { BookingLink, Tenant } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { useTenant } from "@/lib/tenant-query";
+import { useResource } from "@/lib/use-resource";
 const ClientPageBuilder = React.lazy(() =>
   import("./client-page-builder").then((mod) => ({ default: mod.ClientPageBuilder })),
 );
@@ -70,9 +71,17 @@ function configFor(link?: BookingLink | null): ClientConfig {
 export default function ClientPage() {
   const router = useRouter();
   const { data: tenant, isLoading: tenantLoading } = useTenant();
+  const linksQuery = useResource<BookingLink[]>({
+    queryKey: ["client-page-booking-links"],
+    queryFn: () => api.listBookingLinks(),
+    scopes: ["appointments", "dashboard"],
+  });
+  const preferred = React.useMemo(() => {
+    const links = linksQuery.data ?? [];
+    return links.find((item) => item.type === "COMPANY") ?? links[0] ?? null;
+  }, [linksQuery.data]);
   const [link, setLink] = React.useState<BookingLink | null>(null);
   const [config, setConfig] = React.useState<ClientConfig>(DEFAULT_CONFIG);
-  const [loading, setLoading] = React.useState(true);
   const [stage, setStage] = React.useState<"welcome" | "collecting" | "sections" | "building" | "ready" | "builder">("welcome");
   const [selected, setSelected] = React.useState<SectionId>("hero");
   const [view, setView] = React.useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -82,18 +91,27 @@ export default function ClientPage() {
   const [dragged, setDragged] = React.useState<SectionId | null>(null);
   const [history, setHistory] = React.useState<ClientConfig[]>([]);
   const [future, setFuture] = React.useState<ClientConfig[]>([]);
+  const hydratedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!preferred || hydratedRef.current) return;
+    hydratedRef.current = true;
+    setLink(preferred);
+    const next = configFor(preferred);
+    setConfig(next);
+    setStage(next.clientPageCreated ? "builder" : "welcome");
+  }, [preferred]);
+
+  React.useEffect(() => {
+    if (linksQuery.error) toast.error("We couldn't load your business information.");
+  }, [linksQuery.error]);
+
+  const loading = (linksQuery.isLoading && !linksQuery.data) || (tenantLoading && !tenant);
 
   const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const links = await api.listBookingLinks();
-      const preferred = links.find((item) => item.type === "COMPANY") ?? links[0] ?? null;
-      setLink(preferred); const next = configFor(preferred); setConfig(next);
-      setStage(next.clientPageCreated ? "builder" : "welcome");
-    } catch { toast.error("We couldn't load your business information."); }
-    finally { setLoading(false); }
-  }, []);
-  React.useEffect(() => { void load(); }, [load]);
+    hydratedRef.current = false;
+    await linksQuery.refetch();
+  }, [linksQuery]);
 
   const change = (next: ClientConfig) => { setHistory((items) => [...items.slice(-19), config]); setFuture([]); setConfig(next); };
   const save = async (next = config, publish = false) => {

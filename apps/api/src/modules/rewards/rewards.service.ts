@@ -130,6 +130,7 @@ export class RewardsService {
       where,
       include: { _count: { select: { redemptions: true } } },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
 
     return rewards.map(prismaRewardToShared);

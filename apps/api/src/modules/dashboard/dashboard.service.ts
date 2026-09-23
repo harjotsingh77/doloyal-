@@ -5,7 +5,6 @@ import {
   prismaRewardToShared,
   prismaActivityToShared,
 } from '../../common/helpers';
-import { orderCountsAsRevenue } from '../../common/customer-commerce';
 import { resolveOverviewRange } from '@doloyal/shared';
 
 interface TopServiceRow {
@@ -18,6 +17,8 @@ interface TopServiceRow {
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
+  /** Short reuse so dashboard and analytics don't recompute the same window. */
+  private readonly overviewCache = new Map<string, { at: number; data: any }>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -34,13 +35,17 @@ export class DashboardService {
     const prevPeriodTo = range.prevTo;
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Overview fans out ~35 Prisma queries. On Vercel that takes ~10s even for
-    // an empty tenant, and the Next.js /backend proxy drops the socket first
-    // (browser: "Failed to fetch"). New accounts have no activity — return
-    // zeros without the fan-out.
+    const cacheKey = `${tenantId}:${range.currentFromYmd}:${range.currentToYmd}`;
+    const cached = this.overviewCache.get(cacheKey);
+    if (cached && now.getTime() - cached.at < 20_000) return cached.data;
+
+    // One existence check, in parallel with nothing else — empty tenants skip
+    // the aggregate scans. Occupied tenants go straight into indexed scans.
     const occupied = await this.hasTenantActivity(tenantId);
     if (!occupied) {
-      return this.emptyOverview(now, range);
+      const empty = this.emptyOverview(now, range);
+      this.rememberOverview(cacheKey, empty);
+      return empty;
     }
 
     const dayEnd = new Date(startOfDay.getTime() + 86400000);
@@ -61,10 +66,46 @@ export class DashboardService {
         where: { tenantId },
         orderBy: { totalSpent: 'desc' },
         take: 5,
+        select: {
+          id: true,
+          tenantId: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          totalSpent: true,
+          totalVisits: true,
+          pointsBalance: true,
+          churnRiskScore: true,
+          lastVisitAt: true,
+          createdAt: true,
+          status: true,
+          tags: true,
+          notes: true,
+          avatarUrl: true,
+          dob: true,
+        },
       }),
       this.prisma.reward.findMany({
         where: { tenantId, status: 'ACTIVE' as any },
-        include: { _count: { select: { redemptions: true } } },
+        select: {
+          id: true,
+          tenantId: true,
+          name: true,
+          description: true,
+          pointsCost: true,
+          discountVal: true,
+          imageUrl: true,
+          validityDays: true,
+          status: true,
+          quantity: true,
+          redeemedCount: true,
+          category: true,
+          expiresAt: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { redemptions: true } },
+        },
         orderBy: { redemptions: { _count: 'desc' } },
         take: 5,
       }),
@@ -73,7 +114,18 @@ export class DashboardService {
         where: { tenantId },
         orderBy: { createdAt: 'desc' },
         take: 10,
-        include: { customer: true },
+        select: {
+          id: true,
+          tenantId: true,
+          customerId: true,
+          type: true,
+          message: true,
+          metadata: true,
+          createdAt: true,
+          customer: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
       }),
       this.getCampaignPerformance(tenantId, fromDate, toDate),
     ]);
@@ -116,7 +168,7 @@ export class DashboardService {
     const qualifyingPrevOrders = { length: scalars.prevOrderCount };
 
 
-    return {
+    const result = {
       generatedAt: now.toISOString(),
       period: {
         from: range.currentFromYmd,
@@ -166,7 +218,7 @@ export class DashboardService {
       customerTrend,
       topServices,
       topCustomers: topCustomers.map((c) => {
-        const shared = prismaCustomerToShared(c);
+        const shared = prismaCustomerToShared(c as any);
         return {
           id: shared.id,
           name: shared.name,
@@ -177,7 +229,7 @@ export class DashboardService {
           churnRisk: shared.churnRisk,
         };
       }),
-      topRewards: topRewards.map(prismaRewardToShared).map((r) => ({
+      topRewards: topRewards.map((r) => prismaRewardToShared(r as any)).map((r) => ({
         id: r.id,
         name: r.name,
         pointsCost: r.pointsCost,
@@ -187,6 +239,16 @@ export class DashboardService {
         prismaActivityToShared(a as any),
       ),
     };
+    this.rememberOverview(cacheKey, result);
+    return result;
+  }
+
+  private rememberOverview(key: string, data: any) {
+    this.overviewCache.set(key, { at: Date.now(), data });
+    if (this.overviewCache.size > 80) {
+      const oldest = this.overviewCache.keys().next().value;
+      if (oldest) this.overviewCache.delete(oldest);
+    }
   }
 
   /**
@@ -203,78 +265,111 @@ export class DashboardService {
     startOfDay: Date,
     dayEnd: Date,
   ) {
-    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        COALESCE((SELECT SUM(total) FROM "Invoice" WHERE "tenantId" = ${tenantId} AND status::text = 'PAID' AND "createdAt" >= ${from} AND "createdAt" <= ${to}), 0)::float8 AS "periodInvoiceRev",
-        COALESCE((SELECT SUM(total) FROM "Invoice" WHERE "tenantId" = ${tenantId} AND status::text = 'PAID' AND "createdAt" >= ${startOfDay}), 0)::float8 AS "todayInvoiceRev",
-        COALESCE((SELECT SUM(total) FROM "Invoice" WHERE "tenantId" = ${tenantId} AND status::text = 'PAID' AND "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo}), 0)::float8 AS "prevInvoiceRev",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${from} AND "createdAt" <= ${to}), 0)::float8 AS "periodCustomers",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "createdAt" <= ${to}), 0)::float8 AS "totalCustomers",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo}), 0)::float8 AS "prevPeriodCustomers",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "createdAt" <= ${prevTo}), 0)::float8 AS "prevTotalCustomers",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "lastVisitAt" IS NOT NULL AND "lastVisitAt" < ${from} AND status::text = 'ACTIVE'), 0)::float8 AS "inactiveCustomers",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "lastVisitAt" IS NOT NULL AND "lastVisitAt" < ${prevFrom} AND status::text = 'ACTIVE'), 0)::float8 AS "prevInactiveCustomers",
-        COALESCE((SELECT COUNT(*) FROM "Customer" WHERE "tenantId" = ${tenantId} AND "pointsBalance" > 0), 0)::float8 AS "walletHolders",
-        COALESCE((SELECT SUM("pointsBalance") FROM "Customer" WHERE "tenantId" = ${tenantId}), 0)::float8 AS "outstandingPoints",
-        COALESCE((SELECT COUNT(*) FROM "Reward" WHERE "tenantId" = ${tenantId} AND status::text = 'ACTIVE'), 0)::float8 AS "activeRewards",
-        COALESCE((SELECT SUM(amount) FROM "PointsLedger" WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${from} AND "createdAt" <= ${to} AND amount < 0), 0)::float8 AS "pointsRedeemed",
-        COALESCE((SELECT SUM(amount) FROM "PointsLedger" WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${from} AND "createdAt" <= ${to} AND amount > 0), 0)::float8 AS "pointsIssued",
-        COALESCE((SELECT SUM(amount) FROM "PointsLedger" WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo} AND amount < 0), 0)::float8 AS "prevPointsRedeemed",
-        COALESCE((SELECT COUNT(*) FROM "Appointment" WHERE "tenantId" = ${tenantId} AND "startTime" >= ${startOfDay} AND "startTime" < ${dayEnd} AND status::text IN ('BOOKED', 'CONFIRMED', 'IN_PROGRESS')), 0)::float8 AS "appointmentsToday",
-        COALESCE((SELECT COUNT(*) FROM "Appointment" WHERE "tenantId" = ${tenantId} AND "startTime" >= ${from} AND "startTime" <= ${to} AND status::text <> 'CANCELLED'), 0)::float8 AS "appointmentsInPeriod",
-        COALESCE((SELECT COUNT(*) FROM "Appointment" WHERE "tenantId" = ${tenantId} AND "startTime" >= ${prevFrom} AND "startTime" <= ${prevTo} AND status::text <> 'CANCELLED'), 0)::float8 AS "prevAppointmentsInPeriod",
-        COALESCE((SELECT COUNT(*) FROM "Review" WHERE "tenantId" = ${tenantId} AND status::text = 'PENDING'), 0)::float8 AS "pendingReviews",
-        COALESCE((SELECT COUNT(*) FROM "Review" WHERE "tenantId" = ${tenantId} AND status::text = 'APPROVED' AND "publishedAt" >= ${from} AND "publishedAt" <= ${to}), 0)::float8 AS "approvedReviews",
-        COALESCE((SELECT AVG(rating) FROM "Review" WHERE "tenantId" = ${tenantId} AND status::text = 'APPROVED' AND "publishedAt" >= ${from} AND "publishedAt" <= ${to}), 0)::float8 AS "averageRating",
-        COALESCE((SELECT COUNT(*) FROM "Review" WHERE "tenantId" = ${tenantId} AND status::text = 'APPROVED' AND "publishedAt" >= ${prevFrom} AND "publishedAt" <= ${prevTo}), 0)::float8 AS "prevApprovedReviews",
-        COALESCE((SELECT AVG(rating) FROM "Review" WHERE "tenantId" = ${tenantId} AND status::text = 'APPROVED' AND "publishedAt" >= ${prevFrom} AND "publishedAt" <= ${prevTo}), 0)::float8 AS "prevAverageRating",
-        COALESCE((SELECT COUNT(*) FROM "CustomerMembership" m INNER JOIN "Customer" c ON c.id = m."customerId" WHERE c."tenantId" = ${tenantId} AND m."assignedAt" >= ${from} AND m."assignedAt" <= ${to}), 0)::float8 AS "membershipSales",
-        COALESCE((SELECT COUNT(*) FROM "CustomerMembership" m INNER JOIN "Customer" c ON c.id = m."customerId" WHERE c."tenantId" = ${tenantId} AND m."assignedAt" >= ${prevFrom} AND m."assignedAt" <= ${prevTo}), 0)::float8 AS "prevMembershipSales",
-        COALESCE((SELECT SUM(total) FROM "ClientOrder" WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${from} AND "orderDate" <= ${to} AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED' AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')), 0)::float8 AS "periodOrderRev",
-        COALESCE((SELECT COUNT(*) FROM "ClientOrder" WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${from} AND "orderDate" <= ${to} AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED' AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')), 0)::float8 AS "periodOrderCount",
-        COALESCE((SELECT SUM(total) FROM "ClientOrder" WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${prevFrom} AND "orderDate" <= ${prevTo} AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED' AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')), 0)::float8 AS "prevOrderRev",
-        COALESCE((SELECT COUNT(*) FROM "ClientOrder" WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${prevFrom} AND "orderDate" <= ${prevTo} AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED' AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')), 0)::float8 AS "prevOrderCount",
-        COALESCE((SELECT SUM(total) FROM "ClientOrder" WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${startOfDay} AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED' AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')), 0)::float8 AS "todayOrderRev",
-        COALESCE((
-          SELECT COUNT(*) FROM (
-            SELECT COALESCE(i.cid, o.cid) AS cid, COALESCE(i.n, 0) + COALESCE(o.n, 0) AS n
-            FROM (
-              SELECT "customerId" AS cid, COUNT(*)::int AS n
-              FROM "Invoice"
-              WHERE "tenantId" = ${tenantId} AND status::text = 'PAID' AND "createdAt" >= ${from} AND "createdAt" <= ${to}
-              GROUP BY "customerId"
-            ) i
-            FULL OUTER JOIN (
-              SELECT "customerId" AS cid, COUNT(*)::int AS n
-              FROM "ClientOrder"
-              WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${from} AND "orderDate" <= ${to}
-                AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED'
-                AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')
-              GROUP BY "customerId"
-            ) o ON i.cid = o.cid
-          ) s WHERE s.n >= 2
-        ), 0)::float8 AS "repeatCustomers",
-        COALESCE((
-          SELECT COUNT(*) FROM (
-            SELECT COALESCE(i.cid, o.cid) AS cid, COALESCE(i.n, 0) + COALESCE(o.n, 0) AS n
-            FROM (
-              SELECT "customerId" AS cid, COUNT(*)::int AS n
-              FROM "Invoice"
-              WHERE "tenantId" = ${tenantId} AND status::text = 'PAID' AND "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo}
-              GROUP BY "customerId"
-            ) i
-            FULL OUTER JOIN (
-              SELECT "customerId" AS cid, COUNT(*)::int AS n
-              FROM "ClientOrder"
-              WHERE "tenantId" = ${tenantId} AND "orderDate" >= ${prevFrom} AND "orderDate" <= ${prevTo}
-                AND status::text <> 'CANCELLED' AND "paymentStatus"::text <> 'REFUNDED'
-                AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')
-              GROUP BY "customerId"
-            ) o ON i.cid = o.cid
-          ) s WHERE s.n >= 2
-        ), 0)::float8 AS "prevRepeatCustomers"
-    `;
-    const row = rows[0] ?? {};
+    const invoiceSince = prevFrom < startOfDay ? prevFrom : startOfDay;
+    const orderPredicate = `status <> 'CANCELLED'::"ClientOrderStatus" AND "paymentStatus" <> 'REFUNDED'::"ClientOrderPaymentStatus" AND ("paymentStatus" = 'PAID'::"ClientOrderPaymentStatus" OR status = 'COMPLETED'::"ClientOrderStatus")`;
+    const [customers, invoices, orders, repeats, points, appointments, reviews, extras] = await Promise.all([
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COUNT(*) FILTER (WHERE "createdAt" >= ${from} AND "createdAt" <= ${to})::float8 AS "periodCustomers",
+          COUNT(*) FILTER (WHERE "createdAt" <= ${to})::float8 AS "totalCustomers",
+          COUNT(*) FILTER (WHERE "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo})::float8 AS "prevPeriodCustomers",
+          COUNT(*) FILTER (WHERE "createdAt" <= ${prevTo})::float8 AS "prevTotalCustomers",
+          COUNT(*) FILTER (WHERE "lastVisitAt" IS NOT NULL AND "lastVisitAt" < ${from} AND status = 'ACTIVE'::"CustomerStatus")::float8 AS "inactiveCustomers",
+          COUNT(*) FILTER (WHERE "lastVisitAt" IS NOT NULL AND "lastVisitAt" < ${prevFrom} AND status = 'ACTIVE'::"CustomerStatus")::float8 AS "prevInactiveCustomers",
+          COUNT(*) FILTER (WHERE "pointsBalance" > 0)::float8 AS "walletHolders",
+          COALESCE(SUM("pointsBalance"), 0)::float8 AS "outstandingPoints"
+        FROM "Customer"
+        WHERE "tenantId" = ${tenantId}
+      `,
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COALESCE(SUM(total) FILTER (WHERE "createdAt" >= ${from} AND "createdAt" <= ${to}), 0)::float8 AS "periodInvoiceRev",
+          COALESCE(SUM(total) FILTER (WHERE "createdAt" >= ${startOfDay}), 0)::float8 AS "todayInvoiceRev",
+          COALESCE(SUM(total) FILTER (WHERE "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo}), 0)::float8 AS "prevInvoiceRev"
+        FROM "Invoice"
+        WHERE "tenantId" = ${tenantId}
+          AND status = 'PAID'::"InvoiceStatus"
+          AND "createdAt" >= ${invoiceSince}
+      `,
+      this.prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT
+          COALESCE(SUM(total) FILTER (WHERE "orderDate" >= $2 AND "orderDate" <= $3), 0)::float8 AS "periodOrderRev",
+          COALESCE(COUNT(*) FILTER (WHERE "orderDate" >= $2 AND "orderDate" <= $3), 0)::float8 AS "periodOrderCount",
+          COALESCE(SUM(total) FILTER (WHERE "orderDate" >= $4 AND "orderDate" <= $5), 0)::float8 AS "prevOrderRev",
+          COALESCE(COUNT(*) FILTER (WHERE "orderDate" >= $4 AND "orderDate" <= $5), 0)::float8 AS "prevOrderCount",
+          COALESCE(SUM(total) FILTER (WHERE "orderDate" >= $6), 0)::float8 AS "todayOrderRev"
+        FROM "ClientOrder"
+        WHERE "tenantId" = $1 AND "orderDate" >= $7 AND ${orderPredicate}`,
+        tenantId, from, to, prevFrom, prevTo, startOfDay, invoiceSince,
+      ),
+      this.prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT
+          COALESCE((
+            SELECT COUNT(*) FROM (
+              SELECT COALESCE(i.cid, o.cid) AS cid, COALESCE(i.n, 0) + COALESCE(o.n, 0) AS n
+              FROM (
+                SELECT "customerId" AS cid, COUNT(*)::int AS n FROM "Invoice"
+                WHERE "tenantId" = $1 AND status = 'PAID'::"InvoiceStatus" AND "createdAt" >= $2 AND "createdAt" <= $3
+                GROUP BY "customerId"
+              ) i
+              FULL OUTER JOIN (
+                SELECT "customerId" AS cid, COUNT(*)::int AS n FROM "ClientOrder"
+                WHERE "tenantId" = $1 AND "orderDate" >= $2 AND "orderDate" <= $3 AND ${orderPredicate}
+                GROUP BY "customerId"
+              ) o ON i.cid = o.cid
+            ) s WHERE s.n >= 2
+          ), 0)::float8 AS "repeatCustomers",
+          COALESCE((
+            SELECT COUNT(*) FROM (
+              SELECT COALESCE(i.cid, o.cid) AS cid, COALESCE(i.n, 0) + COALESCE(o.n, 0) AS n
+              FROM (
+                SELECT "customerId" AS cid, COUNT(*)::int AS n FROM "Invoice"
+                WHERE "tenantId" = $1 AND status = 'PAID'::"InvoiceStatus" AND "createdAt" >= $4 AND "createdAt" <= $5
+                GROUP BY "customerId"
+              ) i
+              FULL OUTER JOIN (
+                SELECT "customerId" AS cid, COUNT(*)::int AS n FROM "ClientOrder"
+                WHERE "tenantId" = $1 AND "orderDate" >= $4 AND "orderDate" <= $5 AND ${orderPredicate}
+                GROUP BY "customerId"
+              ) o ON i.cid = o.cid
+            ) s WHERE s.n >= 2
+          ), 0)::float8 AS "prevRepeatCustomers"`,
+        tenantId, from, to, prevFrom, prevTo,
+      ),
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COALESCE(SUM(amount) FILTER (WHERE "createdAt" >= ${from} AND "createdAt" <= ${to} AND amount < 0), 0)::float8 AS "pointsRedeemed",
+          COALESCE(SUM(amount) FILTER (WHERE "createdAt" >= ${from} AND "createdAt" <= ${to} AND amount > 0), 0)::float8 AS "pointsIssued",
+          COALESCE(SUM(amount) FILTER (WHERE "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo} AND amount < 0), 0)::float8 AS "prevPointsRedeemed"
+        FROM "PointsLedger"
+        WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${prevFrom} AND "createdAt" <= ${to}
+      `,
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COUNT(*) FILTER (WHERE "startTime" >= ${startOfDay} AND "startTime" < ${dayEnd} AND status IN ('BOOKED'::"AppointmentStatus", 'CONFIRMED'::"AppointmentStatus", 'IN_PROGRESS'::"AppointmentStatus"))::float8 AS "appointmentsToday",
+          COUNT(*) FILTER (WHERE "startTime" >= ${from} AND "startTime" <= ${to} AND status <> 'CANCELLED'::"AppointmentStatus")::float8 AS "appointmentsInPeriod",
+          COUNT(*) FILTER (WHERE "startTime" >= ${prevFrom} AND "startTime" <= ${prevTo} AND status <> 'CANCELLED'::"AppointmentStatus")::float8 AS "prevAppointmentsInPeriod"
+        FROM "Appointment"
+        WHERE "tenantId" = ${tenantId} AND "startTime" >= ${prevFrom < startOfDay ? prevFrom : startOfDay} AND "startTime" <= ${to > dayEnd ? to : dayEnd}
+      `,
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'PENDING'::"ReviewStatus")::float8 AS "pendingReviews",
+          COUNT(*) FILTER (WHERE status = 'APPROVED'::"ReviewStatus" AND "publishedAt" >= ${from} AND "publishedAt" <= ${to})::float8 AS "approvedReviews",
+          COALESCE(AVG(rating) FILTER (WHERE status = 'APPROVED'::"ReviewStatus" AND "publishedAt" >= ${from} AND "publishedAt" <= ${to}), 0)::float8 AS "averageRating",
+          COUNT(*) FILTER (WHERE status = 'APPROVED'::"ReviewStatus" AND "publishedAt" >= ${prevFrom} AND "publishedAt" <= ${prevTo})::float8 AS "prevApprovedReviews",
+          COALESCE(AVG(rating) FILTER (WHERE status = 'APPROVED'::"ReviewStatus" AND "publishedAt" >= ${prevFrom} AND "publishedAt" <= ${prevTo}), 0)::float8 AS "prevAverageRating"
+        FROM "Review"
+        WHERE "tenantId" = ${tenantId}
+      `,
+      this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT
+          COALESCE((SELECT COUNT(*) FROM "Reward" WHERE "tenantId" = ${tenantId} AND status = 'ACTIVE'::"RewardStatus"), 0)::float8 AS "activeRewards",
+          COALESCE((SELECT COUNT(*) FROM "CustomerMembership" m INNER JOIN "Customer" c ON c.id = m."customerId" WHERE c."tenantId" = ${tenantId} AND m."assignedAt" >= ${from} AND m."assignedAt" <= ${to}), 0)::float8 AS "membershipSales",
+          COALESCE((SELECT COUNT(*) FROM "CustomerMembership" m INNER JOIN "Customer" c ON c.id = m."customerId" WHERE c."tenantId" = ${tenantId} AND m."assignedAt" >= ${prevFrom} AND m."assignedAt" <= ${prevTo}), 0)::float8 AS "prevMembershipSales"
+      `,
+    ]);
+    const row = Object.assign({}, customers[0], invoices[0], orders[0], repeats[0], points[0], appointments[0], reviews[0], extras[0]);
     const n = (key: string) => {
       const value = row[key];
       if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -319,13 +414,15 @@ export class DashboardService {
   }
 
   private async hasTenantActivity(tenantId: string): Promise<boolean> {
-    const [customer, invoice, appointment, order] = await Promise.all([
-      this.prisma.customer.findFirst({ where: { tenantId }, select: { id: true } }),
-      this.prisma.invoice.findFirst({ where: { tenantId }, select: { id: true } }),
-      this.prisma.appointment.findFirst({ where: { tenantId }, select: { id: true } }),
-      this.prisma.clientOrder.findFirst({ where: { tenantId }, select: { id: true } }).catch(() => null),
-    ]);
-    return Boolean(customer || invoice || appointment || order);
+    // One round trip instead of four findFirsts competing for the pool.
+    const rows = await this.prisma.$queryRaw<Array<{ ok: number }>>`
+      SELECT 1::int AS ok
+      WHERE EXISTS (SELECT 1 FROM "Customer" WHERE "tenantId" = ${tenantId} LIMIT 1)
+         OR EXISTS (SELECT 1 FROM "Invoice" WHERE "tenantId" = ${tenantId} LIMIT 1)
+         OR EXISTS (SELECT 1 FROM "Appointment" WHERE "tenantId" = ${tenantId} LIMIT 1)
+         OR EXISTS (SELECT 1 FROM "ClientOrder" WHERE "tenantId" = ${tenantId} LIMIT 1)
+    `.catch(() => [] as Array<{ ok: number }>);
+    return rows.length > 0;
   }
 
   private emptyOverview(
@@ -401,8 +498,8 @@ export class DashboardService {
   }
 
   /**
-   * Real top services computed from paid invoices' line items in the period,
-   * with growth measured against the equivalent previous period.
+   * Top services and products for the window. Aggregated in SQL and capped
+   * at 5 so a busy tenant never pulls every line item into Node.
    */
   private async getTopServices(
     tenantId: string,
@@ -410,137 +507,59 @@ export class DashboardService {
     to: Date,
     prevFrom: Date,
   ): Promise<TopServiceRow[]> {
-    const [current, previous] = await Promise.all([
-      this.prisma.invoiceItem.groupBy({
-        by: ['serviceId'],
-        where: {
-          invoice: { tenantId, createdAt: { gte: from, lte: to }, status: 'PAID' },
-          serviceId: { not: null },
-        },
-        _sum: { total: true, quantity: true },
-      }).catch(() => []),
-      this.prisma.invoiceItem.groupBy({
-        by: ['serviceId'],
-        where: {
-          invoice: { tenantId, createdAt: { gte: prevFrom, lt: from }, status: 'PAID' },
-          serviceId: { not: null },
-        },
-        _sum: { total: true },
-      }).catch(() => []),
+    const [services, products] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ service: string; revenue: number; customers: number; prev: number }>>`
+        SELECT
+          COALESCE(s.name, 'Service') AS service,
+          COALESCE(SUM(ii.total) FILTER (WHERE i."createdAt" >= ${from} AND i."createdAt" <= ${to}), 0)::float8 AS revenue,
+          COUNT(DISTINCT i."customerId") FILTER (WHERE i."createdAt" >= ${from} AND i."createdAt" <= ${to})::int AS customers,
+          COALESCE(SUM(ii.total) FILTER (WHERE i."createdAt" >= ${prevFrom} AND i."createdAt" < ${from}), 0)::float8 AS prev
+        FROM "InvoiceItem" ii
+        JOIN "Invoice" i ON i.id = ii."invoiceId"
+        LEFT JOIN "Service" s ON s.id = ii."serviceId"
+        WHERE i."tenantId" = ${tenantId}
+          AND i.status = 'PAID'::"InvoiceStatus"
+          AND i."createdAt" >= ${prevFrom}
+          AND i."createdAt" <= ${to}
+          AND ii."serviceId" IS NOT NULL
+        GROUP BY s.name
+        ORDER BY revenue DESC
+        LIMIT 5
+      `.catch(() => []),
+      this.prisma.$queryRaw<Array<{ service: string; revenue: number; customers: number; prev: number }>>`
+        SELECT
+          COALESCE(p.name, 'Product') AS service,
+          COALESCE(SUM(o.total) FILTER (WHERE o."orderDate" >= ${from} AND o."orderDate" <= ${to}), 0)::float8 AS revenue,
+          COUNT(DISTINCT o."customerId") FILTER (WHERE o."orderDate" >= ${from} AND o."orderDate" <= ${to})::int AS customers,
+          COALESCE(SUM(o.total) FILTER (WHERE o."orderDate" >= ${prevFrom} AND o."orderDate" < ${from}), 0)::float8 AS prev
+        FROM "ClientOrder" o
+        LEFT JOIN "Product" p ON p.id = o."productId"
+        WHERE o."tenantId" = ${tenantId}
+          AND o."orderDate" >= ${prevFrom}
+          AND o."orderDate" <= ${to}
+          AND o.status <> 'CANCELLED'::"ClientOrderStatus"
+          AND o."paymentStatus" <> 'REFUNDED'::"ClientOrderPaymentStatus"
+          AND (o."paymentStatus" = 'PAID'::"ClientOrderPaymentStatus" OR o.status = 'COMPLETED'::"ClientOrderStatus")
+        GROUP BY p.name
+        ORDER BY revenue DESC
+        LIMIT 5
+      `.catch(() => []),
     ]);
 
-    if (current.length === 0) {
-      return (await this.getTopProducts(tenantId, from, to, prevFrom))
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
-    }
-
-    const serviceIds = current
-      .map((row) => row.serviceId)
-      .filter((id): id is string => Boolean(id));
-    const services = await this.prisma.service.findMany({
-      where: { id: { in: serviceIds } },
-      select: { id: true, name: true },
-    });
-    const nameById = new Map(services.map((s) => [s.id, s.name]));
-
-    const prevRevenueById = new Map<string, number>();
-    for (const row of previous) {
-      if (row.serviceId) {
-        prevRevenueById.set(row.serviceId, row._sum.total || 0);
-      }
-    }
-
-    // Distinct customers per service requires the underlying rows joined
-    // through their parent invoice.
-    const rows = await this.prisma.invoiceItem.findMany({
-      where: {
-        invoice: { tenantId, createdAt: { gte: from, lte: to }, status: 'PAID' },
-        serviceId: { in: serviceIds },
-      },
-      select: { serviceId: true, total: true, invoice: { select: { customerId: true } } },
-    });
-
-    const agg = new Map<
-      string,
-      { revenue: number; customers: Set<string> }
-    >();
-    for (const r of rows) {
-      if (!r.serviceId) continue;
-      let entry = agg.get(r.serviceId);
-      if (!entry) {
-        entry = { revenue: 0, customers: new Set<string>() };
-        agg.set(r.serviceId, entry);
-      }
-      entry.revenue += r.total || 0;
-      if (r.invoice?.customerId) entry.customers.add(r.invoice.customerId);
-    }
-
-    return Array.from(agg.entries())
-      .map(([serviceId, entry]) => {
-        const prev = prevRevenueById.get(serviceId) || 0;
-        const growth =
-          prev > 0
-            ? Math.round(((entry.revenue - prev) / prev) * 1000) / 10
-            : null;
+    return [...services, ...products]
+      .filter((row) => Number(row.revenue) > 0)
+      .map((row) => {
+        const revenue = Number(row.revenue) || 0;
+        const prev = Number(row.prev) || 0;
         return {
-          service: nameById.get(serviceId) || 'Service',
-          revenue: Math.round(entry.revenue * 100) / 100,
-          customers: entry.customers.size,
-          growth,
+          service: row.service || 'Service',
+          revenue: Math.round(revenue * 100) / 100,
+          customers: Number(row.customers) || 0,
+          growth: prev > 0 ? Math.round(((revenue - prev) / prev) * 1000) / 10 : null,
         };
       })
-      .concat(await this.getTopProducts(tenantId, from, to, prevFrom))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }
-
-  private async getTopProducts(
-    tenantId: string,
-    from: Date,
-    to: Date,
-    prevFrom: Date,
-  ): Promise<TopServiceRow[]> {
-    const orders = await this.prisma.clientOrder.findMany({
-      where: { tenantId, orderDate: { gte: prevFrom, lte: to } },
-      select: {
-        total: true,
-        customerId: true,
-        orderDate: true,
-        status: true,
-        paymentStatus: true,
-        product: { select: { name: true } },
-      },
-    }).catch(() => []);
-    if (!orders.length) return [];
-
-    const current = new Map<string, { revenue: number; customers: Set<string> }>();
-    const previous = new Map<string, number>();
-    for (const order of orders) {
-      if (!orderCountsAsRevenue(order.status, order.paymentStatus)) continue;
-      const name = order.product?.name || 'Product';
-      if (order.orderDate >= from && order.orderDate <= to) {
-        let entry = current.get(name);
-        if (!entry) {
-          entry = { revenue: 0, customers: new Set() };
-          current.set(name, entry);
-        }
-        entry.revenue += order.total || 0;
-        entry.customers.add(order.customerId);
-      } else if (order.orderDate >= prevFrom && order.orderDate < from) {
-        previous.set(name, (previous.get(name) || 0) + (order.total || 0));
-      }
-    }
-
-    return Array.from(current.entries()).map(([service, entry]) => {
-      const prev = previous.get(service) || 0;
-      return {
-        service,
-        revenue: Math.round(entry.revenue * 100) / 100,
-        customers: entry.customers.size,
-        growth: prev > 0 ? Math.round(((entry.revenue - prev) / prev) * 1000) / 10 : null,
-      };
-    });
   }
 
   private async getRevenueTrend(
@@ -554,7 +573,7 @@ export class DashboardService {
         SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, total AS revenue
         FROM "Invoice"
         WHERE "tenantId" = ${tenantId}
-          AND status::text = 'PAID'
+          AND status = 'PAID'::"InvoiceStatus"
           AND "createdAt" >= ${from}
           AND "createdAt" <= ${to}
         UNION ALL
@@ -563,9 +582,9 @@ export class DashboardService {
         WHERE "tenantId" = ${tenantId}
           AND "orderDate" >= ${from}
           AND "orderDate" <= ${to}
-          AND status::text <> 'CANCELLED'
-          AND "paymentStatus"::text <> 'REFUNDED'
-          AND ("paymentStatus"::text = 'PAID' OR status::text = 'COMPLETED')
+          AND status <> 'CANCELLED'::"ClientOrderStatus"
+          AND "paymentStatus" <> 'REFUNDED'::"ClientOrderPaymentStatus"
+          AND ("paymentStatus" = 'PAID'::"ClientOrderPaymentStatus" OR status = 'COMPLETED'::"ClientOrderStatus")
       ) days
       GROUP BY day
     `;
@@ -630,9 +649,8 @@ export class DashboardService {
   }
 
   /**
-   * Customers and paid revenue attributed to campaigns in the period:
-   * a paid invoice counts if that customer received a campaign send at or
-   * before the invoice, within this window.
+   * Customers and paid revenue attributed to campaigns in the period.
+   * Aggregated in the database so a large send log is not loaded into Node.
    */
   private async getCampaignPerformance(
     tenantId: string,
@@ -646,104 +664,101 @@ export class DashboardService {
   }> {
     const empty = { revenue: 0, customers: 0, reached: 0, campaignsSent: 0 };
     try {
-      const [campaignsSent, emailTouches, waTouches] = await Promise.all([
-        this.prisma.campaign.count({
-          where: {
-            tenantId,
-            status: 'COMPLETED',
-            sentAt: { gte: from, lte: to },
-          },
-        }),
-        this.prisma.emailLog.findMany({
-          where: {
-            tenantId,
-            campaignId: { not: null },
-            status: 'SENT',
-            customerId: { not: null },
-            createdAt: { gte: from, lte: to },
-          },
-          select: { customerId: true, createdAt: true },
-        }),
-        this.prisma.notification.findMany({
-          where: {
-            tenantId,
-            type: 'CAMPAIGN',
-            status: 'SENT',
-            customerId: { not: null },
-            OR: [
-              { sentAt: { gte: from, lte: to } },
-              { sentAt: null, createdAt: { gte: from, lte: to } },
-            ],
-          },
-          select: { customerId: true, sentAt: true, createdAt: true },
-        }),
-      ]);
-
-      const firstTouch = new Map<string, Date>();
-      const record = (customerId: string | null, at: Date) => {
-        if (!customerId) return;
-        const prev = firstTouch.get(customerId);
-        if (!prev || at < prev) firstTouch.set(customerId, at);
-      };
-      for (const row of emailTouches) record(row.customerId, row.createdAt);
-      for (const row of waTouches) record(row.customerId, row.sentAt ?? row.createdAt);
-
-      const reached = firstTouch.size;
-      if (reached === 0) {
-        const sentAgg = await this.prisma.campaign.aggregate({
-          where: {
-            tenantId,
-            status: 'COMPLETED',
-            sentAt: { gte: from, lte: to },
-          },
-          _sum: { sentCount: true },
-        });
-        return {
-          ...empty,
-          campaignsSent,
-          reached: sentAgg._sum.sentCount || 0,
-        };
-      }
-
-      const invoices = await this.prisma.invoice.findMany({
-        where: {
-          tenantId,
-          status: 'PAID',
-          createdAt: { gte: from, lte: to },
-          customerId: { in: Array.from(firstTouch.keys()) },
-        },
-        select: { customerId: true, total: true, createdAt: true },
-      });
-      const attributedOrders = await this.prisma.clientOrder.findMany({
-        where: {
-          tenantId,
-          orderDate: { gte: from, lte: to },
-          customerId: { in: Array.from(firstTouch.keys()) },
-        },
-        select: { customerId: true, total: true, orderDate: true, status: true, paymentStatus: true },
-      }).catch(() => []);
-
-      const converted = new Set<string>();
-      let revenue = 0;
-      for (const inv of invoices) {
-        const touch = firstTouch.get(inv.customerId);
-        if (!touch || inv.createdAt < touch) continue;
-        revenue += inv.total || 0;
-        converted.add(inv.customerId);
-      }
-      for (const order of attributedOrders) {
-        if (!orderCountsAsRevenue(order.status, order.paymentStatus)) continue;
-        const touch = firstTouch.get(order.customerId);
-        if (!touch || order.orderDate < touch) continue;
-        revenue += order.total || 0;
-        converted.add(order.customerId);
-      }
-
+      const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        WITH email_touch AS (
+          SELECT "customerId" AS cid, MIN("createdAt") AS touched
+          FROM "EmailLog"
+          WHERE "tenantId" = ${tenantId}
+            AND "campaignId" IS NOT NULL
+            AND status = 'SENT'
+            AND "customerId" IS NOT NULL
+            AND "createdAt" >= ${from}
+            AND "createdAt" <= ${to}
+          GROUP BY "customerId"
+        ),
+        note_touch AS (
+          SELECT "customerId" AS cid, MIN(COALESCE("sentAt", "createdAt")) AS touched
+          FROM "Notification"
+          WHERE "tenantId" = ${tenantId}
+            AND type = 'CAMPAIGN'
+            AND status = 'SENT'
+            AND "customerId" IS NOT NULL
+            AND (
+              ("sentAt" >= ${from} AND "sentAt" <= ${to})
+              OR ("sentAt" IS NULL AND "createdAt" >= ${from} AND "createdAt" <= ${to})
+            )
+          GROUP BY "customerId"
+        ),
+        touches AS (
+          SELECT cid, MIN(touched) AS touched
+          FROM (
+            SELECT * FROM email_touch
+            UNION ALL
+            SELECT * FROM note_touch
+          ) u
+          GROUP BY cid
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM "Campaign"
+            WHERE "tenantId" = ${tenantId}
+              AND status = 'COMPLETED'::"CampaignStatus"
+              AND "sentAt" >= ${from} AND "sentAt" <= ${to}) AS "campaignsSent",
+          CASE
+            WHEN (SELECT COUNT(*) FROM touches) = 0 THEN (
+              SELECT COALESCE(SUM("sentCount"), 0)::int FROM "Campaign"
+              WHERE "tenantId" = ${tenantId}
+                AND status = 'COMPLETED'::"CampaignStatus"
+                AND "sentAt" >= ${from} AND "sentAt" <= ${to}
+            )
+            ELSE (SELECT COUNT(*)::int FROM touches)
+          END AS reached,
+          (
+            COALESCE((
+              SELECT SUM(i.total) FROM "Invoice" i
+              JOIN touches t ON t.cid = i."customerId"
+              WHERE i."tenantId" = ${tenantId}
+                AND i.status = 'PAID'::"InvoiceStatus"
+                AND i."createdAt" >= ${from} AND i."createdAt" <= ${to}
+                AND i."createdAt" >= t.touched
+            ), 0)
+            + COALESCE((
+              SELECT SUM(o.total) FROM "ClientOrder" o
+              JOIN touches t ON t.cid = o."customerId"
+              WHERE o."tenantId" = ${tenantId}
+                AND o."orderDate" >= ${from} AND o."orderDate" <= ${to}
+                AND o."orderDate" >= t.touched
+                AND o.status <> 'CANCELLED'::"ClientOrderStatus"
+                AND o."paymentStatus" <> 'REFUNDED'::"ClientOrderPaymentStatus"
+                AND (o."paymentStatus" = 'PAID'::"ClientOrderPaymentStatus" OR o.status = 'COMPLETED'::"ClientOrderStatus")
+            ), 0)
+          )::float8 AS revenue,
+          (
+            SELECT COUNT(*)::int FROM (
+              SELECT i."customerId" AS cid FROM "Invoice" i
+              JOIN touches t ON t.cid = i."customerId"
+              WHERE i."tenantId" = ${tenantId}
+                AND i.status = 'PAID'::"InvoiceStatus"
+                AND i."createdAt" >= ${from} AND i."createdAt" <= ${to}
+                AND i."createdAt" >= t.touched
+              UNION
+              SELECT o."customerId" FROM "ClientOrder" o
+              JOIN touches t ON t.cid = o."customerId"
+              WHERE o."tenantId" = ${tenantId}
+                AND o."orderDate" >= ${from} AND o."orderDate" <= ${to}
+                AND o."orderDate" >= t.touched
+                AND o.status <> 'CANCELLED'::"ClientOrderStatus"
+                AND o."paymentStatus" <> 'REFUNDED'::"ClientOrderPaymentStatus"
+                AND (o."paymentStatus" = 'PAID'::"ClientOrderPaymentStatus" OR o.status = 'COMPLETED'::"ClientOrderStatus")
+            ) converted
+          ) AS customers
+      `;
+      const row = rows[0] ?? {};
+      const n = (key: string) => Number(row[key] ?? 0) || 0;
       return {
-        revenue: Math.round(revenue * 100) / 100,
-        customers: converted.size,
-        reached,
-        campaignsSent,
+        revenue: Math.round(n('revenue') * 100) / 100,
+        customers: n('customers'),
+        reached: n('reached'),
+        campaignsSent: n('campaignsSent'),
       };
     } catch (err) {
       this.logger.warn(
@@ -752,4 +767,5 @@ export class DashboardService {
       return empty;
     }
   }
+
 }

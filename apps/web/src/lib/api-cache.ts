@@ -23,7 +23,20 @@ let hydrated = false;
 let diskTimer: ReturnType<typeof setTimeout> | null = null;
 
 const PREFIXES: Record<Exclude<AppDataScope, "all">, string[]> = {
-  dashboard: ["/dashboard", "/assistant/business-health", "/memberships", "/referrals", "/feature-flags"],
+  dashboard: [
+    "/dashboard",
+    "/assistant/business-health",
+    "/memberships",
+    "/referrals",
+    "/feature-flags",
+    "/tenants/current",
+    "/staff",
+    "/integrations",
+    "/help",
+    "/support",
+    "/branches",
+    "/booking-links",
+  ],
   customers: ["/customers"],
   orders: ["/orders"],
   products: ["/products"],

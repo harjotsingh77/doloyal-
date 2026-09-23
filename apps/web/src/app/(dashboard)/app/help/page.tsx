@@ -27,6 +27,7 @@ import {
 } from "@doloyal/ui";
 import { SUPPORT_STATUS_LABELS, SUPPORT_EMAIL } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/use-resource";
 import { CreateTicketDialog } from "@/components/support/create-ticket-dialog";
 
 const OPEN_STATUSES = ["OPEN", "IN_PROGRESS", "WAITING_FOR_CUSTOMER"] as const;
@@ -52,39 +53,29 @@ export default function HelpPage() {
   const searchRef = React.useRef<HTMLDivElement>(null);
 
   // Data
-  const [faqs, setFaqs] = React.useState<SearchResult[]>([]);
-  const [tickets, setTickets] = React.useState<
-    Awaited<ReturnType<typeof api.listSupportTickets>>
-  >([]);
-  const [loading, setLoading] = React.useState(true);
+  const bootQuery = useResource<{
+    faqs: SearchResult[];
+    tickets: Awaited<ReturnType<typeof api.listSupportTickets>>;
+  }>({
+    queryKey: ["help-boot"],
+    queryFn: async () => {
+      const [faqRes, ticketRes] = await Promise.all([
+        api.listHelpArticles({ faq: true }),
+        api.listSupportTickets(),
+      ]);
+      return { faqs: faqRes.articles, tickets: ticketRes };
+    },
+    scopes: ["dashboard"],
+  });
+  const faqs = bootQuery.data?.faqs ?? [];
+  const tickets = bootQuery.data?.tickets ?? [];
+  const loading = bootQuery.isLoading && !bootQuery.data;
 
   // Dialog
   const [dialogOpen, setDialogOpen] = React.useState(false);
 
   // FAQ accordion
   const [openFaq, setOpenFaq] = React.useState<number | null>(0);
-
-  React.useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const [faqRes, ticketRes] = await Promise.all([
-          api.listHelpArticles({ faq: true }),
-          api.listSupportTickets(),
-        ]);
-        if (!active) return;
-        setFaqs(faqRes.articles);
-        setTickets(ticketRes);
-      } catch {
-        // FAQ/tickets are best-effort; the page still works.
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Debounced live search
   React.useEffect(() => {

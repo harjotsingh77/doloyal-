@@ -33,6 +33,7 @@ export class CampaignsService {
     return this.prisma.campaign.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
   }
 

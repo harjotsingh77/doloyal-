@@ -1,24 +1,26 @@
 "use client";
 
 import * as React from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "./api";
 import type { Tenant } from "@doloyal/shared";
+import { useResource } from "./use-resource";
+import { getStaffAuthToken } from "./access-token";
+import { writeQuerySnapshot } from "./api-cache";
 
 /**
  * Cached tenant access shared by every consumer (settings pages, currency
  * sync, billing summary…). One cache entry → one network request no matter
- * how many components need the tenant, and instant renders on back-navigation.
+ * how many components need the tenant, and instant paints on back-navigation.
  */
 export const TENANT_QUERY_KEY = ["tenant"] as const;
 
 export function useTenant() {
-  return useQuery({
+  return useResource({
     queryKey: TENANT_QUERY_KEY,
     queryFn: () => api.getTenant(),
-    staleTime: 60_000,
-    retry: 1,
+    scopes: ["dashboard"],
   });
 }
 
@@ -57,6 +59,7 @@ export function useUpdateTenant() {
     },
     onSuccess: (updated) => {
       queryClient.setQueryData(TENANT_QUERY_KEY, updated);
+      writeQuerySnapshot(TENANT_QUERY_KEY, getStaffAuthToken(), updated);
     },
   });
 }
@@ -65,7 +68,10 @@ export function useUpdateTenant() {
 export function useSetTenantCache() {
   const queryClient = useQueryClient();
   return React.useCallback(
-    (tenant: Tenant) => queryClient.setQueryData(TENANT_QUERY_KEY, tenant),
+    (tenant: Tenant) => {
+      queryClient.setQueryData(TENANT_QUERY_KEY, tenant);
+      writeQuerySnapshot(TENANT_QUERY_KEY, getStaffAuthToken(), tenant);
+    },
     [queryClient],
   );
 }

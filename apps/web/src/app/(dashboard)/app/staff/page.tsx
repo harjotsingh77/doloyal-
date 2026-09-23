@@ -16,6 +16,7 @@ import {
   type StaffMember, type StaffStats, type StaffMemberList,
 } from "@doloyal/shared";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/use-resource";
 import {
   StatsCards, InviteMemberDialog, ManageMemberDialog, InvitationsPanel,
   sfInitials, sfName, roleBadge, statusBadge, relTime, fmtDate,
@@ -39,10 +40,8 @@ const ROLE_FILTERS = [
 
 export default function StaffPage() {
   const [tab, setTab] = React.useState<"members" | "invitations">("members");
-  const [stats, setStats] = React.useState<StaffStats | null>(null);
-  const [list, setList] = React.useState<StaffMemberList | null>(null);
-  const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("ALL");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -57,50 +56,60 @@ export default function StaffPage() {
 
   const pageSize = 20;
 
-  const loadStats = React.useCallback(async () => {
-    try {
-      setStats(await api.getStaffStats());
-    } catch { /* stats optional */ }
-  }, []);
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const load = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await api.listStaffMembers({
-        search: search || undefined,
+  React.useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, roleFilter, statusFilter]);
+
+  const statsQuery = useResource<StaffStats>({
+    queryKey: ["staff-stats"],
+    queryFn: () => api.getStaffStats(),
+    scopes: ["dashboard"],
+  });
+  const listQuery = useResource<StaffMemberList>({
+    queryKey: ["staff-members", debouncedSearch, roleFilter, statusFilter, sortBy, sortDir, page],
+    queryFn: () =>
+      api.listStaffMembers({
+        search: debouncedSearch || undefined,
         role: roleFilter !== "ALL" ? roleFilter : undefined,
         status: statusFilter !== "ALL" ? (statusFilter as import("@doloyal/shared").StaffStatus) : undefined,
-        sortBy, sortDir, page, pageSize,
-      });
-      setList(res);
-      setSelected((prev) => {
-        const next = new Set(prev);
-        for (const id of prev) {
-          if (!res.items.some((m) => m.id === id)) next.delete(id);
-        }
-        return next;
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load members");
-    } finally {
-      setLoading(false);
+        sortBy,
+        sortDir,
+        page,
+        pageSize,
+      }),
+    scopes: ["dashboard"],
+    keepPrevious: true,
+  });
+
+  const stats = statsQuery.data ?? null;
+  const list = listQuery.data ?? null;
+  const loading = listQuery.isLoading && !list;
+
+  React.useEffect(() => {
+    if (listQuery.error) {
+      toast.error(listQuery.error instanceof Error ? listQuery.error.message : "Failed to load members");
     }
-  }, [search, roleFilter, statusFilter, sortBy, sortDir, page]);
+  }, [listQuery.error]);
+
+  React.useEffect(() => {
+    if (!list) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of prev) {
+        if (!list.items.some((m) => m.id === id)) next.delete(id);
+      }
+      return next;
+    });
+  }, [list]);
 
   const refresh = React.useCallback(async () => {
-    await Promise.all([load(), loadStats()]);
-  }, [load, loadStats]);
-
-  React.useEffect(() => {
-    loadStats();
-  }, [loadStats]);
-
-  React.useEffect(() => {
-    const t = setTimeout(() => { if (page !== 1) setPage(1); else load(); }, 250);
-    return () => clearTimeout(t);
-  }, [search, roleFilter, statusFilter]);
-
-  React.useEffect(() => { load(); }, [load, page, sortBy, sortDir]);
+    await Promise.all([listQuery.refetch(), statsQuery.refetch()]);
+  }, [listQuery, statsQuery]);
 
   const members = list?.items ?? [];
 
