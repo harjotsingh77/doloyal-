@@ -250,6 +250,9 @@ export const Sidebar = React.memo(function Sidebar({
                         onMouseEnter={() => {
                           if (item.badge !== "soon") prefetchHref(item.href);
                         }}
+                        onPointerDown={() => {
+                          if (item.badge !== "soon") prefetchHref(item.href, true);
+                        }}
                         onClick={(e) => {
                           if (item.badge === "soon") e.preventDefault();
                           else pausePrefetch(2500);
@@ -334,8 +337,15 @@ export const Sidebar = React.memo(function Sidebar({
                                 <Link
                                   href={child.badge === "soon" ? "#" : childHref}
                                   prefetch={child.badge === "soon" ? undefined : true}
+                                  onMouseEnter={() => {
+                                    if (child.badge !== "soon") prefetchHref(child.href);
+                                  }}
+                                  onPointerDown={() => {
+                                    if (child.badge !== "soon") prefetchHref(child.href, true);
+                                  }}
                                   onClick={(e) => {
                                     if (child.badge === "soon") e.preventDefault();
+                                    else pausePrefetch(2500);
                                     onMobileClose?.();
                                   }}
                                   className={cn(

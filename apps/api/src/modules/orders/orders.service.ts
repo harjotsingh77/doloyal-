@@ -88,24 +88,26 @@ export class OrdersService {
   }
 
   async summary(tenantId: string) {
-    const [total, pending, processing, completed, cancelled, value] = await Promise.all([
-      this.prisma.clientOrder.count({ where: { tenantId } }),
-      this.prisma.clientOrder.count({ where: { tenantId, status: 'PENDING' } }),
-      this.prisma.clientOrder.count({ where: { tenantId, status: 'PROCESSING' } }),
-      this.prisma.clientOrder.count({ where: { tenantId, status: 'COMPLETED' } }),
-      this.prisma.clientOrder.count({ where: { tenantId, status: 'CANCELLED' } }),
-      this.prisma.clientOrder.aggregate({
-        where: { tenantId, status: { not: 'CANCELLED' } },
-        _sum: { total: true },
-      }),
-    ]);
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'PENDING'::"ClientOrderStatus")::int AS pending,
+        COUNT(*) FILTER (WHERE status = 'PROCESSING'::"ClientOrderStatus")::int AS processing,
+        COUNT(*) FILTER (WHERE status = 'COMPLETED'::"ClientOrderStatus")::int AS completed,
+        COUNT(*) FILTER (WHERE status = 'CANCELLED'::"ClientOrderStatus")::int AS cancelled,
+        COALESCE(SUM(total) FILTER (WHERE status <> 'CANCELLED'::"ClientOrderStatus"), 0)::float8 AS "totalValue"
+      FROM "ClientOrder"
+      WHERE "tenantId" = ${tenantId}
+    `;
+    const row = rows[0] ?? {};
+    const n = (key: string) => Number(row[key] ?? 0) || 0;
     return {
-      total,
-      pending,
-      processing,
-      completed,
-      cancelled,
-      totalValue: value._sum.total ?? 0,
+      total: n('total'),
+      pending: n('pending'),
+      processing: n('processing'),
+      completed: n('completed'),
+      cancelled: n('cancelled'),
+      totalValue: n('totalValue'),
     };
   }
 

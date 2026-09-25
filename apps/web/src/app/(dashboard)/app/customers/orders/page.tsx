@@ -65,7 +65,6 @@ type OrdersBoot = {
   orders: ClientOrder[];
   total: number;
   summary: ClientOrderSummary;
-  products: CatalogProduct[];
 };
 
 function formatDate(iso: string) {
@@ -128,26 +127,30 @@ export default function OrdersPage() {
         page,
         limit: pageSize,
       };
-      const [list, stats, catalog] = await Promise.all([
+      const [list, stats] = await Promise.all([
         api.listOrders(query),
         api.getOrderSummary(),
-        api.listProducts({ limit: 100 }),
       ]);
       return {
         orders: list.items,
         total: list.total,
         summary: stats,
-        products: catalog.items,
       };
     },
-    scopes: ["orders", "products", "customers", "dashboard"],
+    scopes: ["orders", "customers", "dashboard"],
     keepPrevious: true,
+  });
+
+  const productQuery = useResource<{ items: CatalogProduct[] }>({
+    queryKey: ["orders-product-filter"],
+    queryFn: () => api.listProducts({ limit: 100, sort: "name", order: "asc" }),
+    scopes: ["products"],
   });
 
   const orders = bootQuery.data?.orders ?? [];
   const total = bootQuery.data?.total ?? 0;
   const summary = bootQuery.data?.summary ?? null;
-  const products = bootQuery.data?.products ?? [];
+  const products = productQuery.data?.items ?? [];
   const loading = bootQuery.isLoading && !bootQuery.data;
   const error = bootQuery.error && !bootQuery.data
     ? bootQuery.error instanceof Error

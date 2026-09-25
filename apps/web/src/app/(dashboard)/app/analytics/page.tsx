@@ -184,47 +184,22 @@ export default function AnalyticsPage() {
 
   const revenueChange = compareValues(totalRevenue, kpis.previousPeriodRevenue ?? 0);
 
-  const fallbackScore = Math.min(
-    100,
-    Math.max(
-      0,
-      Math.round(
-        (Math.min(repeatRate, 100) / 100) * 35 +
-          ((kpis.monthlyGrowthPct ?? 0) > 0 ? Math.min((kpis.monthlyGrowthPct as number) / 2, 25) : 10) +
-          Math.min(kpis.activeRewards * 4, 20) +
-          (kpis.inactiveCustomers === 0 ? 20 : Math.max(20 - kpis.inactiveCustomers, 5))
-      )
-    )
-  );
+  // Score only when this period has real commerce signal. Lifetime leftovers
+  // (inactive customers, reward catalog) must not invent an "AT RISK" gauge
+  // when revenue, customers, orders, and reviews are all empty.
+  const periodHasSignal =
+    totalRevenue > 0 ||
+    (kpis.previousPeriodRevenue ?? 0) > 0 ||
+    newInPeriod > 0 ||
+    orderCount > 0 ||
+    (kpis.approvedReviews ?? 0) > 0;
+  const healthUnavailable = !periodHasSignal || health?.available === false;
 
-  const fallbackFactors = [];
-  if (repeatRate >= 50) {
-    fallbackFactors.push({ label: "Repeat rate is strong", positive: true });
-  } else {
-    fallbackFactors.push({ label: "Repeat rate needs improvement", positive: false });
-  }
-  if ((kpis.monthlyGrowthPct ?? 0) > 0) {
-    fallbackFactors.push({ label: "Revenue is growing", positive: true });
-  } else {
-    fallbackFactors.push({ label: "Revenue is declining", positive: false });
-  }
-  if (kpis.activeRewards >= 5) {
-    fallbackFactors.push({ label: "Active rewards program", positive: true });
-  } else {
-    fallbackFactors.push({ label: "Few active rewards", positive: false });
-  }
-  if (kpis.inactiveCustomers <= 5) {
-    fallbackFactors.push({ label: "Low customer inactivity", positive: true });
-  } else {
-    fallbackFactors.push({
-      label: `${kpis.inactiveCustomers} inactive customers`,
-      positive: false,
-    });
-  }
-
-  const healthScore = health?.score ?? fallbackScore;
-  const healthFactors = health?.factors?.length ? health.factors : fallbackFactors;
-  const healthStatus = health?.status ?? healthStatusFromScore(healthScore);
+  const healthScore = healthUnavailable ? 0 : (health?.score ?? 0);
+  const healthFactors = healthUnavailable ? [] : health?.factors ?? [];
+  const healthStatus = healthUnavailable
+    ? "fair"
+    : health?.status ?? healthStatusFromScore(healthScore);
   const healthBadge = HEALTH_LABEL[healthStatus];
 
   const periodLabel =
@@ -442,70 +417,79 @@ export default function AnalyticsPage() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col justify-between px-6 pb-6 pt-0">
-            <div className="flex flex-col items-center py-2">
-              <div className="relative flex h-24 w-24 items-center justify-center">
-                <svg className="h-24 w-24 -rotate-90" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="42"
-                    fill="none"
-                    stroke="rgb(var(--color-border))"
-                    strokeWidth="8"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="42"
-                    fill="none"
-                    stroke={
+            {healthUnavailable ? (
+              <EmptyState
+                title="No activity in this period"
+                description="Business health is scored once this period has revenue, new customers, orders, or reviews. An empty period is not marked at risk."
+              />
+            ) : (
+              <>
+                <div className="flex flex-col items-center py-2">
+                  <div className="relative flex h-24 w-24 items-center justify-center">
+                    <svg className="h-24 w-24 -rotate-90" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        stroke="rgb(var(--color-border))"
+                        strokeWidth="8"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        stroke={
+                          healthScore >= 70
+                            ? "rgb(var(--color-success))"
+                            : healthScore >= 40
+                              ? "rgb(var(--color-warning))"
+                              : "rgb(var(--color-danger))"
+                        }
+                        strokeWidth="8"
+                        strokeDasharray={`${(healthScore / 100) * 264} 264`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="absolute text-2xl font-bold">{healthScore}%</span>
+                  </div>
+                  <Badge
+                    variant={
                       healthScore >= 70
-                        ? "rgb(var(--color-success))"
+                        ? "success"
                         : healthScore >= 40
-                          ? "rgb(var(--color-warning))"
-                          : "rgb(var(--color-danger))"
+                          ? "warning"
+                          : "danger"
                     }
-                    strokeWidth="8"
-                    strokeDasharray={`${(healthScore / 100) * 264} 264`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute text-2xl font-bold">{healthScore}%</span>
-              </div>
-              <Badge
-                variant={
-                  healthScore >= 70
-                    ? "success"
-                    : healthScore >= 40
-                      ? "warning"
-                      : "danger"
-                }
-                className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wider"
-              >
-                {healthBadge}
-              </Badge>
-              <p className="mt-2 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
-                {health?.source === "ai" ? "Analyzed by Doloyal AI" : "Doloyal AI"}
-              </p>
-            </div>
-            <div className="mt-4 space-y-2.5 border-t border-[rgb(var(--color-border))] pt-4">
-              {healthFactors.map((f, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-[rgb(var(--color-muted-foreground))]">
-                    {f.label}
-                  </span>
-                  <span
-                    className={`text-xs font-medium ${
-                      f.positive
-                        ? "text-[rgb(var(--color-success))]"
-                        : "text-[rgb(var(--color-danger))]"
-                    }`}
+                    className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wider"
                   >
-                    {f.positive ? "Good" : "Needs attention"}
-                  </span>
+                    {healthBadge}
+                  </Badge>
+                  <p className="mt-2 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                    {health?.source === "ai" ? "Analyzed by Doloyal AI" : "Doloyal AI"}
+                  </p>
                 </div>
-              ))}
-            </div>
+                <div className="mt-4 space-y-2.5 border-t border-[rgb(var(--color-border))] pt-4">
+                  {healthFactors.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="text-[rgb(var(--color-muted-foreground))]">
+                        {f.label}
+                      </span>
+                      <span
+                        className={`text-xs font-medium ${
+                          f.positive
+                            ? "text-[rgb(var(--color-success))]"
+                            : "text-[rgb(var(--color-danger))]"
+                        }`}
+                      >
+                        {f.positive ? "Good" : "Needs attention"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -591,88 +575,97 @@ export default function AnalyticsPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-5">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[rgb(var(--color-muted-foreground))]">
-                    Health score
-                  </p>
-                  <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{healthScore}%</p>
-                  <Badge
-                    variant={healthScore >= 70 ? "success" : healthScore >= 40 ? "warning" : "danger"}
-                    className="mt-2 text-[0.65rem] font-semibold uppercase tracking-wider"
-                  >
-                    {healthBadge}
-                  </Badge>
-                  {health?.summary ? (
-                    <p className="mt-3 text-sm leading-6 text-[rgb(var(--color-foreground))]">{health.summary}</p>
-                  ) : null}
-                </div>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <HealthStat
-                    label="Repeat rate"
-                    value={`${repeatRate.toFixed(1)}%`}
-                    onClick={() => {
-                      setOpenPanel(null);
-                      setOpenMetric("repeat_rate");
-                    }}
+                {healthUnavailable ? (
+                  <EmptyState
+                    title="No activity in this period"
+                    description="There is nothing to score yet. Health appears after this period has revenue, new customers, orders, or reviews."
                   />
-                  <HealthStat
-                    label="Revenue"
-                    value={fmt(totalRevenue)}
-                    hint={revenueChange.percentChangeLabel}
-                    onClick={() => {
-                      setOpenPanel(null);
-                      setOpenMetric("revenue");
-                    }}
-                  />
-                  <HealthStat
-                    label="Inactive customers"
-                    value={String(kpis.inactiveCustomers)}
-                    onClick={() => {
-                      setOpenPanel(null);
-                      setOpenMetric("inactive");
-                    }}
-                  />
-                  <HealthStat
-                    label="Active rewards"
-                    value={String(kpis.activeRewards)}
-                  />
-                </div>
-                <div>
-                  <h4 className="mb-2 text-sm font-semibold">Supporting signals</h4>
-                  <div className="space-y-2">
-                    {healthFactors.map((f) => (
-                      <button
-                        key={f.label}
-                        type="button"
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[rgb(var(--color-muted-foreground))]">
+                        Health score
+                      </p>
+                      <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{healthScore}%</p>
+                      <Badge
+                        variant={healthScore >= 70 ? "success" : healthScore >= 40 ? "warning" : "danger"}
+                        className="mt-2 text-[0.65rem] font-semibold uppercase tracking-wider"
+                      >
+                        {healthBadge}
+                      </Badge>
+                      {health?.summary ? (
+                        <p className="mt-3 text-sm leading-6 text-[rgb(var(--color-foreground))]">{health.summary}</p>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                      <HealthStat
+                        label="Repeat rate"
+                        value={`${repeatRate.toFixed(1)}%`}
                         onClick={() => {
                           setOpenPanel(null);
-                          router.push(
-                            `/app/assistant?prompt=${encodeURIComponent(
-                              healthSignalPrompt(f.label, data.period?.from, data.period?.to),
-                            )}`,
-                          );
+                          setOpenMetric("repeat_rate");
                         }}
-                        className="flex w-full items-center justify-between rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 text-left text-sm transition-colors hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)]"
-                      >
-                        <span>{f.label}</span>
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={`text-xs font-medium ${
-                              f.positive
-                                ? "text-[rgb(var(--color-success))]"
-                                : "text-[rgb(var(--color-danger))]"
-                            }`}
+                      />
+                      <HealthStat
+                        label="Revenue"
+                        value={fmt(totalRevenue)}
+                        hint={revenueChange.percentChangeLabel}
+                        onClick={() => {
+                          setOpenPanel(null);
+                          setOpenMetric("revenue");
+                        }}
+                      />
+                      <HealthStat
+                        label="Inactive customers"
+                        value={String(kpis.inactiveCustomers)}
+                        onClick={() => {
+                          setOpenPanel(null);
+                          setOpenMetric("inactive");
+                        }}
+                      />
+                      <HealthStat
+                        label="Active rewards"
+                        value={String(kpis.activeRewards)}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold">Supporting signals</h4>
+                      <div className="space-y-2">
+                        {healthFactors.map((f) => (
+                          <button
+                            key={f.label}
+                            type="button"
+                            onClick={() => {
+                              setOpenPanel(null);
+                              router.push(
+                                `/app/assistant?prompt=${encodeURIComponent(
+                                  healthSignalPrompt(f.label, data.period?.from, data.period?.to),
+                                )}`,
+                              );
+                            }}
+                            className="flex w-full items-center justify-between rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 text-left text-sm transition-colors hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)]"
                           >
-                            {f.positive ? "Good" : "Needs attention"}
-                          </span>
-                          <span className="text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
-                            Ask AI
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                            <span>{f.label}</span>
+                            <span className="flex items-center gap-2">
+                              <span
+                                className={`text-xs font-medium ${
+                                  f.positive
+                                    ? "text-[rgb(var(--color-success))]"
+                                    : "text-[rgb(var(--color-danger))]"
+                                }`}
+                              >
+                                {f.positive ? "Good" : "Needs attention"}
+                              </span>
+                              <span className="text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
+                                Ask AI
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}

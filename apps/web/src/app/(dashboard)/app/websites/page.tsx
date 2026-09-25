@@ -92,8 +92,8 @@ export default function WebsiteBuilderPage() {
   const [teamGoal, setTeamGoal] = React.useState("");
   const [submittingTeam, setSubmittingTeam] = React.useState(false);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
+  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const [data, currentTenant] = await Promise.all([
         api.listWebsiteProjects().catch(() => []),
@@ -111,7 +111,7 @@ export default function WebsiteBuilderPage() {
   React.useEffect(() => {
     void load();
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState === "visible") void load({ silent: true });
     }, 15_000);
     return () => window.clearInterval(interval);
   }, [load]);

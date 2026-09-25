@@ -1453,6 +1453,7 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
       reviewsApproved,
       reviewRating,
       campaignsSent,
+      orderCount,
     ] = await Promise.all([
       this.prisma.customer.count({ where: { tenantId, createdAt: period } }),
       this.prisma.customer.count({
@@ -1483,6 +1484,11 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
         })
         .catch(() => ({ _avg: { rating: 0 } })),
       this.prisma.campaign.count({ where: { tenantId, sentAt: period } }).catch(() => 0),
+      this.prisma.clientOrder
+        .count({
+          where: { tenantId, orderDate: period, status: { not: 'CANCELLED' } },
+        })
+        .catch(() => 0),
     ]);
 
     const revenue = paidInvoiceAgg._sum.total || 0;
@@ -1494,6 +1500,10 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
       prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue > 0 ? 100 : 0;
 
     return {
+      periodRevenue: revenue,
+      previousRevenue: prevRevenue,
+      customersNew,
+      orders: Number(orderCount) || 0,
       repeatRate: Math.round(repeatRate * 10) / 10,
       revenueChangePct: Math.round(revenueChangePct * 10) / 10,
       rewardsActive: Number(rewardsActive) || 0,
@@ -1804,6 +1814,27 @@ The numbers say this is a **retention leak**, not a traffic problem. Appointment
   }
 
   private ruleBasedHealth(snapshot: HealthSnapshot, from: string, to: string): BusinessHealthInsight {
+    // Empty commerce period → no score. Do not treat inactive customers or
+    // reward catalog size as enough signal to mark the business "at risk".
+    const noActivity =
+      (snapshot.periodRevenue ?? 0) === 0 &&
+      (snapshot.previousRevenue ?? 0) === 0 &&
+      (snapshot.customersNew ?? 0) === 0 &&
+      (snapshot.reviewsApproved ?? 0) === 0 &&
+      (snapshot.orders ?? 0) === 0;
+    if (noActivity) {
+      return {
+        score: 0,
+        status: 'fair',
+        summary: 'Not enough activity in this period to score business health.',
+        factors: [],
+        source: 'rules',
+        generatedAt: new Date().toISOString(),
+        period: { from, to },
+        available: false,
+      };
+    }
+
     const score = Math.min(
       100,
       Math.max(
@@ -1825,8 +1856,13 @@ The numbers say this is a **retention leak**, not a traffic problem. Appointment
         positive: snapshot.repeatRate >= 50,
       },
       {
-        label: snapshot.revenueChangePct > 0 ? 'Revenue is growing' : 'Revenue is declining',
-        positive: snapshot.revenueChangePct > 0,
+        label:
+          (snapshot.periodRevenue ?? 0) === 0 && (snapshot.previousRevenue ?? 0) === 0
+            ? 'No revenue in this period'
+            : snapshot.revenueChangePct > 0
+              ? 'Revenue is growing'
+              : 'Revenue is declining',
+        positive: snapshot.revenueChangePct > 0 && (snapshot.periodRevenue ?? 0) > 0,
       },
       {
         label: snapshot.rewardsActive >= 5 ? 'Active rewards program' : 'Few active rewards',
@@ -1859,6 +1895,7 @@ The numbers say this is a **retention leak**, not a traffic problem. Appointment
       source: 'rules',
       generatedAt: new Date().toISOString(),
       period: { from, to },
+      available: true,
     };
   }
 

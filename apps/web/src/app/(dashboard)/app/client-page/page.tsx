@@ -8,15 +8,13 @@ import {
   Loader2, MapPin, Megaphone, Monitor, MoreHorizontal, Palette, Plus, Redo2,
   RotateCcw, Save, Settings2, Smartphone, Sparkles, Trash2, Undo2, Users, X,
 } from "lucide-react";
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Switch, cn } from "@doloyal/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Switch, Skeleton, cn } from "@doloyal/ui";
 import type { BookingLink, Tenant } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { useTenant } from "@/lib/tenant-query";
 import { useResource } from "@/lib/use-resource";
-const ClientPageBuilder = React.lazy(() =>
-  import("./client-page-builder").then((mod) => ({ default: mod.ClientPageBuilder })),
-);
+import { ClientPageBuilder } from "./client-page-builder";
 
 type SectionId = "hero" | "intro" | "services" | "featured" | "booking" | "loyalty" | "rewards" | "membership" | "referrals" | "reviews" | "about" | "contact" | "footer" | "gallery" | "offers" | "faq" | "testimonials" | "hours" | "video" | "social" | "map" | "cta";
 type ClientSection = { id: SectionId; enabled: boolean; title?: string; hidden?: boolean };
@@ -138,7 +136,6 @@ export default function ClientPage() {
   };
   const start = async () => {
     setStage("collecting");
-    await new Promise((resolve) => setTimeout(resolve, 900));
     if (!link) {
       try {
         const created = await api.createBookingLink({ type: "COMPANY", name: `${tenant?.name ?? "My business"} client page`, description: tenant?.description ?? undefined, status: "DRAFT" });
@@ -149,7 +146,7 @@ export default function ClientPage() {
   };
   const create = async () => {
     if (!link) return;
-    setStage("building"); await new Promise((resolve) => setTimeout(resolve, 1100));
+    setStage("building");
     const next = { ...config, clientPageCreated: true, clientPageVersion: 1 };
     try { await save(next); setConfig(next); setStage("ready"); } catch { setStage("sections"); }
   };
@@ -159,15 +156,15 @@ export default function ClientPage() {
 
   const currentTenant = tenant ?? null;
 
-  if (loading || tenantLoading) return <LoadingScreen />;
+  // Only block the first paint when we have nothing to show yet. Background
+  // tenant refetches must not replace a ready page with a blank spinner.
+  if (loading) return <LoadingScreen />;
   if (stage === "welcome") return <Welcome business={currentTenant} onStart={start} onManual={() => setStage("sections")} />;
   if (stage === "collecting" || stage === "building") return <Preparation building={stage === "building"} />;
   if (stage === "sections") return <SectionSetup config={config} onToggle={toggle} onReorder={reorder} onDrag={setDragged} onAdd={() => setLibraryOpen(true)} onBack={() => setStage("welcome")} onCreate={create} />;
   if (stage === "ready") return <Ready business={currentTenant} link={link} onCustomize={() => setStage("builder")} onPreview={() => window.open(`/book/${link?.slug}`, "_blank")} />;
   if (stage === "builder") return (
-    <React.Suspense fallback={<LoadingScreen />}>
-      <ClientPageBuilder tenant={currentTenant} link={link} initialConfig={config} onSave={async (next, publish) => { await save(next as ClientConfig, publish); }} />
-    </React.Suspense>
+    <ClientPageBuilder tenant={currentTenant} link={link} initialConfig={config} onSave={async (next, publish) => { await save(next as ClientConfig, publish); }} />
   );
 
   return <div className="-m-4 flex h-[calc(100vh-3.5rem)] min-h-[680px] flex-col bg-[#f4f7f8] text-[#18312e] sm:-m-6">
@@ -195,4 +192,34 @@ function SettingsPanel({ section, config, tenant, onChange, onDelete, onDuplicat
 function SectionLibrary({ open, setOpen, config, onAdd }: { open: boolean; setOpen: (open: boolean) => void; config: ClientConfig; onAdd: (id: SectionId) => void }) { const [category, setCategory] = React.useState("All"); const categories = ["All", ...Array.from(new Set(Object.values(SECTIONS).map((item) => item.category)))]; return <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Add a section</DialogTitle><DialogDescription>Choose a section. It will stay connected to your business data.</DialogDescription></DialogHeader><div className="flex flex-wrap gap-2 py-3">{categories.map((item) => <button key={item} onClick={() => setCategory(item)} className={cn("rounded-lg px-3 py-1.5 text-xs font-medium", category === item ? "bg-[#2563EB] text-white" : "bg-[#f0f5f3] text-[#567068]")}>{item}</button>)}</div><div className="grid max-h-[50vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">{(Object.entries(SECTIONS) as [SectionId, typeof SECTIONS[SectionId]][]).filter(([, item]) => category === "All" || item.category === category).map(([id, item]) => { const Icon = item.icon; const added = config.sections.some((section) => section.id === id && section.enabled); return <button key={id} onClick={() => onAdd(id)} className="flex items-start gap-3 rounded-xl border border-[#dce7e3] p-4 text-left transition hover:border-[#8cb8aa] hover:bg-[#f7fbf9]"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#e9f3ef] text-[#2563EB]"><Icon className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-1 block text-xs leading-5 text-[#6f827c]">{item.description}</span></span>{added ? <Check className="h-4 w-4 text-[#2563EB]" /> : <Plus className="h-4 w-4 text-[#789089]" />}</button>; })}</div></DialogContent></Dialog>; }
 function BrandSettings({ open, setOpen, tenant, onSaved }: { open: boolean; setOpen: (open: boolean) => void; tenant: Tenant | null; onSaved: (tenant: Tenant) => void }) { const [primary, setPrimary] = React.useState(tenant?.brandColor || "#2563EB"); const [secondary, setSecondary] = React.useState(tenant?.secondaryColor || "#dcefe9"); const [radius, setRadius] = React.useState("10"); React.useEffect(() => { setPrimary(tenant?.brandColor || "#2563EB"); setSecondary(tenant?.secondaryColor || "#dcefe9"); }, [tenant, open]); const persist = async () => { try { const updated = await api.updateTenantSettings({ brandColor: primary, secondaryColor: secondary, borderRadius: `${radius}px` }); onSaved(updated); toast.success("Brand settings saved."); setOpen(false); } catch (error: any) { toast.error(error?.message ?? "We couldn't save your brand settings."); } }; return <Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogHeader><DialogTitle>Brand settings</DialogTitle><DialogDescription>Your customer page inherits these settings from your Business Profile.</DialogDescription></DialogHeader><div className="space-y-4 py-3"><ColorInput label="Primary color" value={primary} setValue={setPrimary} /><ColorInput label="Secondary color" value={secondary} setValue={setSecondary} /><div><Label className="text-xs">Button radius</Label><div className="mt-2 flex items-center gap-3"><input type="range" min="0" max="24" value={radius} onChange={(event) => setRadius(event.target.value)} className="flex-1 accent-[#2563EB]" /><span className="w-10 text-xs text-[#63766f]">{radius}px</span></div></div></div><DialogFooter><Button variant="ghost" onClick={() => { setPrimary("#2563EB"); setSecondary("#dcefe9"); setRadius("10"); }}><RotateCcw className="h-4 w-4" /> Reset to default</Button><Button onClick={persist} className="bg-[#2563EB] hover:bg-[#1d4ed8]">Save changes</Button></DialogFooter></DialogContent></Dialog>; }
 function ColorInput({ label, value, setValue }: { label: string; value: string; setValue: (value: string) => void }) { return <div><Label className="text-xs">{label}</Label><div className="mt-1.5 flex gap-2"><input aria-label={label} type="color" value={value} onChange={(event) => setValue(event.target.value)} className="h-10 w-11 rounded border border-[#dbe6e2] bg-white p-1" /><Input value={value} onChange={(event) => setValue(event.target.value)} /></div></div>; }
-function LoadingScreen() { return <div className="-m-4 grid min-h-[calc(100vh-3.5rem)] place-items-center bg-[#f4f7f8] sm:-m-6"><Loader2 className="h-7 w-7 animate-spin text-[#2563EB]" /></div>; }
+function LoadingScreen() {
+  return (
+    <div className="-m-4 space-y-6 bg-[#f4f7f8] p-6 sm:-m-6 sm:p-8" aria-busy="true" aria-label="Loading client page">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="mt-2 h-4 w-64" />
+        </div>
+        <Skeleton className="h-10 w-28 rounded-lg" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[240px_1fr_280px]">
+        <div className="hidden space-y-3 rounded-2xl border border-[#dbe6e2] bg-white p-4 lg:block">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full rounded-lg" />
+          ))}
+        </div>
+        <div className="min-h-[420px] rounded-2xl border border-[#dbe6e2] bg-white p-6">
+          <Skeleton className="mx-auto h-8 w-56" />
+          <Skeleton className="mx-auto mt-4 h-4 w-72" />
+          <Skeleton className="mx-auto mt-8 h-40 w-full max-w-xl rounded-xl" />
+        </div>
+        <div className="hidden space-y-4 rounded-2xl border border-[#dbe6e2] bg-white p-4 xl:block">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}

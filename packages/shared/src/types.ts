@@ -1069,6 +1069,8 @@ export interface BusinessHealthInsight {
   source: "ai" | "rules";
   generatedAt: string;
   period: { from: string; to: string };
+  /** False when the period has no activity worth scoring. */
+  available?: boolean;
 }
 
 export type DashboardMetricId =

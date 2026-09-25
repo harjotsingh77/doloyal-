@@ -8,8 +8,8 @@ import { readQuerySnapshot, writeQuerySnapshot } from "./api-cache";
 
 /**
  * Page data that paints from the last visit immediately, then refreshes.
- * Snapshot is read synchronously on first render (and again in useLayoutEffect
- * when the key changes) so a return visit does not sit on a skeleton.
+ * Snapshot is read synchronously so a return visit (or sidebar prefetch)
+ * does not sit on a skeleton while the network round-trip completes.
  */
 export function useResource<T>(options: {
   queryKey: QueryKey;
@@ -19,39 +19,36 @@ export function useResource<T>(options: {
   keepPrevious?: boolean;
 }) {
   const keyText = JSON.stringify(options.queryKey);
-  const [cached, setCached] = React.useState<T | undefined>(() => {
-    if (typeof window === "undefined") return undefined;
-    return readQuerySnapshot<T>(options.queryKey, getStaffAuthToken())?.data;
-  });
 
-  React.useLayoutEffect(() => {
-    const snap = readQuerySnapshot<T>(options.queryKey, getStaffAuthToken());
-    setCached(snap?.data);
-  }, [keyText]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Client navigations run this with `window` available, so the last payload
+  // becomes React Query `initialData` on the first render — no loading flash.
+  const snapshot = React.useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    return readQuerySnapshot<T>(options.queryKey, getStaffAuthToken());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyText is the stable serialization of queryKey
+  }, [keyText]);
 
   const query = useQuery({
     queryKey: options.queryKey,
     queryFn: async () => {
       const data = await options.queryFn();
       writeQuerySnapshot(options.queryKey, getStaffAuthToken(), data);
-      setCached(data);
       return data;
     },
     enabled: options.enabled ?? true,
     staleTime: 90_000,
     gcTime: 30 * 60_000,
+    initialData: snapshot?.data,
+    initialDataUpdatedAt: snapshot?.at,
     placeholderData: options.keepPrevious ? keepPreviousData : undefined,
     meta: { scopes: options.scopes },
   });
 
-  const data = (query.data !== undefined ? query.data : cached) as T | undefined;
-  const waiting = data === undefined;
   return {
     ...query,
-    data,
-    // Snapshot counts as loaded so remounts do not flash a full-page skeleton.
-    isLoading: query.isLoading && waiting,
-    isPending: query.isPending && waiting,
+    // Snapshot / initialData counts as loaded so remounts do not flash a skeleton.
+    isLoading: query.isLoading && query.data === undefined,
+    isPending: query.isPending && query.data === undefined,
     isFetching: query.isFetching,
   };
 }

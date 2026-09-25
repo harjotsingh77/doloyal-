@@ -20,6 +20,7 @@ import { TenantCurrencySync } from "@/components/tenant-currency-sync";
 import { TenantBrandingSync } from "@/components/tenant-branding";
 import { AskDoloyal } from "@/components/ask-doloyal";
 import { initials } from "@doloyal/shared";
+import { warmAppShell } from "@/lib/prefetch-workspace";
 
 export default function AppShellLayout({
   children,
@@ -40,6 +41,10 @@ export default function AppShellLayout({
   React.useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  React.useEffect(() => {
+    warmAppShell();
+  }, []);
 
   return (
     <AskDoloyal>

@@ -113,25 +113,24 @@ export class ProductsService {
   }
 
   async summary(tenantId: string) {
-    const products = await this.prisma.product.findMany({
-      where: { tenantId },
-      select: {
-        status: true,
-        availability: true,
-        stockQuantity: true,
-        lowStockThreshold: true,
-      },
-    });
-    let active = 0;
-    let lowStock = 0;
-    let outOfStock = 0;
-    for (const p of products) {
-      if (p.status === 'ACTIVE') active += 1;
-      const status = stockStatus(p);
-      if (status === 'LOW_STOCK') lowStock += 1;
-      if (status === 'OUT_OF_STOCK') outOfStock += 1;
-    }
-    return { total: products.length, active, lowStock, outOfStock };
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'ACTIVE'::"CatalogProductStatus")::int AS active,
+        COUNT(*) FILTER (
+          WHERE availability = 'OUT_OF_STOCK'::"CatalogAvailability" OR "stockQuantity" <= 0
+        )::int AS "outOfStock",
+        COUNT(*) FILTER (
+          WHERE availability = 'IN_STOCK'::"CatalogAvailability"
+            AND "stockQuantity" > 0
+            AND "stockQuantity" <= "lowStockThreshold"
+        )::int AS "lowStock"
+      FROM "Product"
+      WHERE "tenantId" = ${tenantId}
+    `;
+    const row = rows[0] ?? {};
+    const n = (key: string) => Number(row[key] ?? 0) || 0;
+    return { total: n('total'), active: n('active'), lowStock: n('lowStock'), outOfStock: n('outOfStock') };
   }
 
   async listCategories(tenantId: string) {
@@ -213,21 +212,49 @@ export class ProductsService {
                   ? { category: { name: order } }
                   : { updatedAt: order };
 
-    const rows = await this.prisma.product.findMany({
-      where,
-      include: { category: { select: { name: true } } },
-      orderBy,
-    });
-
-    let items = rows.map((row) => this.mapProduct(row));
-    if (query.stock && query.stock !== 'ALL') {
-      items = items.filter((item) => item.stockStatus === query.stock);
+    if (query.stock === 'OUT_OF_STOCK') {
+      const stockClause: Prisma.ProductWhereInput = {
+        OR: [{ availability: 'OUT_OF_STOCK' }, { stockQuantity: { lte: 0 } }],
+      };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), stockClause];
+    } else if (query.stock === 'LOW_STOCK' || query.stock === 'IN_STOCK') {
+      // Above or below the per-product threshold needs a column comparison.
+      const stockSql =
+        query.stock === 'LOW_STOCK'
+          ? Prisma.sql`AND availability = 'IN_STOCK'::"CatalogAvailability" AND "stockQuantity" > 0 AND "stockQuantity" <= "lowStockThreshold"`
+          : Prisma.sql`AND availability = 'IN_STOCK'::"CatalogAvailability" AND "stockQuantity" > "lowStockThreshold"`;
+      const idRows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "Product"
+        WHERE "tenantId" = ${tenantId}
+        ${stockSql}
+      `;
+      const ids = idRows.map((row) => row.id);
+      if (ids.length === 0) {
+        return {
+          items: [],
+          page,
+          pageSize,
+          total: 0,
+          hasMore: false,
+          nextCursor: null as string | null,
+        };
+      }
+      where.id = { in: ids };
     }
 
-    const total = items.length;
-    const paged = items.slice((page - 1) * pageSize, page * pageSize);
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: { category: { select: { name: true } } },
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
     return {
-      items: paged,
+      items: rows.map((row) => this.mapProduct(row)),
       page,
       pageSize,
       total,
