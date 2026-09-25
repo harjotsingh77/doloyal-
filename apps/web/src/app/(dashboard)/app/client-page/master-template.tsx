@@ -35,6 +35,7 @@ import {
   HoursSection,
   LoyaltySection,
   MembershipSection,
+  OrdersSection,
   ReferralsSection,
   ReviewsModule,
   RewardsSection,
@@ -131,7 +132,18 @@ export function MasterClientTemplate({
     requestAnimationFrame(() => requestAnimationFrame(jump));
   };
 
-  const sequence = orderedVisible.length ? orderedVisible : ["hero", ...DEFAULT_VISIBLE];
+  const baseSequence = orderedVisible.length ? orderedVisible : ["hero", ...DEFAULT_VISIBLE];
+  const hasPortalOrders = (portal?.orders?.length ?? 0) > 0;
+  // Live Client Page: if the customer has orders from buy/book, surface the
+  // Orders block even when the builder config never added it.
+  const sequence =
+    !chrome.isBuilder && hasPortalOrders && !baseSequence.includes("orders")
+      ? (() => {
+          const at = Math.max(0, baseSequence.indexOf("booking"));
+          const insertAt = at >= 0 ? at + 1 : Math.max(1, baseSequence.indexOf("services") + 1);
+          return [...baseSequence.slice(0, insertAt), "orders", ...baseSequence.slice(insertAt)];
+        })()
+      : baseSequence;
   const title = chrome.titleFor;
   const bookLabel = config?.heroButtonLabel?.trim() || copy.book;
   const activeServices = services.filter((service) => service.isActive);
@@ -238,6 +250,20 @@ export function MasterClientTemplate({
           buttonLabel={config?.bookingButtonLabel || bookLabel}
           portal={portal}
           onBook={onBook}
+        />
+      );
+    }
+    if (id === "orders") {
+      // On the live page, only show once the customer actually has orders.
+      if (!chrome.isBuilder && !hasPortalOrders) return null;
+      return (
+        <OrdersSection
+          key={id}
+          chrome={chrome}
+          config={config}
+          title={title("orders", FRIENDLY_TITLES.orders)}
+          portal={portal}
+          currency={currency}
         />
       );
     }

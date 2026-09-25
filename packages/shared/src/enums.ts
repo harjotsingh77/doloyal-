@@ -412,8 +412,8 @@ export type ClientOrderStatus = (typeof CLIENT_ORDER_STATUSES)[number];
 export const CLIENT_ORDER_STATUS_LABELS: Record<ClientOrderStatus, string> = {
   PENDING: "Pending",
   CONFIRMED: "Confirmed",
-  PROCESSING: "Processing",
-  COMPLETED: "Completed",
+  PROCESSING: "In making",
+  COMPLETED: "Done",
   CANCELLED: "Cancelled",
 };
 

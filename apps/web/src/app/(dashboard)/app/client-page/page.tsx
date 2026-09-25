@@ -16,7 +16,7 @@ import { useTenant } from "@/lib/tenant-query";
 import { useResource } from "@/lib/use-resource";
 import { ClientPageBuilder } from "./client-page-builder";
 
-type SectionId = "hero" | "intro" | "services" | "featured" | "booking" | "loyalty" | "rewards" | "membership" | "referrals" | "reviews" | "about" | "contact" | "footer" | "gallery" | "offers" | "faq" | "testimonials" | "hours" | "video" | "social" | "map" | "cta" | "checkout";
+type SectionId = "hero" | "intro" | "services" | "featured" | "booking" | "orders" | "loyalty" | "rewards" | "membership" | "referrals" | "reviews" | "about" | "contact" | "footer" | "gallery" | "offers" | "faq" | "testimonials" | "hours" | "video" | "social" | "map" | "cta" | "checkout";
 type ClientSection = { id: SectionId; enabled: boolean; title?: string; hidden?: boolean };
 type ClientConfig = { sections: ClientSection[]; heroHeading?: string; heroDescription?: string; heroBadge?: string; showSearch?: boolean; featuredTitle?: string; clientPageCreated?: boolean; clientPageVersion?: number; websiteLayout?: number; checkoutCashEnabled?: boolean; checkout?: { cashEnabled?: boolean } };
 
@@ -26,6 +26,7 @@ const SECTIONS: Record<string, { label: string; description: string; icon: React
   services: { label: "Services / menu", description: "Live catalog from your products.", icon: Sparkles, category: "Business" },
   featured: { label: "Highlights", description: "Featured products or services.", icon: Sparkles, category: "Business" },
   booking: { label: "Your visits", description: "Let customers discover availability and book.", icon: CalendarDays, category: "Customer" },
+  orders: { label: "Your orders", description: "Show purchases from this page after sign-in.", icon: Sparkles, category: "Customer" },
   loyalty: { label: "Loyalty", description: "Let customers view points and benefits.", icon: BadgeCheck, category: "Loyalty" },
   rewards: { label: "Rewards", description: "Show rewards customers can unlock.", icon: Gift, category: "Loyalty" },
   membership: { label: "Membership", description: "Present member perks and plans.", icon: Users, category: "Loyalty" },
@@ -48,7 +49,7 @@ const SECTIONS: Record<string, { label: string; description: string; icon: React
 const RECOMMENDED: SectionId[] = ["hero", "intro", "services", "featured", "about", "offers", "gallery", "testimonials", "faq", "contact", "map", "cta", "footer"];
 const DEFAULT_CONFIG: ClientConfig = { sections: RECOMMENDED.map((id) => ({ id, enabled: true })) };
 
-const APP_SECTIONS: SectionId[] = ["booking", "loyalty", "rewards", "membership", "referrals"];
+const APP_SECTIONS: SectionId[] = ["booking", "orders", "loyalty", "rewards", "membership", "referrals"];
 
 function restoreStrippedSections(sections: ClientSection[], layout?: number): ClientSection[] {
   if (layout !== 3) return sections;

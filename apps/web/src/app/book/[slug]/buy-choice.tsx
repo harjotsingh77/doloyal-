@@ -74,7 +74,7 @@ export function BuyChoiceDialog({
               <Store className="h-4 w-4" />
             </span>
             <span>
-              <span className="block text-sm font-semibold">Abhi lena hai</span>
+              <span className="block text-sm font-semibold">Buy now</span>
               <span className="mt-0.5 block text-xs leading-5 text-[rgb(var(--color-muted-foreground))]">
                 I&apos;m at the store — go straight to payment
               </span>

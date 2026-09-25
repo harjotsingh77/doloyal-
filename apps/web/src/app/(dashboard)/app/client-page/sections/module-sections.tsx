@@ -3,13 +3,20 @@
 import * as React from "react";
 import { ArrowUpRight, Copy, Gift, MapPin, Phone, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ClientPortal, PublicBusinessInfo, PublicService } from "@doloyal/shared";
+import {
+  CLIENT_ORDER_PAYMENT_LABELS,
+  CLIENT_ORDER_STATUS_LABELS,
+  type ClientPortal,
+  type PublicBusinessInfo,
+  type PublicService,
+} from "@doloyal/shared";
 import { LeaveReviewSection } from "../leave-review-section";
 import {
   LoungeButton,
   SelectableBlock,
   SectionEyebrow,
   firstName,
+  formatPrice,
   formatVisit,
   nextAppointment,
   sectionUi,
@@ -100,6 +107,65 @@ export function BookingSection({
         <div className="mt-6 rounded-2xl bg-black/[0.04] px-5 py-6">
           <p className="text-xl">{ui.emptyText?.trim() || "No visits on the calendar yet."}</p>
           <p className="mt-1 text-sm text-black/55">It takes about a minute to book your next one.</p>
+        </div>
+      )}
+    </Shell>,
+  );
+}
+
+export function OrdersSection({
+  chrome,
+  title,
+  portal,
+  config,
+  currency = "INR",
+}: {
+  chrome: PortalChrome;
+  title: string;
+  portal?: ClientPortal | null;
+  config?: MasterConfig;
+  currency?: string;
+}) {
+  const ui = sectionUi(config, "orders");
+  const orders = (portal?.orders ?? []).slice(0, 6);
+  return wrap(
+    chrome,
+    "orders",
+    <Shell id="portal-orders" eyebrow={ui.eyebrow?.trim() || "Your orders"} title={title}>
+      <p className="mt-2 max-w-xl text-sm leading-6 text-black/55">
+        {ui.body?.trim() ||
+          (orders.length
+            ? "Purchases from this page show up here — same orders your business sees on the Order page."
+            : "When you buy something here, your order will show up in this list.")}
+      </p>
+      {orders.length ? (
+        <div className="mt-6 grid gap-3">
+          {orders.map((order) => (
+            <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-black/[0.04] px-4 py-4">
+              <div>
+                <p className="font-semibold">{order.productName}</p>
+                <p className="mt-1 text-xs text-black/50">
+                  {order.orderNumber} · {formatVisit(order.orderDate)}
+                  {order.quantity > 1 ? ` · ×${order.quantity}` : ""}
+                  {" · "}
+                  {formatPrice(order.total, currency)}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-black/55">
+                  {CLIENT_ORDER_PAYMENT_LABELS[order.paymentStatus as keyof typeof CLIENT_ORDER_PAYMENT_LABELS] || order.paymentStatus}
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--site-accent)]">
+                  {CLIENT_ORDER_STATUS_LABELS[order.status as keyof typeof CLIENT_ORDER_STATUS_LABELS] || order.status}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-6 rounded-2xl bg-black/[0.04] px-5 py-6">
+          <p className="text-xl">{ui.emptyText?.trim() || "No orders yet."}</p>
+          <p className="mt-1 text-sm text-black/55">Buy from the menu and your order will land here.</p>
         </div>
       )}
     </Shell>,

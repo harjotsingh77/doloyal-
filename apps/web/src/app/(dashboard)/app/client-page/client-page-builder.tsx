@@ -42,6 +42,7 @@ const LIBRARY: Array<[SectionId, string, React.ElementType, string]> = [
   ["cta", "Final CTA", Sparkles, "Closing banner before the footer."],
   ["checkout", "Checkout", Sparkles, "Payment options for Buy now and booking."],
   ["booking", "Your visits", CalendarDays, "Upcoming appointments after sign-in."],
+  ["orders", "Your orders", Sparkles, "Purchases from this page after sign-in."],
   ["loyalty", "Loyalty", Sparkles, "Points and progress."],
   ["rewards", "Rewards", Gift, "Rewards guests can redeem."],
   ["membership", "Membership", Users, "Member perks and plans."],

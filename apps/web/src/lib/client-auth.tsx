@@ -85,6 +85,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
         const next: ClientPortal = {
           customer: data.customer,
           appointments: data.appointments ?? [],
+          orders: data.orders ?? [],
           rewards: data.rewards ?? [],
           membership: data.membership ?? null,
           referralCode: data.referralCode ?? null,

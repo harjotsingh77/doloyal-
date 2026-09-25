@@ -24,7 +24,7 @@ function asText(...values: unknown[]) {
   return undefined;
 }
 
-const STRIPPED_APP_IDS = ["booking", "loyalty", "rewards", "membership", "referrals"];
+const STRIPPED_APP_IDS = ["booking", "orders", "loyalty", "rewards", "membership", "referrals"];
 
 function restoreVisibleSectionIds(
   stored: StoredSection[],

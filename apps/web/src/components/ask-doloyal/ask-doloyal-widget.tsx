@@ -3,7 +3,6 @@
 import * as React from "react";
 import nextDynamic from "next/dynamic";
 import { X } from "lucide-react";
-import { cn } from "@doloyal/ui";
 import { useAskDoloyal } from "./ask-doloyal-context";
 
 /**
@@ -32,21 +31,17 @@ export function AskDoloyalWidget() {
         onClick={toggle}
         aria-label={isOpen ? "Close Ask Doloyal" : "Open Ask Doloyal"}
         data-ask-doloyal-fab=""
-        className={cn(
-          "fixed bottom-5 right-5 z-[70] flex items-center justify-center rounded-full transition-[bottom,transform] duration-200 hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6",
-          isOpen
-            ? "bg-[rgb(var(--color-primary))] p-3.5 text-white shadow-lg shadow-black/20"
-            : "p-0 drop-shadow-xl",
-        )}
-        style={{ height: 56, width: 56 }}
+        className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[rgb(var(--color-primary))] text-white shadow-lg shadow-black/20 transition-[bottom] duration-200 hover:brightness-110 active:brightness-95 lg:bottom-6 lg:right-6"
       >
         {isOpen ? (
-          <X className="h-6 w-6" />
+          <X className="h-6 w-6" strokeWidth={2.5} />
         ) : (
           <img
             src="/ask-doloyal-icon.png"
             alt="Ask Doloyal"
-            className="h-full w-full object-contain select-none pointer-events-none"
+            width={56}
+            height={56}
+            className="h-14 w-14 object-cover select-none pointer-events-none"
           />
         )}
         {!isOpen && unread > 0 && (

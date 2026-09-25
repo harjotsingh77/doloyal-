@@ -72,14 +72,6 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function statusVariant(status: ClientOrderStatus): "warning" | "primary" | "accent" | "success" | "danger" {
-  if (status === "PENDING") return "warning";
-  if (status === "CONFIRMED") return "primary";
-  if (status === "PROCESSING") return "accent";
-  if (status === "COMPLETED") return "success";
-  return "danger";
-}
-
 function paymentVariant(status: ClientOrderPaymentStatus): "success" | "warning" | "accent" | "outline" {
   if (status === "PAID") return "success";
   if (status === "PENDING") return "warning";
@@ -109,6 +101,8 @@ export default function OrdersPage() {
   const [nextStatus, setNextStatus] = React.useState<ClientOrderStatus>("PENDING");
   const [nextPayment, setNextPayment] = React.useState<ClientOrderPaymentStatus>("PENDING");
   const [busy, setBusy] = React.useState(false);
+  const [statusOverrides, setStatusOverrides] = React.useState<Record<string, ClientOrderStatus>>({});
+  const [statusBusyId, setStatusBusyId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -189,20 +183,64 @@ export default function OrdersPage() {
     }
   };
 
+  const rowStatus = (row: ClientOrder) => statusOverrides[row.id] ?? row.status;
+
+  const applyStatus = async (row: ClientOrder, next: ClientOrderStatus): Promise<boolean> => {
+    const current = rowStatus(row);
+    if (next === current) return true;
+    setStatusOverrides((prev) => ({ ...prev, [row.id]: next }));
+    setStatusBusyId(row.id);
+    try {
+      await api.updateOrder(row.id, { status: next });
+      toast.success(`Status set to ${CLIENT_ORDER_STATUS_LABELS[next]}`);
+      await load({ silent: true });
+      setStatusOverrides((prev) => {
+        const { [row.id]: _, ...rest } = prev;
+        return rest;
+      });
+      return true;
+    } catch (err) {
+      setStatusOverrides((prev) => ({ ...prev, [row.id]: current }));
+      toast.error(err instanceof Error ? err.message : "Could not update status");
+      return false;
+    } finally {
+      setStatusBusyId(null);
+    }
+  };
+
   const handleStatus = async () => {
     if (!statusTarget) return;
     try {
       setBusy(true);
-      await api.updateOrder(statusTarget.id, { status: nextStatus });
-      toast.success("Order status updated");
-      setStatusTarget(null);
-      void load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update status");
+      const ok = await applyStatus(statusTarget, nextStatus);
+      if (ok) setStatusTarget(null);
     } finally {
       setBusy(false);
     }
   };
+
+  const statusSelect = (row: ClientOrder) => (
+    <Select
+      value={rowStatus(row)}
+      disabled={statusBusyId === row.id}
+      onValueChange={(v) => void applyStatus(row, v as ClientOrderStatus)}
+    >
+      <SelectTrigger
+        className="h-8 w-[8.75rem]"
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Order status for ${row.orderNumber}`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent onClick={(e) => e.stopPropagation()}>
+        {CLIENT_ORDER_STATUSES.map((s) => (
+          <SelectItem key={s} value={s}>
+            {CLIENT_ORDER_STATUS_LABELS[s]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   const handlePayment = async () => {
     if (!paymentTarget) return;
@@ -346,7 +384,7 @@ export default function OrdersPage() {
               onClick={() => setStatus("PENDING")}
             />
             <KpiCard
-              label="Completed"
+              label="Done"
               value={summary?.completed ?? 0}
               accent="success"
               onClick={() => setStatus("COMPLETED")}
@@ -431,9 +469,7 @@ export default function OrdersPage() {
                     <TableCell>
                       <Badge variant={paymentVariant(row.paymentStatus)}>{CLIENT_ORDER_PAYMENT_LABELS[row.paymentStatus]}</Badge>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(row.status)}>{CLIENT_ORDER_STATUS_LABELS[row.status]}</Badge>
-                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>{statusSelect(row)}</TableCell>
                     <TableCell>{row.assignedStaffName || "—"}</TableCell>
                     <TableCell>{rowMenu(row)}</TableCell>
                   </TableRow>
@@ -459,7 +495,7 @@ export default function OrdersPage() {
                   <div onClick={(e) => e.stopPropagation()}>{rowMenu(row)}</div>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Badge variant={statusVariant(row.status)}>{CLIENT_ORDER_STATUS_LABELS[row.status]}</Badge>
+                  <div onClick={(e) => e.stopPropagation()}>{statusSelect(row)}</div>
                   <Badge variant={paymentVariant(row.paymentStatus)}>{CLIENT_ORDER_PAYMENT_LABELS[row.paymentStatus]}</Badge>
                   <span className="ml-auto text-sm font-semibold">{fmt(row.total)}</span>
                 </div>

@@ -38,6 +38,7 @@ function ProfileButton({
   const name = profileName(user, portal);
   const email = portal?.customer?.email || user.email;
   const points = portal?.pointsBalance ?? 0;
+  const clientId = portal?.customer?.clientNumber?.trim() || null;
 
   React.useEffect(() => {
     if (!open) return;
@@ -72,6 +73,7 @@ function ProfileButton({
         >
           <div className="border-b border-black/[0.06] px-4 py-3">
             <p className="truncate text-sm font-semibold">{name}</p>
+            {clientId ? <p className="mt-0.5 truncate text-xs tabular-nums text-black/45">ID: {clientId}</p> : null}
             {email ? <p className="mt-0.5 truncate text-xs text-black/45">{email}</p> : null}
             <p className="mt-2 text-xs font-medium text-black/55">{points.toLocaleString("en-IN")} pts</p>
           </div>
@@ -87,6 +89,19 @@ function ProfileButton({
             >
               Your visits
             </button>
+            {(portal?.orders?.length ?? 0) > 0 ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-black/[0.04]"
+                onClick={() => {
+                  setOpen(false);
+                  onJump("portal-orders");
+                }}
+              >
+                Your orders
+              </button>
+            ) : null}
             <button
               type="button"
               role="menuitem"
@@ -193,6 +208,7 @@ export function SiteNav({
   const pointsTarget = visible.has("rewards") ? "portal-rewards" : "portal-loyalty";
   const signedIn = !!user;
   const accountName = profileName(user, portal);
+  const accountClientId = portal?.customer?.clientNumber?.trim() || null;
   const signInHref = `/book/${business.bookingLink?.slug || business.slug}/sign-in`;
   const loginClass = `hidden h-10 items-center rounded-full px-4 text-sm font-semibold sm:inline-flex ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-[color:var(--site-ink)]"}`;
   const goSignIn = (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -290,11 +306,19 @@ export function SiteNav({
             <>
               <div className="mt-8 rounded-2xl bg-white/10 px-4 py-3">
                 <p className="text-sm font-semibold">{accountName}</p>
+                {accountClientId ? (
+                  <p className="mt-0.5 text-xs tabular-nums text-white/55">ID: {accountClientId}</p>
+                ) : null}
                 <p className="mt-1 text-xs text-white/55">{(portal?.pointsBalance ?? 0).toLocaleString("en-IN")} pts</p>
               </div>
               <button type="button" onClick={() => { onJump("portal-booking"); setOpen(false); }} className="mt-3 w-full py-2 text-left text-sm text-white/80">
                 Your visits
               </button>
+              {(portal?.orders?.length ?? 0) > 0 ? (
+                <button type="button" onClick={() => { onJump("portal-orders"); setOpen(false); }} className="mt-1 w-full py-2 text-left text-sm text-white/80">
+                  Your orders
+                </button>
+              ) : null}
               {onLogout ? (
                 <button type="button" onClick={() => { onLogout(); setOpen(false); }} className="mt-1 w-full py-2 text-left text-sm text-white/55">
                   Sign out

@@ -40,6 +40,7 @@ export function prismaCustomerToShared(c: PrismaCustomer & { _count?: { invoices
     status: (c as { status?: "ACTIVE" | "AT_RISK" | "INACTIVE" | "CHURNED" }).status ?? "ACTIVE",
     userId: (c as { userId?: string | null }).userId ?? null,
     source: (c as { signupSource?: string | null }).signupSource ?? null,
+    clientNumber: (c as { clientNumber?: string | null }).clientNumber ?? null,
     pointsBalance: c.pointsBalance,
     lifetimeValue: totalSpent,
     visitCount: totalVisits,

@@ -2331,6 +2331,7 @@ export const api = {
       needsPhone: boolean;
       customer?: import("@doloyal/shared").Customer;
       appointments?: import("@doloyal/shared").ClientPortal["appointments"];
+      orders?: import("@doloyal/shared").ClientPortal["orders"];
       rewards?: import("@doloyal/shared").ClientPortal["rewards"];
       membership?: import("@doloyal/shared").ClientPortal["membership"];
       referralCode?: string | null;

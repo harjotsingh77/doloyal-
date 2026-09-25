@@ -18,13 +18,19 @@ import {
   DialogTitle,
   EmptyState,
   PageHeader,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Skeleton,
 } from "@doloyal/ui";
 import {
   CLIENT_ORDER_PAYMENT_LABELS,
   CLIENT_ORDER_STATUS_LABELS,
+  CLIENT_ORDER_STATUSES,
 } from "@doloyal/shared";
-import type { ClientOrder } from "@doloyal/shared";
+import type { ClientOrder, ClientOrderStatus } from "@doloyal/shared";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
@@ -49,6 +55,7 @@ export default function OrderDetailPage() {
   const [formOpen, setFormOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [statusBusy, setStatusBusy] = React.useState(false);
 
   const load = React.useCallback(async (opts?: { silent?: boolean }) => {
     try {
@@ -67,6 +74,23 @@ export default function OrderDetailPage() {
   }, [load]);
 
   useCommerceLive(["orders"], () => void load({ silent: true }));
+
+  const handleStatusChange = async (next: ClientOrderStatus) => {
+    if (!order || next === order.status) return;
+    const snapshot = order;
+    setOrder({ ...order, status: next });
+    setStatusBusy(true);
+    try {
+      const updated = await api.updateOrder(order.id, { status: next });
+      setOrder(updated);
+      toast.success(`Status set to ${CLIENT_ORDER_STATUS_LABELS[next]}`);
+    } catch (err) {
+      setOrder(snapshot);
+      toast.error(err instanceof Error ? err.message : "Could not update status");
+    } finally {
+      setStatusBusy(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!order) return;
@@ -144,10 +168,23 @@ export default function OrderDetailPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <Badge variant={order.status === "COMPLETED" ? "success" : order.status === "CANCELLED" ? "danger" : "warning"}>
-          {CLIENT_ORDER_STATUS_LABELS[order.status]}
-        </Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={order.status}
+          disabled={statusBusy}
+          onValueChange={(v) => void handleStatusChange(v as ClientOrderStatus)}
+        >
+          <SelectTrigger className="h-8 w-[8.75rem]" aria-label="Order status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CLIENT_ORDER_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {CLIENT_ORDER_STATUS_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Badge variant={order.paymentStatus === "PAID" ? "success" : "outline"}>
           {CLIENT_ORDER_PAYMENT_LABELS[order.paymentStatus]}
         </Badge>

@@ -98,6 +98,17 @@ export interface ClientPortal {
     serviceName?: string | null;
     staffName?: string | null;
   }>;
+  /** Orders placed via Client Page buy/book — mirrors staff /app/customers/orders. */
+  orders: Array<{
+    id: string;
+    orderNumber: string;
+    productName: string;
+    quantity: number;
+    total: number;
+    status: string;
+    paymentStatus: string;
+    orderDate: string;
+  }>;
   rewards: Array<{ id: string; name: string; pointsCost: number; description?: string | null }>;
   membership: { name: string; color?: string | null } | null;
   referralCode: string | null;
@@ -449,6 +460,8 @@ export interface Customer {
   tags: string[];
   notes?: string | null;
   source?: string | null;
+  /** Human-readable client ID (e.g. CL-0001), assigned on Client Page signup/booking. */
+  clientNumber?: string | null;
   createdAt: string;
   lastVisitAt?: string | null;
   lastLoginAt?: string | null;

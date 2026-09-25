@@ -7,6 +7,7 @@ import {
   logActivity,
   orderCountsAsRevenue,
 } from '../../common/customer-commerce';
+import { ensureClientNumber, nextClientNumber } from '../../common/client-number';
 import { BookingLinksService } from './booking-links.service';
 import { BookingNotificationsService } from './booking-notifications.service';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
@@ -354,6 +355,7 @@ export class BookingOrchestratorService {
       }
       isNewCustomer = true;
       const tags = dto.referralSource ? [`referral:${dto.referralSource}`] : [];
+      const clientNumber = await nextClientNumber(this.prisma, tenant.id);
       customer = await this.prisma.customer.create({
         data: {
           tenantId: tenant.id,
@@ -366,16 +368,23 @@ export class BookingOrchestratorService {
             .join('\n') || null,
           dob: dto.birthday ? new Date(dto.birthday) : undefined,
           tags,
+          clientNumber,
+          signupSource: 'BOOKING',
         },
       });
-    } else if (automations.updateCrm !== false) {
-      await this.prisma.customer.update({
-        where: { id: customer.id },
-        data: {
-          email: customer.email || dto.email || dto.customerEmail || undefined,
-          notes: dto.notes ? `${customer.notes || ''}\n${dto.notes}`.trim() : customer.notes,
-        },
-      });
+    } else {
+      if (automations.updateCrm !== false) {
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: {
+            email: customer.email || dto.email || dto.customerEmail || undefined,
+            notes: dto.notes ? `${customer.notes || ''}\n${dto.notes}`.trim() : customer.notes,
+          },
+        });
+      }
+      if (!customer.clientNumber) {
+        customer = await ensureClientNumber(this.prisma, customer);
+      }
     }
 
     // Membership access check
@@ -745,6 +754,7 @@ export class BookingOrchestratorService {
       });
     }
     if (!customer) {
+      const clientNumber = await nextClientNumber(this.prisma, tenant.id);
       customer = await this.prisma.customer.create({
         data: {
           tenantId: tenant.id,
@@ -752,8 +762,12 @@ export class BookingOrchestratorService {
           lastName,
           phone,
           email: dto.email || dto.customerEmail || null,
+          clientNumber,
+          signupSource: 'BOOKING',
         },
       });
+    } else if (!customer.clientNumber) {
+      customer = await ensureClientNumber(this.prisma, customer);
     }
 
     const quantity = Math.max(1, Math.floor(Number(dto.quantity) || 1));

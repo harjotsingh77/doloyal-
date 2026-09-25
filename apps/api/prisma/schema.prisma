@@ -713,6 +713,8 @@ model Customer {
   visitStreak     Int            @default(0)
   longestStreak   Int            @default(0)
   referralCode    String?
+  /// Human-readable client ID shown on Client Page (e.g. CL-0001). Per-tenant sequential.
+  clientNumber    String?
   cashbackBalance Float          @default(0.0)
   lastVisitAt     DateTime?
   lastLoginAt     DateTime?
@@ -750,6 +752,7 @@ model Customer {
 
   @@unique([tenantId, referralCode])
   @@unique([tenantId, userId])
+  @@unique([tenantId, clientNumber])
   @@index([tenantId, phone])
   @@index([tenantId, email])
   @@index([tenantId, dob])

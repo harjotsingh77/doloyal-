@@ -9,6 +9,7 @@ import {
   prismaCustomerToShared,
   prismaPointsLedgerToShared,
 } from '../../common/helpers';
+import { ensureClientNumber, nextClientNumber } from '../../common/client-number';
 import {
   buildCustomerExportWorkbook,
   isExcelFilename,
@@ -273,6 +274,7 @@ export class CustomersService {
     if (duplicate) {
       throw new ConflictException('A customer with this phone number or email already exists');
     }
+    const clientNumber = await nextClientNumber(this.prisma, tenantId);
     const customer = await this.prisma.customer.create({
       data: {
         tenantId,
@@ -284,6 +286,7 @@ export class CustomersService {
         tags: data.tags || [],
         status: 'ACTIVE',
         signupSource: 'MANUAL',
+        clientNumber,
       },
     });
 
@@ -360,8 +363,9 @@ export class CustomersService {
           status: byUser.status === 'INACTIVE' ? 'ACTIVE' : byUser.status,
         },
       });
+      const withId = await ensureClientNumber(this.prisma, updated);
       this.realtime.publish(tenantId, 'customers');
-      return updated;
+      return withId;
     }
 
     const orFilters: Array<{ email?: { equals: string; mode: 'insensitive' }; phone?: string }> = [];
@@ -390,8 +394,9 @@ export class CustomersService {
           signupSource: existing.signupSource || input.source || 'CLIENT_PAGE',
         },
       });
+      const withId = await ensureClientNumber(this.prisma, linked);
       this.realtime.publish(tenantId, 'customers');
-      return linked;
+      return withId;
     }
 
     const created = await this.create(tenantId, {
@@ -426,7 +431,7 @@ export class CustomersService {
   }
 
   async getClientPortal(tenantId: string, userId: string) {
-    const customer = await this.prisma.customer.findFirst({
+    let customer = await this.prisma.customer.findFirst({
       where: { tenantId, userId },
       include: {
         appointments: {
@@ -434,11 +439,21 @@ export class CustomersService {
           orderBy: { startTime: 'desc' },
           include: { staff: true },
         },
+        orders: {
+          take: 20,
+          orderBy: { orderDate: 'desc' },
+          include: { product: { select: { name: true } } },
+        },
         memberships: { include: { tier: true }, take: 1 },
       },
     });
     if (!customer) {
       throw new NotFoundException('Customer profile not found for this business.');
+    }
+
+    if (!customer.clientNumber) {
+      const withId = await ensureClientNumber(this.prisma, customer);
+      customer = { ...customer, clientNumber: withId.clientNumber };
     }
 
     await this.prisma.customer.update({
@@ -465,6 +480,16 @@ export class CustomersService {
         status: apt.status,
         serviceName: apt.serviceName,
         staffName: apt.staff?.name ?? null,
+      })),
+      orders: customer.orders.map((order) => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        productName: order.product?.name ?? 'Order',
+        quantity: order.quantity,
+        total: order.total,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        orderDate: order.orderDate.toISOString(),
       })),
       rewards: rewards.map((r) => ({
         id: r.id,
@@ -577,14 +602,26 @@ export class CustomersService {
 
     const createdCustomers = [];
     const BATCH_SIZE = 100;
+    let seqBase = 0;
+    {
+      const existingNumbers = await this.prisma.customer.findMany({
+        where: { tenantId, clientNumber: { startsWith: 'CL-' } },
+        select: { clientNumber: true },
+      });
+      for (const row of existingNumbers) {
+        const n = Number(String(row.clientNumber || '').replace(/^CL-/i, ''));
+        if (Number.isFinite(n) && n > seqBase) seqBase = n;
+      }
+    }
 
     for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
       const batch = toCreate.slice(i, i + BATCH_SIZE);
       const created = await this.prisma.$transaction(
-        batch.map((row) => {
+        batch.map((row, idx) => {
           const nameParts = row.name.trim().split(/\s+/);
           const firstName = nameParts.shift() || row.name.trim();
           const lastName = nameParts.join(' ') || '-';
+          const clientNumber = `CL-${String(seqBase + i + idx + 1).padStart(4, '0')}`;
           return this.prisma.customer.create({
             data: {
               tenantId,
@@ -595,6 +632,8 @@ export class CustomersService {
               notes: row.notes,
               tags: row.tags,
               status: row.status || 'ACTIVE',
+              clientNumber,
+              signupSource: 'IMPORT',
             },
           });
         }),
