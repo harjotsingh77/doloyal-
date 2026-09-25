@@ -2,6 +2,10 @@ import type { AppDataScope } from "./data-sync";
 
 /** Skip the network while a response is this fresh. */
 const FRESH_MS = 90_000;
+/** Dashboard KPIs must catch new customers/orders within seconds, not minutes. */
+const DASHBOARD_FRESH_MS = 12_000;
+/** Orders must reflect public buy/booking payments quickly after prefetch. */
+const ORDERS_FRESH_MS = 8_000;
 /** Show the last payload instantly for this long, then refresh behind it. */
 const KEEP_MS = 30 * 60_000;
 const MAX_ENTRIES = 80;
@@ -176,7 +180,13 @@ export function readGetCache<T>(path: string, token: string | null): T | undefin
   if (!isCacheableGet(path)) return undefined;
   const entry = readEntry(pathKey(path, token));
   if (!entry) return undefined;
-  if (Date.now() - entry.at > FRESH_MS) return undefined;
+  const pathname = pathnameOf(path);
+  const freshMs = pathname.startsWith("/dashboard")
+    ? DASHBOARD_FRESH_MS
+    : pathname === "/orders" || pathname.startsWith("/orders/")
+      ? ORDERS_FRESH_MS
+      : FRESH_MS;
+  if (Date.now() - entry.at > freshMs) return undefined;
   if (entry.generation !== generationForPath(path)) return undefined;
   return entry.data as T;
 }

@@ -388,6 +388,17 @@ export const api = {
 
   getOrderSummary: () => request<ClientOrderSummary>("/orders/summary"),
 
+  /** Subscribe to commerce realtime events (SSE) for products/orders/customers. */
+  subscribeCommerceEvents: () => {
+    assertApiBaseUrlConfigured();
+    const token = getStaffAuthToken();
+    const base = apiBase();
+    const withAuth = token
+      ? `${base}/commerce/events?access_token=${encodeURIComponent(token)}`
+      : `${base}/commerce/events`;
+    return new EventSource(withAuth);
+  },
+
   getOrder: (id: string) => request<ClientOrder>(`/orders/${id}`),
 
   createOrder: (data: CreateClientOrderInput) =>

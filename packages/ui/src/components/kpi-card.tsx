@@ -22,6 +22,7 @@ export interface KpiCardProps {
   delay?: number;
   className?: string;
   onClick?: () => void;
+  onPointerEnter?: () => void;
   /** Label and value only — extra comparison, hint, and "View details" stay in the opened view. */
   compact?: boolean;
 }
@@ -65,6 +66,7 @@ export function KpiCard({
   delay = 0,
   className,
   onClick,
+  onPointerEnter,
   compact,
 }: KpiCardProps) {
   const isNumeric = typeof value === "number";
@@ -93,6 +95,7 @@ export function KpiCard({
     >
       <Card
         onClick={onClick}
+        onPointerEnter={onPointerEnter}
         role={onClick ? "button" : undefined}
         tabIndex={onClick ? 0 : undefined}
         aria-label={onClick ? `${label} details` : undefined}

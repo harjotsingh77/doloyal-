@@ -124,6 +124,14 @@ export function masterConfigFromPageConfig(
     sectionUi: raw.sectionUi && typeof raw.sectionUi === "object" && !Array.isArray(raw.sectionUi)
       ? raw.sectionUi as MasterConfig["sectionUi"]
       : undefined,
+    checkoutCashEnabled: (() => {
+      const nested = raw.checkout && typeof raw.checkout === "object" && !Array.isArray(raw.checkout)
+        ? (raw.checkout as { cashEnabled?: unknown }).cashEnabled
+        : undefined;
+      if (typeof nested === "boolean") return nested;
+      if (typeof raw.checkoutCashEnabled === "boolean") return raw.checkoutCashEnabled;
+      return true;
+    })(),
     ...(stored.length
       ? { visibleSections: restoreVisibleSectionIds(stored, asNum(raw.websiteLayout)) }
       : {}),

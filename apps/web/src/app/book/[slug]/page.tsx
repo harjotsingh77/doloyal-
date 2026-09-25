@@ -33,6 +33,7 @@ import type {
   PublicStaff,
   BookingSlot,
   BookingConfirmation,
+  PublicPurchaseConfirmation,
 } from "@doloyal/shared";
 import { ClientPageRenderer, masterConfigFromPageConfig } from "@/app/(dashboard)/app/client-page/client-page-renderer";
 import { catalogImageSrc } from "@/app/(dashboard)/app/client-page/portal-shared";
@@ -40,6 +41,30 @@ import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
 import { useClientAuth } from "@/lib/client-auth";
 import { api } from "@/lib/api";
 import { useCommerceLive } from "@/lib/data-sync";
+import { BuyChoiceDialog, isBookableProduct, isBuyableProduct } from "./buy-choice";
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on: (event: string, cb: (e: unknown) => void) => void;
+    };
+  }
+}
+
+function loadRazorpaySdk(): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(!!window.Razorpay);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+const ONLINE_PAYMENT_METHODS = ["RAZORPAY", "STRIPE", "UPI"] as const;
 
 const BASE_URL = getApiBaseUrl();
 
@@ -450,7 +475,10 @@ export default function BookingPage() {
 
   const [step, setStep] = React.useState(1);
   const [direction, setDirection] = React.useState(0);
-  const [phase, setPhase] = React.useState<"landing" | "flow">("landing");
+  const [phase, setPhase] = React.useState<"landing" | "flow" | "purchase">("landing");
+  const [choiceService, setChoiceService] = React.useState<PublicService | null>(null);
+  const [choiceOpen, setChoiceOpen] = React.useState(false);
+  const [purchaseConfirmation, setPurchaseConfirmation] = React.useState<PublicPurchaseConfirmation | null>(null);
 
   const [business, setBusiness] = React.useState<PublicBusinessInfo | null>(null);
   const [businessLoading, setBusinessLoading] = React.useState(true);
@@ -499,7 +527,7 @@ export default function BookingPage() {
   const [gender, setGender] = React.useState("");
   const [address, setAddress] = React.useState("");
   const [referralSource, setReferralSource] = React.useState("");
-  const [paymentMethod, setPaymentMethod] = React.useState("PAY_AT_STORE");
+  const [paymentMethod, setPaymentMethod] = React.useState("RAZORPAY");
   const [honeypot, setHoneypot] = React.useState("");
   const [validationErrors, setValidationErrors] = React.useState<Record<string, string>>({});
 
@@ -757,7 +785,7 @@ export default function BookingPage() {
         phone: phone.trim(),
         customerPhone: phone.trim(),
         honeypot,
-        paymentMethod,
+        paymentMethod: paymentMethod === "UPI" ? "RAZORPAY" : paymentMethod,
       };
       if (selectedStaff) payload.staffId = selectedStaff;
       if (email.trim()) {
@@ -779,8 +807,125 @@ export default function BookingPage() {
       if (!res.ok || json.error) {
         throw new Error(json.error?.message ?? "Booking failed. Please try again.");
       }
-      setConfirmation(json.data as BookingConfirmation);
+      const data = json.data as BookingConfirmation & {
+        paymentIntent?: {
+          provider?: string;
+          orderId?: string | null;
+          keyId?: string | null;
+          amount?: number;
+          currency?: string;
+        } | null;
+        paymentAmount?: number;
+      };
+
+      if (data.paymentIntent?.orderId && data.paymentIntent?.keyId) {
+        await openRazorpayCheckout({
+          intent: data.paymentIntent,
+          name: `${firstName} ${lastName}`.trim(),
+          description: selectedService.name,
+          prefill: {
+            name: `${firstName} ${lastName}`.trim(),
+            email: email.trim() || undefined,
+            contact: phone.trim(),
+          },
+          onPaid: async (response) => {
+            const confirmRes = await fetch(`${BASE_URL}/public/book/${slug}/confirm-payment`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                appointmentId: data.id,
+                provider: "RAZORPAY",
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              }),
+            });
+            const confirmJson = await confirmRes.json();
+            if (!confirmRes.ok || confirmJson.error) {
+              throw new Error(confirmJson.error?.message ?? "Payment confirmation failed");
+            }
+          },
+        });
+      }
+
+      setConfirmation(data);
       goToStep(6);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Something went wrong. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handlePurchase() {
+    if (!validateDetails()) return;
+    if (!selectedService) return;
+
+    try {
+      setSubmitting(true);
+      setSubmitError(null);
+
+      const payload: Record<string, unknown> = {
+        productId: selectedService.id,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        customerName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        phone: phone.trim(),
+        customerPhone: phone.trim(),
+        paymentMethod,
+        honeypot,
+        quantity: 1,
+      };
+      if (email.trim()) {
+        payload.email = email.trim();
+        payload.customerEmail = email.trim();
+      }
+      if (notes.trim()) payload.notes = notes.trim();
+
+      const res = await fetch(`${BASE_URL}/public/book/${slug}/purchase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        throw new Error(json.error?.message ?? "Purchase failed. Please try again.");
+      }
+      const data = json.data as PublicPurchaseConfirmation;
+
+      if (data.paymentIntent?.orderId && data.paymentIntent?.keyId) {
+        await openRazorpayCheckout({
+          intent: data.paymentIntent,
+          name: data.customerName,
+          description: data.productName,
+          prefill: {
+            name: data.customerName,
+            email: email.trim() || undefined,
+            contact: phone.trim(),
+          },
+          onPaid: async (response) => {
+            const confirmRes = await fetch(`${BASE_URL}/public/book/${slug}/confirm-purchase-payment`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                orderId: data.id,
+                provider: "RAZORPAY",
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              }),
+            });
+            const confirmJson = await confirmRes.json();
+            if (!confirmRes.ok || confirmJson.error) {
+              throw new Error(confirmJson.error?.message ?? "Payment confirmation failed");
+            }
+          },
+        });
+      }
+
+      setPurchaseConfirmation(data);
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : "Something went wrong. Please try again."
@@ -821,30 +966,228 @@ export default function BookingPage() {
 
   const startBooking = (service?: PublicService) => {
     if (service) setSelectedService(service);
+    setPaymentMethod("RAZORPAY");
     setPhase("flow");
     setDirection(1);
     setStep(2);
   };
 
+  const startPurchase = (service?: PublicService) => {
+    if (service) setSelectedService(service);
+    const cashEnabled = masterConfigFromPageConfig(
+      business?.bookingLink?.pageConfig ?? (business as { pageConfig?: unknown } | null)?.pageConfig,
+      business?.brandColor,
+    ).checkoutCashEnabled !== false;
+    setPaymentMethod(cashEnabled ? "CASH" : "RAZORPAY");
+    setPurchaseConfirmation(null);
+    setPhase("purchase");
+    setDirection(1);
+  };
+
+  const handleProductCta = (service?: PublicService) => {
+    if (!service) {
+      startBooking();
+      return;
+    }
+    const bookable = isBookableProduct(service);
+    const buyable = isBuyableProduct(service);
+    if (bookable && buyable) {
+      setChoiceService(service);
+      setChoiceOpen(true);
+      return;
+    }
+    if (buyable && !bookable) {
+      setSelectedService(service);
+      startPurchase(service);
+      return;
+    }
+    startBooking(service);
+  };
+
+  async function openRazorpayCheckout(opts: {
+    intent: {
+      provider?: string;
+      orderId?: string | null;
+      keyId?: string | null;
+      amount?: number;
+      currency?: string;
+      clientSecret?: string | null;
+    };
+    name: string;
+    description: string;
+    prefill: { name?: string; email?: string; contact?: string };
+    onPaid: (payload: {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    }) => Promise<void>;
+  }) {
+    const ready = await loadRazorpaySdk();
+    if (!ready || !opts.intent.keyId || !opts.intent.orderId) {
+      throw new Error("Online payment is temporarily unavailable. Please try again or choose cash if available.");
+    }
+    await new Promise<void>((resolve, reject) => {
+      const rzp = new window.Razorpay!({
+        key: opts.intent.keyId,
+        amount: opts.intent.amount,
+        currency: opts.intent.currency || currency || "INR",
+        name: business?.name || "Payment",
+        description: opts.description,
+        order_id: opts.intent.orderId,
+        prefill: opts.prefill,
+        theme: { color: business?.brandColor || "#2563EB" },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            await opts.onPaid(response);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        },
+        modal: {
+          ondismiss: () => reject(new Error("Payment cancelled. You can try again.")),
+        },
+      });
+      rzp.open();
+    });
+  }
+
   // The landing page is the customer's client page: the exact same component the
   // builder previews, so what a business publishes is what it saw while editing.
   if (phase === "landing") {
     return (
-      <ClientPageRenderer
-        business={business}
-        services={services}
-        currency={currency}
-        config={masterConfigFromPageConfig(
-          business.bookingLink?.pageConfig ?? (business as { pageConfig?: unknown }).pageConfig,
-          business.brandColor,
-        )}
-        mode="published"
-        onBook={startBooking}
-        portal={portal}
-        user={user}
-        onLogout={() => logout(slug)}
-        headerAccessory={<ThemeToggle />}
-      />
+      <>
+        <ClientPageRenderer
+          business={business}
+          services={services}
+          currency={currency}
+          config={masterConfigFromPageConfig(
+            business.bookingLink?.pageConfig ?? (business as { pageConfig?: unknown }).pageConfig,
+            business.brandColor,
+          )}
+          mode="published"
+          onBook={handleProductCta}
+          portal={portal}
+          user={user}
+          onLogout={() => logout(slug)}
+          headerAccessory={<ThemeToggle />}
+        />
+        <BuyChoiceDialog
+          open={choiceOpen}
+          service={choiceService}
+          onClose={() => setChoiceOpen(false)}
+          onBuyNow={() => {
+            const svc = choiceService;
+            setChoiceOpen(false);
+            if (svc) startPurchase(svc);
+          }}
+          onBook={() => {
+            const svc = choiceService;
+            setChoiceOpen(false);
+            startBooking(svc || undefined);
+          }}
+        />
+      </>
+    );
+  }
+
+  const checkoutCashEnabled = masterConfigFromPageConfig(
+    business.bookingLink?.pageConfig ?? (business as { pageConfig?: unknown }).pageConfig,
+    business.brandColor,
+  ).checkoutCashEnabled !== false;
+
+  if (phase === "purchase") {
+    return (
+      <div className="min-h-screen bg-[rgb(var(--color-background))]">
+        <header className="sticky top-0 z-50 border-b border-black/[0.08] bg-white/95 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="mr-1 rounded-md p-1 hover:bg-[rgb(var(--color-muted))]"
+                onClick={() => {
+                  setPhase("landing");
+                  setPurchaseConfirmation(null);
+                }}
+                aria-label="Back"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              {business.logoUrl ? (
+                <img src={business.logoUrl} alt={business.name} className="h-8 w-8 rounded-[var(--radius-sm)] object-cover" />
+              ) : (
+                <div
+                  className="h-8 w-8 rounded-[var(--radius-sm)] flex items-center justify-center text-white text-xs font-bold"
+                  style={{ backgroundColor: business.brandColor || "rgb(var(--color-primary))" }}
+                >
+                  {getInitials(business.name)}
+                </div>
+              )}
+              <div>
+                <h1 className="text-sm font-bold leading-tight">{business.name}</h1>
+                <p className="text-[0.65rem] text-[rgb(var(--color-muted-foreground))]">Buy now</p>
+              </div>
+            </div>
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="mx-auto max-w-3xl px-4 py-6 md:py-10">
+          {purchaseConfirmation ? (
+            <div className="space-y-5 text-center">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="h-7 w-7" />
+              </div>
+              <h2 className="text-xl font-bold">Purchase confirmed</h2>
+              <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+                {purchaseConfirmation.productName} · {formatPrice(purchaseConfirmation.total, currency)}
+              </p>
+              <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                Order {purchaseConfirmation.orderNumber} · {purchaseConfirmation.paymentMethod === "CASH" || purchaseConfirmation.paymentMethod === "PAY_AT_STORE" ? "Pay cash at the store" : "Paid online"}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhase("landing");
+                  setPurchaseConfirmation(null);
+                  resetFlow();
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-[var(--radius)] bg-[rgb(var(--color-primary))] px-5 text-sm font-semibold text-white"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <StepPurchase
+              service={selectedService}
+              currency={currency}
+              cashEnabled={checkoutCashEnabled}
+              firstName={firstName}
+              lastName={lastName}
+              email={email}
+              phone={phone}
+              notes={notes}
+              paymentMethod={paymentMethod}
+              honeypot={honeypot}
+              errors={validationErrors}
+              submitting={submitting}
+              submitError={submitError}
+              onChangeFirstName={setFirstName}
+              onChangeLastName={setLastName}
+              onChangeEmail={setEmail}
+              onChangePhone={setPhone}
+              onChangeNotes={setNotes}
+              onChangePaymentMethod={setPaymentMethod}
+              onChangeHoneypot={setHoneypot}
+              onBack={() => setPhase("landing")}
+              onSubmit={handlePurchase}
+            />
+          )}
+        </main>
+      </div>
     );
   }
 
@@ -975,8 +1318,17 @@ export default function BookingPage() {
                 referralSource={referralSource}
                 paymentMethod={paymentMethod}
                 honeypot={honeypot}
-                paymentMode={business?.bookingLink?.payment?.mode || "NONE"}
-                paymentMethods={business?.bookingLink?.payment?.methods || ["CASH", "UPI"]}
+                paymentMode="FULL"
+                paymentMethods={
+                  (business?.bookingLink?.payment?.methods || ["RAZORPAY", "UPI", "STRIPE"]).filter(
+                    (m) => ONLINE_PAYMENT_METHODS.includes(m as (typeof ONLINE_PAYMENT_METHODS)[number]),
+                  ).length
+                    ? (business?.bookingLink?.payment?.methods || []).filter((m) =>
+                        ONLINE_PAYMENT_METHODS.includes(m as (typeof ONLINE_PAYMENT_METHODS)[number]),
+                      )
+                    : ["RAZORPAY", "UPI"]
+                }
+                onlineOnly
                 customerFields={business?.bookingLink?.customerFields}
                 errors={validationErrors}
                 onChangeFirstName={setFirstName}
@@ -1568,6 +1920,7 @@ function StepDetails({
   honeypot,
   paymentMode,
   paymentMethods,
+  onlineOnly,
   customerFields,
   errors,
   onChangeFirstName,
@@ -1599,6 +1952,7 @@ function StepDetails({
   honeypot: string;
   paymentMode: string;
   paymentMethods: string[];
+  onlineOnly?: boolean;
   customerFields?: Record<string, { enabled?: boolean; required?: boolean }> | null;
   errors: Record<string, string>;
   onChangeFirstName: (v: string) => void;
@@ -1631,7 +1985,18 @@ function StepDetails({
   const showGender = field("gender", false).enabled === true;
   const showAddress = field("address", false).enabled === true;
   const showReferral = field("referralSource", false).enabled === true;
-  const needsPayment = paymentMode && paymentMode !== "NONE";
+  const needsPayment = onlineOnly || (paymentMode && paymentMode !== "NONE");
+  const methods = (paymentMethods.length ? paymentMethods : ["RAZORPAY", "UPI"]).filter(
+    (m) => !onlineOnly || (m !== "CASH" && m !== "PAY_AT_STORE"),
+  );
+
+  const methodLabel = (m: string) => {
+    if (m === "RAZORPAY") return "Card / UPI";
+    if (m === "STRIPE") return "Card";
+    if (m === "UPI") return "UPI";
+    if (m === "PAY_AT_STORE") return "Pay at Store";
+    return m;
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -1719,7 +2084,7 @@ function StepDetails({
         {needsPayment && (
           <FieldGroup label="Payment Method">
             <div className="flex flex-wrap gap-2">
-              {(paymentMethods.length ? paymentMethods : ["CASH", "UPI"]).map((m) => (
+              {methods.map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -1730,26 +2095,17 @@ function StepDetails({
                       : "border-[rgb(var(--color-border))]"
                   }`}
                 >
-                  {m === "PAY_AT_STORE" ? "Pay at Store" : m}
+                  {methodLabel(m)}
                 </button>
               ))}
-              {paymentMode === "PAY_AT_STORE" || paymentMode === "DEPOSIT" || paymentMode === "FULL" || paymentMode === "PARTIAL" ? (
-                <button
-                  type="button"
-                  onClick={() => onChangePaymentMethod("PAY_AT_STORE")}
-                  className={`px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium border ${
-                    paymentMethod === "PAY_AT_STORE"
-                      ? "border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
-                      : "border-[rgb(var(--color-border))]"
-                  }`}
-                >
-                  Pay at Store
-                </button>
-              ) : null}
             </div>
-            {paymentMode === "DEPOSIT" && (
+            {onlineOnly ? (
+              <p className="text-xs text-[rgb(var(--color-muted-foreground))] mt-2">
+                Bookings require online payment. Cash is only available for in-store purchases.
+              </p>
+            ) : paymentMode === "DEPOSIT" ? (
               <p className="text-xs text-[rgb(var(--color-muted-foreground))] mt-2">A deposit is required to confirm this booking.</p>
-            )}
+            ) : null}
           </FieldGroup>
         )}
       </div>
@@ -1767,7 +2123,7 @@ function StepDetails({
         className="w-full py-3 px-6 rounded-[var(--radius)] bg-[rgb(var(--color-primary))] text-[rgb(var(--color-primary-foreground))] font-semibold text-sm hover:brightness-110 transition-all shadow-soft disabled:opacity-40 inline-flex items-center justify-center gap-2"
       >
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-        {submitting ? "Booking..." : needsPayment && paymentMethod !== "PAY_AT_STORE" && paymentMethod !== "CASH" ? "Pay & Confirm" : "Confirm Booking"}
+        {submitting ? "Booking..." : "Pay & Confirm"}
       </button>
     </form>
   );
@@ -1909,5 +2265,157 @@ function DetailItem({
       </p>
       <p className="text-sm font-semibold">{value}</p>
     </div>
+  );
+}
+
+function StepPurchase({
+  service,
+  currency,
+  cashEnabled,
+  firstName,
+  lastName,
+  email,
+  phone,
+  notes,
+  paymentMethod,
+  honeypot,
+  errors,
+  submitting,
+  submitError,
+  onChangeFirstName,
+  onChangeLastName,
+  onChangeEmail,
+  onChangePhone,
+  onChangeNotes,
+  onChangePaymentMethod,
+  onChangeHoneypot,
+  onBack,
+  onSubmit,
+}: {
+  service: PublicService | null;
+  currency: string;
+  cashEnabled: boolean;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  notes: string;
+  paymentMethod: string;
+  honeypot: string;
+  errors: Record<string, string>;
+  submitting: boolean;
+  submitError: string | null;
+  onChangeFirstName: (v: string) => void;
+  onChangeLastName: (v: string) => void;
+  onChangeEmail: (v: string) => void;
+  onChangePhone: (v: string) => void;
+  onChangeNotes: (v: string) => void;
+  onChangePaymentMethod: (v: string) => void;
+  onChangeHoneypot: (v: string) => void;
+  onBack: () => void;
+  onSubmit: () => void;
+}) {
+  const methods = cashEnabled
+    ? [
+        { id: "RAZORPAY", label: "Card / UPI" },
+        { id: "CASH", label: "Cash" },
+      ]
+    : [{ id: "RAZORPAY", label: "Card / UPI" }];
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+      className="space-y-5"
+    >
+      <div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 inline-flex items-center gap-1.5 text-xs text-[rgb(var(--color-muted-foreground))] transition-colors hover:text-[rgb(var(--color-foreground))]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </button>
+        <h2 className="text-lg font-bold">Buy now</h2>
+        <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+          {service
+            ? `${service.name} · ${formatPrice(service.price, currency)} — pay at the store`
+            : "Complete payment for your purchase"}
+        </p>
+      </div>
+
+      <input
+        tabIndex={-1}
+        autoComplete="off"
+        value={honeypot}
+        onChange={(e) => onChangeHoneypot(e.target.value)}
+        className="absolute -z-10 h-0 w-0 opacity-0"
+        aria-hidden="true"
+      />
+
+      <div className="space-y-4 rounded-[var(--radius)] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-soft">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FieldGroup label="First Name" required error={errors.firstName}>
+            <input value={firstName} onChange={(e) => onChangeFirstName(e.target.value)} placeholder="John" className={inputClass(!!errors.firstName)} />
+          </FieldGroup>
+          <FieldGroup label="Last Name" required error={errors.lastName}>
+            <input value={lastName} onChange={(e) => onChangeLastName(e.target.value)} placeholder="Doe" className={inputClass(!!errors.lastName)} />
+          </FieldGroup>
+        </div>
+        <FieldGroup label="Phone" required error={errors.phone}>
+          <input type="tel" value={phone} onChange={(e) => onChangePhone(e.target.value)} placeholder="+91 98765 43210" className={inputClass(!!errors.phone)} />
+        </FieldGroup>
+        <FieldGroup label="Email" error={errors.email}>
+          <input type="email" value={email} onChange={(e) => onChangeEmail(e.target.value)} placeholder="you@email.com" className={inputClass(!!errors.email)} />
+        </FieldGroup>
+        <FieldGroup label="Notes">
+          <textarea value={notes} onChange={(e) => onChangeNotes(e.target.value)} rows={2} placeholder="Optional note" className={inputClass(false)} />
+        </FieldGroup>
+        <FieldGroup label="Payment Method">
+          <div className="flex flex-wrap gap-2">
+            {methods.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onChangePaymentMethod(m.id)}
+                className={`rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-medium ${
+                  paymentMethod === m.id
+                    ? "border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
+                    : "border-[rgb(var(--color-border))]"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {!cashEnabled ? (
+            <p className="mt-2 text-xs text-[rgb(var(--color-muted-foreground))]">Cash is turned off for this page.</p>
+          ) : null}
+        </FieldGroup>
+      </div>
+
+      {submitError ? (
+        <div className="flex items-center gap-2 text-sm text-[rgb(var(--color-danger))]">
+          <AlertCircle className="h-4 w-4" />
+          <span>{submitError}</span>
+        </div>
+      ) : null}
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[rgb(var(--color-primary))] px-6 py-3 text-sm font-semibold text-[rgb(var(--color-primary-foreground))] shadow-soft transition-all hover:brightness-110 disabled:opacity-40"
+      >
+        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {submitting
+          ? "Processing..."
+          : paymentMethod === "CASH" || paymentMethod === "PAY_AT_STORE"
+            ? "Confirm · Pay cash at store"
+            : "Pay now"}
+      </button>
+    </form>
   );
 }

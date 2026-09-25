@@ -30,6 +30,16 @@ export class RazorpayIntegrationService {
     return new Razorpay({ key_id: keyId, key_secret: keySecret });
   }
 
+  async getKeyId(tenantId: string): Promise<string | null> {
+    const secrets = await this.integrations.getConnectedProviderSecrets(tenantId, 'RAZORPAY');
+    return secrets?.token?.apiKey || null;
+  }
+
+  async getKeySecret(tenantId: string): Promise<string | null> {
+    const secrets = await this.integrations.getConnectedProviderSecrets(tenantId, 'RAZORPAY');
+    return secrets?.token?.apiSecret || null;
+  }
+
   async createOrder(tenantId: string, amount: number, currency: string = 'INR', receipt?: string) {
     const client = await this.getClient(tenantId);
     if (!client) throw new Error('Razorpay not connected');

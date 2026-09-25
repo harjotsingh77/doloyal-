@@ -142,7 +142,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/app", icon: "LayoutDashboard" },
       { label: "Analytics", href: "/app/analytics", icon: "BarChart3", requires: ["analytics:read"] },
-      { label: "Doloyal AI", href: "/app/assistant", icon: "Bot", requires: ["ai:use"], badge: "new" },
+      { label: "Doloyal AI", href: "/app/assistant", icon: "Bot", requires: ["ai:use"] },
     ],
   },
   {
@@ -151,8 +151,8 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { label: "Client", href: "/app/customers", icon: "Users", requires: ["customers:read"] },
       { label: "Product", href: "/app/customers/products", icon: "Package", requires: ["customers:read"] },
       { label: "Order", href: "/app/customers/orders", icon: "ShoppingCart", requires: ["customers:read"] },
-      { label: "Client Sign-in", href: "/app/client-signin", icon: "LogIn", badge: "new" },
-      { label: "Client Page", href: "/app/client-page", icon: "Globe", badge: "new" },
+      { label: "Client Sign-in", href: "/app/client-signin", icon: "LogIn" },
+      { label: "Client Page", href: "/app/client-page", icon: "Globe" },
     ],
   },
   {
@@ -171,7 +171,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
   {
     section: "AI & Websites",
     items: [
-      { label: "Workflows", href: "/app/workflows", icon: "Workflow", badge: "new", hidden: true },
+      { label: "Workflows", href: "/app/workflows", icon: "Workflow", hidden: true },
     ],
   },
   {

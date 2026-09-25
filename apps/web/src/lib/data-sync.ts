@@ -1,5 +1,7 @@
 import * as React from "react";
 import { invalidateGetCache } from "./api-cache";
+import { getApiBaseUrl } from "./api-base";
+import { getStaffAuthToken } from "./access-token";
 
 export type AppDataScope =
   | "dashboard"
@@ -152,11 +154,42 @@ export function useCommerceLive(
     // instances. Poll only while visible; local mutation/cross-tab updates are
     // still immediate through useAppSync above.
     const poll = () => {
-      if (document.visibilityState === "visible") reloadRef.current();
+      if (document.visibilityState !== "visible") return;
+      // Drop GET cache before refetch so public buy/booking orders are not
+      // masked by a fresh-but-stale prefetch from /app/customers/orders.
+      invalidateGetCache(scopes.length ? scopes : ["all"]);
+      reloadRef.current();
     };
-    const interval = window.setInterval(poll, slug ? 30_000 : 45_000);
+    const interval = window.setInterval(poll, slug ? 30_000 : 12_000);
     return () => {
       window.clearInterval(interval);
+    };
+  }, [scopesKey, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Staff tabs: subscribe to commerce SSE so public purchase/booking publishes
+  // invalidate orders immediately when the API process is shared.
+  React.useEffect(() => {
+    if (typeof window === "undefined" || slug) return;
+    const token = getStaffAuthToken();
+    if (!token) return;
+    const base = getApiBaseUrl().replace(/\/+$/, "");
+    const url = `${base}/commerce/events?access_token=${encodeURIComponent(token)}`;
+    const source = new EventSource(url);
+    const wanted = new Set(scopes);
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as { scope?: AppDataScope };
+        const scope = data?.scope;
+        if (!scope) return;
+        if (!wanted.has("all") && !wanted.has(scope)) return;
+        notifyAppChange([scope]);
+        reloadRef.current();
+      } catch {
+        // ignore malformed keepalive payloads
+      }
+    };
+    return () => {
+      source.close();
     };
   }, [scopesKey, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 }

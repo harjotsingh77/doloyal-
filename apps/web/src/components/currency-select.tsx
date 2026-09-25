@@ -4,9 +4,12 @@ import * as React from "react";
 import { ChevronDown, Check } from "lucide-react";
 import { useCurrency } from "@/lib/currency-context";
 import { CURRENCIES } from "@/lib/currency";
+import { useTenant, useUpdateTenant } from "@/lib/tenant-query";
 
 export function CurrencySelect() {
   const { currency, setCurrency } = useCurrency();
+  const { data: tenant } = useTenant();
+  const updateTenant = useUpdateTenant();
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -21,6 +24,18 @@ export function CurrencySelect() {
   }, []);
 
   const active = CURRENCIES.find((c) => c.code === currency);
+
+  const pick = React.useCallback(
+    (code: string) => {
+      setCurrency(code);
+      setOpen(false);
+      // Persist to tenant so Client Page / public book prices use the same currency.
+      if (tenant && tenant.currency !== code) {
+        updateTenant.mutate({ currency: code });
+      }
+    },
+    [setCurrency, tenant, updateTenant],
+  );
 
   return (
     <div ref={ref} className="relative">
@@ -42,10 +57,7 @@ export function CurrencySelect() {
             {CURRENCIES.map((c) => (
               <button
                 key={c.code}
-                onClick={() => {
-                  setCurrency(c.code);
-                  setOpen(false);
-                }}
+                onClick={() => pick(c.code)}
                 className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-[rgb(var(--color-muted))]"
               >
                 <span className="w-8 text-center text-base">{c.symbol}</span>

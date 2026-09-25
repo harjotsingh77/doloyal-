@@ -102,6 +102,8 @@ export type MasterConfig = {
   faqs?: Array<{ question: string; answer: string }>;
   testimonials?: Array<{ name: string; text: string; rating?: number }>;
   sectionUi?: Record<string, SectionUi>;
+  /** When true (default), walk-in purchases offer Cash alongside online/card. */
+  checkoutCashEnabled?: boolean;
 };
 
 export function sectionUi(config?: MasterConfig, id?: string): SectionUi {
@@ -131,6 +133,7 @@ export const SECTION_ANCHORS: Record<string, string> = {
   social: "portal-social",
   map: "portal-map",
   cta: "portal-cta",
+  checkout: "portal-checkout",
   footer: "portal-footer",
 };
 
@@ -159,6 +162,7 @@ export const FRIENDLY_TITLES: Record<string, string> = {
   social: "Follow along",
   map: "Find us",
   cta: "Ready when you are",
+  checkout: "Checkout",
   footer: "Find us",
 };
 

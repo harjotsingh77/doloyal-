@@ -17,6 +17,7 @@ import { useTenant } from "@/lib/tenant-query";
 import {
   CategoryCreateDialog,
   ProductEditorFields,
+  PRODUCT_SKU_INPUT_ID,
   buildProductPayload,
   persistProduct,
   pickProductImage,
@@ -48,28 +49,51 @@ export function ProductFormDialog({
   const [imageFile, setImageFile] = React.useState<File | null>(null);
   const [categoryOpen, setCategoryOpen] = React.useState(false);
   const [imageBusy, setImageBusy] = React.useState(false);
+  const [skuError, setSkuError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
     setForm(productFormDefaults(product, tenant));
     setImageFile(null);
+    setSkuError(null);
+    // Ensure Name/SKU stay visible — dialog body scrolls and users often miss them.
+    requestAnimationFrame(() => {
+      const sku = document.getElementById(PRODUCT_SKU_INPUT_ID);
+      sku?.closest('[role="dialog"]')?.scrollTo?.({ top: 0 });
+    });
   }, [open, product, tenant]);
 
   const patch = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+    if (key === "sku") setSkuError(null);
+  };
+
+  const focusSkuField = () => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(PRODUCT_SKU_INPUT_ID) as HTMLInputElement | null;
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus();
+      el?.select();
+    });
   };
 
   const handleSave = async () => {
-    const payload = buildProductPayload(form);
+    const payload = buildProductPayload(form, { requireSku: isEdit });
     if (!payload) return;
     try {
       setSaving(true);
+      setSkuError(null);
       const saved = await persistProduct({ product, payload, imageFile });
       onSaved(saved);
       onOpenChange(false);
       toast.success(product ? "Product updated successfully." : "Product created successfully.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save product");
+      const message = err instanceof Error ? err.message : "Could not save product";
+      if (/sku/i.test(message)) {
+        setSkuError(message);
+        focusSkuField();
+      }
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -80,11 +104,11 @@ export function ProductFormDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{isEdit ? "Edit Product" : "Add Product"}</DialogTitle>
+            <DialogTitle>{isEdit ? "Edit Product" : "Create Product"}</DialogTitle>
             <DialogDescription>
               {isEdit
                 ? "Update catalog details used across client engagement and loyalty workflows."
-                : "Add a product or service to your catalog."}
+                : "Add a product or service to your catalog. A unique SKU is suggested automatically."}
             </DialogDescription>
           </DialogHeader>
 
@@ -118,6 +142,7 @@ export function ProductFormDialog({
             active={form.active}
             setActive={(v) => patch("active", v)}
             imagePreview={form.imagePreview}
+            skuError={skuError}
             onPickImage={(file) =>
               void pickProductImage(file, async (next, preview) => {
                 setImageFile(next);

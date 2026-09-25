@@ -30,6 +30,20 @@ import { toast } from "sonner";
 export const NONE = "__none__";
 export const ADD_CATEGORY = "__add__";
 const IMAGE_MAX_BYTES = 12 * 1024 * 1024;
+export const PRODUCT_SKU_INPUT_ID = "product-sku-input";
+
+/** Client-side draft SKU so create forms aren't empty/colliding with common values. */
+export function suggestProductSku(name?: string) {
+  const base = (name?.trim() || "PRD")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24) || "PRD";
+  const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    .toUpperCase()
+    .slice(-8);
+  return `${base}-${suffix}`.slice(0, 64);
+}
 
 export function productImageSrc(url: string | null | undefined) {
   if (!url) return null;
@@ -65,7 +79,7 @@ export function productFormDefaults(
 } {
   return {
     name: product?.name ?? "",
-    sku: product?.sku ?? "",
+    sku: product?.sku ?? suggestProductSku(),
     categoryId: product?.categoryId ?? NONE,
     description: product?.description ?? "",
     price: product != null ? String(product.price) : "",
@@ -82,27 +96,30 @@ export function productFormDefaults(
   };
 }
 
-export function buildProductPayload(state: {
-  name: string;
-  sku: string;
-  categoryId: string;
-  description: string;
-  price: string;
-  originalPrice: string;
-  discount: string;
-  stockQuantity: string;
-  lowStockThreshold: string;
-  availability: "IN_STOCK" | "OUT_OF_STOCK";
-  unit: string;
-  brand: string;
-  productCode: string;
-  active: boolean;
-}): CreateProductInput | null {
+export function buildProductPayload(
+  state: {
+    name: string;
+    sku: string;
+    categoryId: string;
+    description: string;
+    price: string;
+    originalPrice: string;
+    discount: string;
+    stockQuantity: string;
+    lowStockThreshold: string;
+    availability: "IN_STOCK" | "OUT_OF_STOCK";
+    unit: string;
+    brand: string;
+    productCode: string;
+    active: boolean;
+  },
+  options?: { requireSku?: boolean },
+): CreateProductInput | null {
   if (!state.name.trim()) {
     toast.error("Product name is required");
     return null;
   }
-  if (!state.sku.trim()) {
+  if (options?.requireSku && !state.sku.trim()) {
     toast.error("SKU is required");
     return null;
   }
@@ -217,6 +234,7 @@ export function ProductEditorFields({
   categories,
   onAddCategory,
   imageBusy,
+  skuError,
 }: {
   name: string; setName: (v: string) => void;
   sku: string; setSku: (v: string) => void;
@@ -238,6 +256,7 @@ export function ProductEditorFields({
   categories: ProductCategory[];
   onAddCategory: () => void;
   imageBusy?: boolean;
+  skuError?: string | null;
 }) {
   return (
     <div className="space-y-6">
@@ -249,8 +268,19 @@ export function ProductEditorFields({
           <Field label="Product Name" required>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Premium Hair Spa" />
           </Field>
-          <Field label="SKU" required>
-            <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="HS-001" />
+          <Field
+            label="SKU"
+            htmlFor={PRODUCT_SKU_INPUT_ID}
+            error={skuError || undefined}
+            hint={skuError ? undefined : "Unique per catalog. Leave blank to auto-generate."}
+          >
+            <Input
+              id={PRODUCT_SKU_INPUT_ID}
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              placeholder="Auto if blank"
+              aria-invalid={Boolean(skuError)}
+            />
           </Field>
           <Field label="Product Code">
             <Input value={productCode} onChange={(e) => setProductCode(e.target.value)} placeholder="Same as SKU if empty" />

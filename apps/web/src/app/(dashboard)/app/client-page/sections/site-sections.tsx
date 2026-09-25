@@ -165,7 +165,7 @@ export function WebsiteServices({
                 {service.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-[color:var(--site-ink)]/55">{service.description}</p> : null}
                 <div className="mt-5 flex items-center justify-between">
                   {ui.showDuration !== false ? <span className="inline-flex items-center gap-1.5 text-xs text-[color:var(--site-ink)]/50"><Clock3 className="h-3.5 w-3.5" />{service.durationMinutes} min</span> : <span />}
-                  {ui.showCta !== false ? <LoungeButton onClick={() => onBook(service)} className="px-4 py-2 text-xs">{ui.cta?.trim() || copy.book}</LoungeButton> : null}
+                  {ui.showCta !== false ? <LoungeButton onClick={() => onBook(service)} className="px-4 py-2 text-xs">{ui.cta?.trim() || "Buy"}</LoungeButton> : null}
                 </div>
               </div>
             </article>
@@ -215,7 +215,7 @@ export function FeaturedGrid({
                   <h4 className={`${index === 0 ? "text-2xl" : "text-lg"} font-semibold tracking-[-0.03em]`}>{service.name}</h4>
                   {ui.showPrice !== false ? <span className="text-sm font-semibold">{formatPrice(service.price, currency)}</span> : null}
                 </div>
-                <button type="button" onClick={() => onBook(service)} className="mt-4 text-sm font-semibold text-[color:var(--site-accent)]">{ui.cta?.trim() || copy.book}</button>
+                <button type="button" onClick={() => onBook(service)} className="mt-4 text-sm font-semibold text-[color:var(--site-accent)]">{ui.cta?.trim() || "Buy"}</button>
               </div>
             </article>
           ))}
@@ -576,6 +576,43 @@ export function FinalCta({
           </div>
         </div>
       </div>
+    </section>,
+  );
+}
+
+export function CheckoutSection({
+  chrome,
+  config,
+  title,
+}: {
+  chrome: PortalChrome;
+  config?: MasterConfig;
+  title: string;
+}) {
+  const ui = sectionUi(config, "checkout");
+  const cashEnabled = config?.checkoutCashEnabled !== false;
+  return wrap(
+    chrome,
+    "checkout",
+    <section id="portal-checkout" className="py-10 sm:py-14">
+      <Inner>
+        <SectionTitle>{title || "Checkout"}</SectionTitle>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--site-ink)]/55">
+          {ui.body?.trim() || "Pay online when you book. At the store, choose card/UPI or cash if the business allows it."}
+        </p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[20px] bg-white p-5 ring-1 ring-black/[0.06]">
+            <p className="text-sm font-semibold tracking-[-0.02em]">Booking</p>
+            <p className="mt-1.5 text-sm leading-6 text-[color:var(--site-ink)]/55">Online payment only — card or UPI.</p>
+          </div>
+          <div className="rounded-[20px] bg-white p-5 ring-1 ring-black/[0.06]">
+            <p className="text-sm font-semibold tracking-[-0.02em]">At the store</p>
+            <p className="mt-1.5 text-sm leading-6 text-[color:var(--site-ink)]/55">
+              {cashEnabled ? "Online/card and cash are both available." : "Online/card only — cash is turned off."}
+            </p>
+          </div>
+        </div>
+      </Inner>
     </section>,
   );
 }

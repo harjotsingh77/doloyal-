@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/marketing/components/legal";
 import { buildMetadata } from "@/marketing/lib/seo";
+import { CookieSettingsButton } from "@/components/cookie-settings-button";
 
 export const metadata: Metadata = buildMetadata({
   title: "Cookie Policy",
@@ -29,7 +30,7 @@ export default function CookiesPage() {
         },
         {
           h: "Your choices",
-          p: "You can disable non-essential cookies anytime in your browser settings. Essential cookies can't be turned off without breaking the product. Some features (like one-click sign-in) rely on them.",
+          p: "After you accept or deny once, the floating cookie badge is hidden. You can change your choice anytime with Cookie settings below, or in your browser. Essential cookies can't be turned off without breaking the product.",
         },
         {
           h: "Third parties",
@@ -40,6 +41,10 @@ export default function CookiesPage() {
           p: "Questions about cookies? Email hello@doloyal.com.",
         },
       ]}
-    />
+    >
+      <CookieSettingsButton className="rounded-full border border-[rgb(var(--color-border))] bg-white px-4 py-2 text-sm font-semibold text-[rgb(var(--color-foreground))] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors">
+        Cookie settings
+      </CookieSettingsButton>
+    </LegalPage>
   );
 }

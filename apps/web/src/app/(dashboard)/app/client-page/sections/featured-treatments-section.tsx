@@ -57,7 +57,7 @@ export function FeaturedTreatmentsSection({
                       {service.durationMinutes} min
                     </span>
                     <LoungeButton onClick={() => onBook(service)} className="px-4 py-2 text-xs">
-                      Book this
+                      Buy
                       <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
                         <ArrowUpRight className="h-3 w-3" />
                       </span>

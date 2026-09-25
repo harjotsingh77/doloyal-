@@ -58,6 +58,7 @@ import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 import { OrderFormDialog } from "./order-form-dialog";
 import { useCommerceLive } from "@/lib/data-sync";
+import { invalidateGetCache } from "@/lib/api-cache";
 
 const ALL = "__all__";
 
@@ -117,6 +118,9 @@ export default function OrdersPage() {
   const bootQuery = useResource<OrdersBoot>({
     queryKey: ["orders-page", debouncedSearch, productId, status, paymentStatus, from, to, page],
     queryFn: async () => {
+      // Public buy/booking writes ClientOrder outside the staff API client, so
+      // drop any prefetch GET cache before reading summary + list.
+      invalidateGetCache(["orders", "customers", "dashboard"]);
       const query: ClientOrderQuery = {
         search: debouncedSearch || undefined,
         productId: productId === ALL ? undefined : productId,
@@ -139,6 +143,8 @@ export default function OrdersPage() {
     },
     scopes: ["orders", "customers", "dashboard"],
     keepPrevious: true,
+    staleTime: 8_000,
+    refetchOnMount: "always",
   });
 
   const productQuery = useResource<{ items: CatalogProduct[] }>({

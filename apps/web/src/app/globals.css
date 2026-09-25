@@ -425,3 +425,13 @@ body {
     max-width: none !important;
   }
 }
+
+/* Hide CookieHub floating reopen icon after Allow/Deny (sits over sidebar footer).
+   Initial consent dialog is unchanged; reopen via /cookies "Cookie settings" button. */
+.ch2-icon,
+.ch2 .ch2-icon,
+.ch2-icon.ch2-visible {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

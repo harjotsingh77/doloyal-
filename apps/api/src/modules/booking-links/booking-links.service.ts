@@ -529,6 +529,7 @@ export class BookingLinksService {
           category: product.category?.name || 'General',
           isActive: true,
           imageUrl: resolveProductImageUrl(product),
+          unit: product.unit,
         }))
       : await this.fallbackBookingServices(tenant.id, bookingLink.serviceIds);
 
@@ -1217,6 +1218,7 @@ export class BookingLinksService {
       category: service.category,
       isActive: service.isActive,
       imageUrl: null as string | null,
+      unit: 'Service' as string | null,
     }));
   }
 }

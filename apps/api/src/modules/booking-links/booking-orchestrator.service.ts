@@ -1,5 +1,12 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
+import {
+  applyCustomerSpendDelta,
+  awardSpendPoints,
+  logActivity,
+  orderCountsAsRevenue,
+} from '../../common/customer-commerce';
 import { BookingLinksService } from './booking-links.service';
 import { BookingNotificationsService } from './booking-notifications.service';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
@@ -7,6 +14,7 @@ import { StripeIntegrationService } from '../integrations/services/stripe.servic
 import { RazorpayIntegrationService } from '../integrations/services/razorpay.service';
 import {
   DEFAULT_AUTOMATIONS,
+  DEFAULT_CHECKOUT,
   DEFAULT_LOYALTY,
   DEFAULT_PAYMENT,
   DEFAULT_RULES,
@@ -54,6 +62,7 @@ export class BookingOrchestratorService {
     private readonly googleCalendar: GoogleCalendarIntegrationService,
     private readonly stripeIntegration: StripeIntegrationService,
     private readonly razorpayIntegration: RazorpayIntegrationService,
+    private readonly realtime: CommerceRealtimeService,
   ) {}
 
   private calcPaymentAmount(servicePrice: number, paymentCfg: any): {
@@ -80,6 +89,111 @@ export class BookingOrchestratorService {
       return { amount: Math.round(partial * 100) / 100, status: 'PENDING', mode };
     }
     return { amount: servicePrice, status: 'PENDING', mode };
+  }
+
+  private bookingOrderNote(appointmentId: string) {
+    return `booking:${appointmentId}`;
+  }
+
+  private isRetailUnit(unit?: string | null) {
+    return (unit || '').trim().toLowerCase() === 'piece';
+  }
+
+  private async nextOrderNumber(tenantId: string) {
+    const year = new Date().getFullYear();
+    const prefix = `ORD-${year}-`;
+    const latest = await this.prisma.clientOrder.findFirst({
+      where: { tenantId, orderNumber: { startsWith: prefix } },
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    });
+    const seq = latest ? Number(latest.orderNumber.slice(prefix.length)) + 1 : 1;
+    return `${prefix}${String(seq).padStart(4, '0')}`;
+  }
+
+  /** Resolve catalog Product for ClientOrder; mirrors Service from Product when needed. */
+  private async resolveBookableService(tenantId: string, serviceId: string) {
+    let service = await this.prisma.service.findFirst({
+      where: { id: serviceId, tenantId, isActive: true },
+    });
+    const product = await this.prisma.product.findFirst({
+      where: { id: serviceId, tenantId, status: 'ACTIVE' },
+      include: { category: { select: { name: true } } },
+    });
+    if (!service && product) {
+      try {
+        service = await this.prisma.service.create({
+          data: {
+            id: product.id,
+            tenantId,
+            name: product.name,
+            description: product.description,
+            durationMinutes:
+              product.unit === 'Package'
+                ? 90
+                : product.unit === 'Session'
+                  ? 45
+                  : product.unit === 'Piece'
+                    ? 30
+                    : 60,
+            price: product.price,
+            category: product.category?.name || 'General',
+            isActive: true,
+          },
+        });
+      } catch {
+        service = await this.prisma.service.findFirst({ where: { id: serviceId, tenantId } });
+      }
+    }
+    if (!service) throw new NotFoundException('Service not found');
+    return { service, product };
+  }
+
+  private async createClientOrderRow(opts: {
+    tenantId: string;
+    customerId: string;
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+    discount?: number;
+    tax?: number;
+    total: number;
+    status: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
+    paymentStatus: 'PAID' | 'PENDING' | 'PARTIALLY_PAID' | 'REFUNDED';
+    notes?: string | null;
+    adjustStock?: boolean;
+    stockQuantity?: number;
+  }) {
+    const orderNumber = await this.nextOrderNumber(opts.tenantId);
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.clientOrder.create({
+        data: {
+          tenantId: opts.tenantId,
+          orderNumber,
+          customerId: opts.customerId,
+          productId: opts.productId,
+          quantity: opts.quantity,
+          unitPrice: opts.unitPrice,
+          discount: opts.discount ?? 0,
+          tax: opts.tax ?? 0,
+          total: opts.total,
+          status: opts.status,
+          paymentStatus: opts.paymentStatus,
+          notes: opts.notes?.trim() || null,
+        },
+      });
+      if (opts.adjustStock && opts.stockQuantity != null) {
+        const nextQty = Math.max(0, opts.stockQuantity - opts.quantity);
+        await tx.product.update({
+          where: { id: opts.productId },
+          data: {
+            stockQuantity: nextQty,
+            availability: nextQty <= 0 ? 'OUT_OF_STOCK' : 'IN_STOCK',
+          },
+        });
+      }
+      return created;
+    });
   }
 
   private async createPaymentIntent(
@@ -124,17 +238,20 @@ export class BookingOrchestratorService {
         currency.toUpperCase(),
         `bkng_${Date.now().toString(36)}`,
       );
+      const keyId = await this.razorpayIntegration.getKeyId(tenantId);
       return {
         provider: 'RAZORPAY',
         orderId: order.id,
         amount: Number(order.amount),
         currency: order.currency,
+        keyId,
         simulated: false,
       };
     } catch (err: any) {
       return {
         provider: 'RAZORPAY',
         orderId: null,
+        keyId: null,
         simulated: false,
         failed: true,
         message: err?.message || 'Razorpay is not connected — choose Pay at Store or connect Razorpay in Integrations',
@@ -160,10 +277,10 @@ export class BookingOrchestratorService {
       }
     }
 
-    const service = await this.prisma.service.findFirst({
-      where: { id: dto.serviceId, tenantId: tenant.id, isActive: true },
-    });
-    if (!service) throw new NotFoundException('Service not found');
+    const { service, product: catalogProduct } = await this.resolveBookableService(
+      tenant.id,
+      dto.serviceId,
+    );
 
     const rules = { ...DEFAULT_RULES, ...((bookingLink.rules as any) || {}) };
     const paymentCfg = { ...DEFAULT_PAYMENT, ...((bookingLink.payment as any) || {}) };
@@ -205,6 +322,14 @@ export class BookingOrchestratorService {
 
     const phone = dto.phone || dto.customerPhone;
     if (!phone) throw new BadRequestException('Phone is required');
+
+    // Bookings are online-payment only — cash / pay-at-store is for walk-in purchases.
+    const paymentMethod = String(dto.paymentMethod || 'RAZORPAY').toUpperCase();
+    if (paymentMethod === 'CASH' || paymentMethod === 'PAY_AT_STORE') {
+      throw new BadRequestException(
+        'Bookings require online payment. Cash is only available for in-store purchases.',
+      );
+    }
 
     const customerName =
       dto.customerName || `${dto.firstName || ''} ${dto.lastName || ''}`.trim() || 'Guest';
@@ -493,18 +618,42 @@ export class BookingOrchestratorService {
       }).catch(() => undefined);
     }
 
-    let paymentIntent: any = null;
-    const needsOnlinePay =
-      ['DEPOSIT', 'FULL', 'PARTIAL'].includes(pay.mode) &&
-      dto.paymentMethod !== 'CASH' &&
-      dto.paymentMethod !== 'PAY_AT_STORE' &&
-      dto.paymentMethod !== 'UPI';
+    // Mirror booking into ClientOrder so it appears on /app/customers/orders.
+    // Catalog Product shares the Service id when synced from the public page.
+    if (catalogProduct) {
+      const free = !(pay.amount > 0);
+      try {
+        await this.createClientOrderRow({
+          tenantId: tenant.id,
+          customerId: customer.id,
+          productId: catalogProduct.id,
+          quantity: 1,
+          unitPrice: service.price,
+          discount,
+          total: Math.round(Math.max(0, subtotal) * 100) / 100,
+          status: free ? 'COMPLETED' : 'PENDING',
+          paymentStatus: free ? 'PAID' : 'PENDING',
+          notes: this.bookingOrderNote(appointment.id),
+          adjustStock: false,
+        });
+        this.realtime.publish(tenant.id, 'orders');
+        this.realtime.publish(tenant.id, 'customers');
+      } catch {
+        // Order mirror must not block the booking confirmation.
+      }
+    }
 
-    if (needsOnlinePay) {
+    let paymentIntent: any = null;
+    // Bookings always collect online payment (no cash). UPI uses the same gateway checkout.
+    const gatewayMethod =
+      paymentMethod === 'STRIPE' ? 'STRIPE' : paymentMethod === 'UPI' ? 'RAZORPAY' : paymentMethod;
+    const needsOnlinePay = gatewayMethod === 'STRIPE' || gatewayMethod === 'RAZORPAY';
+
+    if (needsOnlinePay && pay.amount > 0) {
       paymentIntent = await this.createPaymentIntent(
         tenant.id,
         pay.amount,
-        dto.paymentMethod,
+        gatewayMethod,
         tenant.currency || 'INR',
         appointment.id,
       );
@@ -513,6 +662,8 @@ export class BookingOrchestratorService {
         // instead of silently confirming an unpaid booking.
         throw new BadRequestException(paymentIntent.message || 'Online payment could not be initiated');
       }
+    } else if (pay.amount > 0 && !needsOnlinePay) {
+      throw new BadRequestException('Online payment is required to confirm this booking');
     }
 
     return {
@@ -538,6 +689,210 @@ export class BookingOrchestratorService {
       isNewCustomer,
       paymentIntent,
     };
+  }
+
+  /**
+   * Walk-in / "buy now" purchase — creates a ClientOrder and optional online payment.
+   * Cash is allowed only when Client Page checkout.cashEnabled is true.
+   */
+  async purchase(slug: string, dto: any, meta?: { ipHash?: string }) {
+    if (dto.honeypot) throw new BadRequestException('Invalid request');
+
+    const { tenant, bookingLink } = await this.bookingLinks.findBySlug(slug);
+    this.bookingLinks.assertLinkBookable(bookingLink);
+    this.bookingLinks.checkRateLimit(`purchase:${slug}:${meta?.ipHash || 'anon'}`);
+
+    const productId = dto.productId || dto.serviceId;
+    if (!productId) throw new BadRequestException('Product is required');
+
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, tenantId: tenant.id, status: 'ACTIVE' },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+
+    const phone = dto.phone || dto.customerPhone;
+    if (!phone) throw new BadRequestException('Phone is required');
+
+    const pageConfig = (bookingLink as any).pageConfig || {};
+    const checkout = {
+      ...DEFAULT_CHECKOUT,
+      ...(pageConfig.checkout || {}),
+      ...(typeof pageConfig.checkoutCashEnabled === 'boolean'
+        ? { cashEnabled: pageConfig.checkoutCashEnabled }
+        : {}),
+    };
+    const cashEnabled = checkout.cashEnabled !== false;
+
+    const paymentMethod = String(dto.paymentMethod || (cashEnabled ? 'CASH' : 'RAZORPAY')).toUpperCase();
+    if (paymentMethod === 'CASH' || paymentMethod === 'PAY_AT_STORE') {
+      if (!cashEnabled) {
+        throw new BadRequestException('Cash payment is disabled for this page. Please pay online.');
+      }
+    }
+
+    const customerName =
+      dto.customerName || `${dto.firstName || ''} ${dto.lastName || ''}`.trim() || 'Guest';
+    const nameParts = customerName.trim().split(/\s+/);
+    const firstName = dto.firstName || nameParts[0] || 'Guest';
+    const lastName = dto.lastName || nameParts.slice(1).join(' ') || '';
+
+    let customer = await this.prisma.customer.findFirst({
+      where: { tenantId: tenant.id, phone },
+    });
+    if (!customer && dto.email) {
+      customer = await this.prisma.customer.findFirst({
+        where: { tenantId: tenant.id, email: dto.email },
+      });
+    }
+    if (!customer) {
+      customer = await this.prisma.customer.create({
+        data: {
+          tenantId: tenant.id,
+          firstName,
+          lastName,
+          phone,
+          email: dto.email || dto.customerEmail || null,
+        },
+      });
+    }
+
+    const quantity = Math.max(1, Math.floor(Number(dto.quantity) || 1));
+    const unitPrice = product.price;
+    const total = Math.round(unitPrice * quantity * 100) / 100;
+    const isCash = paymentMethod === 'CASH' || paymentMethod === 'PAY_AT_STORE';
+    const paymentStatus = 'PENDING' as const;
+
+    const order = await this.createClientOrderRow({
+      tenantId: tenant.id,
+      customerId: customer.id,
+      productId: product.id,
+      quantity,
+      unitPrice,
+      total,
+      status: 'PENDING',
+      paymentStatus,
+      notes: dto.notes?.trim() || (isCash ? 'In-store purchase (cash)' : 'In-store purchase (online)'),
+      adjustStock: this.isRetailUnit(product.unit),
+      stockQuantity: product.stockQuantity,
+    });
+
+    let paymentIntent: any = null;
+    if (!isCash && total > 0) {
+      const gatewayMethod = paymentMethod === 'STRIPE' ? 'STRIPE' : 'RAZORPAY';
+      paymentIntent = await this.createPaymentIntent(
+        tenant.id,
+        total,
+        gatewayMethod,
+        tenant.currency || 'INR',
+      );
+      if (paymentIntent?.failed) {
+        throw new BadRequestException(paymentIntent.message || 'Online payment could not be initiated');
+      }
+    }
+
+    await logActivity(this.prisma, {
+      tenantId: tenant.id,
+      customerId: customer.id,
+      type: 'NOTE_ADDED',
+      message: `In-store purchase started: ${product.name} (${order.orderNumber})`,
+    });
+
+    this.realtime.publish(tenant.id, 'orders');
+    this.realtime.publish(tenant.id, 'products');
+    this.realtime.publish(tenant.id, 'customers');
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      productName: product.name,
+      customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+      total,
+      paymentStatus: order.paymentStatus,
+      paymentMethod,
+      paymentIntent,
+    };
+  }
+
+  async confirmPurchasePayment(
+    tenantId: string,
+    orderId: string,
+    payment: {
+      provider: 'STRIPE' | 'RAZORPAY';
+      paymentIntentId?: string;
+      razorpayOrderId?: string;
+      razorpayPaymentId?: string;
+      razorpaySignature?: string;
+    },
+  ) {
+    const order = await this.prisma.clientOrder.findFirst({
+      where: { id: orderId, tenantId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const expectedAmountPaise = Math.round(Number(order.total || 0) * 100);
+    if (expectedAmountPaise <= 0) {
+      throw new BadRequestException('This order has no online payment due');
+    }
+
+    if (payment.provider === 'STRIPE') {
+      if (!payment.paymentIntentId) throw new BadRequestException('paymentIntentId is required');
+      const stripe = await this.stripeIntegration.getClient(tenantId, 'STRIPE');
+      if (!stripe) throw new BadRequestException('Stripe is not connected');
+      const intent = await stripe.paymentIntents.retrieve(payment.paymentIntentId);
+      if (intent.status !== 'succeeded' || Number(intent.amount) !== expectedAmountPaise) {
+        throw new BadRequestException('Payment verification failed');
+      }
+    } else {
+      if (!payment.razorpayOrderId || !payment.razorpayPaymentId || !payment.razorpaySignature) {
+        throw new BadRequestException('Razorpay order id, payment id and signature are required');
+      }
+      const secret = await this.razorpayIntegration.getKeySecret(tenantId);
+      if (!secret) throw new BadRequestException('Razorpay is not connected');
+      const ok = await this.razorpayIntegration.verifyPayment(
+        payment.razorpayOrderId,
+        payment.razorpayPaymentId,
+        payment.razorpaySignature,
+        secret,
+      );
+      if (!ok) throw new BadRequestException('Invalid payment signature');
+
+      const client = await this.razorpayIntegration.getClient(tenantId);
+      const rpPayment = await client?.payments.fetch(payment.razorpayPaymentId).catch(() => null);
+      if (
+        !rpPayment ||
+        (rpPayment.status !== 'captured' && rpPayment.status !== 'authorized') ||
+        rpPayment.order_id !== payment.razorpayOrderId ||
+        Number(rpPayment.amount) !== expectedAmountPaise
+      ) {
+        throw new BadRequestException('Payment verification failed');
+      }
+    }
+
+    const updated = await this.prisma.clientOrder.update({
+      where: { id: order.id },
+      data: { paymentStatus: 'PAID', status: 'COMPLETED' },
+    });
+
+    if (orderCountsAsRevenue(updated.status, updated.paymentStatus)) {
+      await applyCustomerSpendDelta(this.prisma, {
+        tenantId,
+        customerId: order.customerId,
+        deltaAmount: order.total,
+        deltaVisits: 1,
+        lastVisitAt: new Date(),
+      });
+      await awardSpendPoints(this.prisma, {
+        tenantId,
+        customerId: order.customerId,
+        amount: order.total,
+        reason: `Earned from order ${order.orderNumber}`,
+      });
+    }
+
+    this.realtime.publish(tenantId, 'orders');
+    this.realtime.publish(tenantId, 'customers');
+
+    return { ok: true, id: order.id, paymentStatus: 'PAID' };
   }
 
   /**
@@ -621,6 +976,20 @@ export class BookingOrchestratorService {
       },
       data: { status: 'PAID', paidAt: new Date() },
     });
+
+    // Mark the mirrored ClientOrder paid (loyalty/spend already handled at book time).
+    const bookingNote = this.bookingOrderNote(appointmentId);
+    await this.prisma.clientOrder.updateMany({
+      where: {
+        tenantId,
+        customerId: appointment.customerId,
+        notes: bookingNote,
+        paymentStatus: { not: 'PAID' },
+      },
+      data: { paymentStatus: 'PAID', status: 'COMPLETED' },
+    });
+    this.realtime.publish(tenantId, 'orders');
+    this.realtime.publish(tenantId, 'customers');
 
     return this.prisma.appointment.update({
       where: { id: appointmentId },

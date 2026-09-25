@@ -40,6 +40,8 @@ import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { useResource } from "@/lib/use-resource";
 import { prefetchWorkspace } from "@/lib/prefetch-workspace";
+import { writeQuerySnapshot } from "@/lib/api-cache";
+import { getStaffAuthToken } from "@/lib/access-token";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
 
 const toYMD = (d: Date | string) => {
@@ -141,6 +143,10 @@ export default function DashboardPage() {
     queryFn: () => api.getDashboardOverview({ from: fromDate, to: toDate }),
     scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "invoices", "loyalty", "appointments"],
     keepPrevious: true,
+    // Live board: paint cache instantly, then keep numbers within ~15s of truth.
+    staleTime: 12_000,
+    refetchOnMount: "always",
+    refetchInterval: 15_000,
   });
   const data = overviewQuery.data ?? null;
   const loading = overviewQuery.isLoading && !data;
@@ -155,10 +161,27 @@ export default function DashboardPage() {
     queryFn: () => api.getDashboardMetricDetail(openMetric as DashboardMetricId, { from: fromDate, to: toDate }),
     scopes: ["dashboard"],
     enabled: Boolean(openMetric),
+    staleTime: 12_000,
   });
   React.useEffect(() => {
     if (data) prefetchWorkspace();
   }, [data]);
+
+  const prefetchMetric = React.useCallback(
+    (metric: DashboardMetricId) => {
+      void api
+        .getDashboardMetricDetail(metric, { from: fromDate, to: toDate })
+        .then((detail) => {
+          writeQuerySnapshot(
+            ["dashboard-metric", metric, fromDate, toDate],
+            getStaffAuthToken(),
+            detail,
+          );
+        })
+        .catch(() => undefined);
+    },
+    [fromDate, toDate],
+  );
 
   const detail = openMetric ? detailQuery.data ?? null : null;
   // Prefer last snapshot over skeleton — background refetch must not blank the modal.
@@ -313,6 +336,7 @@ export default function DashboardPage() {
           badge={periodGrowthPct === null ? "New" : periodGrowthPct >= 0 ? "Growing" : "Declining"}
           badgeVariant={periodGrowthPct === null ? "accent" : periodGrowthPct >= 0 ? "success" : "danger"}
           onClick={() => setOpenMetric("ai_revenue")}
+          onPointerEnter={() => prefetchMetric("ai_revenue")}
         >
           <p className="text-[13px] leading-5 text-[rgb(var(--color-foreground))]">
             {periodGrowthPct === null
@@ -328,6 +352,7 @@ export default function DashboardPage() {
           badge={periodRepeatRate >= 50 ? "Healthy" : "Attention Needed"}
           badgeVariant={periodRepeatRate >= 50 ? "success" : "warning"}
           onClick={() => setOpenMetric("ai_retention")}
+          onPointerEnter={() => prefetchMetric("ai_retention")}
         >
           <p className="text-[13px] leading-5 text-[rgb(var(--color-foreground))]">
             {periodRepeatRate >= 50
@@ -344,12 +369,14 @@ export default function DashboardPage() {
           value={periodRevenue}
           format={(v) => fmt(v)}
           onClick={() => setOpenMetric("revenue")}
+          onPointerEnter={() => prefetchMetric("revenue")}
         />
         <KpiCard
           compact
           label="Total Customers"
           value={periodCustomers}
           onClick={() => setOpenMetric("customers")}
+          onPointerEnter={() => prefetchMetric("customers")}
         />
         <KpiCard
           compact
@@ -357,18 +384,21 @@ export default function DashboardPage() {
           value={periodRepeatRate}
           format={(v) => `${v}%`}
           onClick={() => setOpenMetric("repeat_rate")}
+          onPointerEnter={() => prefetchMetric("repeat_rate")}
         />
         <KpiCard
           compact
           label="New Customers"
           value={periodNewCustomers}
           onClick={() => setOpenMetric("new_customers")}
+          onPointerEnter={() => prefetchMetric("new_customers")}
         />
         <KpiCard
           compact
           label="Inactive Customers"
           value={kpis.inactiveCustomers}
           onClick={() => setOpenMetric("inactive")}
+          onPointerEnter={() => prefetchMetric("inactive")}
         />
         <KpiCard
           compact
@@ -376,30 +406,35 @@ export default function DashboardPage() {
           value={periodPointsRedeemed}
           format={(v) => v.toLocaleString("en-IN")}
           onClick={() => setOpenMetric("points")}
+          onPointerEnter={() => prefetchMetric("points")}
         />
         <KpiCard
           compact
           label={`Orders (${diffDays}d)`}
           value={orderCount}
           onClick={() => setOpenMetric("orders")}
+          onPointerEnter={() => prefetchMetric("orders")}
         />
         <KpiCard
           compact
           label="Reviews"
           value={approvedReviews}
           onClick={() => setOpenMetric("reviews")}
+          onPointerEnter={() => prefetchMetric("reviews")}
         />
         <KpiCard
           compact
           label={`Appointments (${diffDays}d)`}
           value={periodAppointments}
           onClick={() => setOpenMetric("appointments")}
+          onPointerEnter={() => prefetchMetric("appointments")}
         />
         <KpiCard
           compact
           label={`Memberships (${diffDays}d)`}
           value={periodMembershipSales}
           onClick={() => setOpenMetric("memberships")}
+          onPointerEnter={() => prefetchMetric("memberships")}
         />
       </div>
 
@@ -754,12 +789,14 @@ function InsightCard({
   badge,
   badgeVariant,
   onClick,
+  onPointerEnter,
   children,
 }: {
   title: string;
   badge: string;
   badgeVariant: "success" | "warning" | "danger" | "primary" | "accent";
   onClick?: () => void;
+  onPointerEnter?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -767,6 +804,7 @@ function InsightCard({
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onPointerEnter={onPointerEnter}
       onKeyDown={
         onClick
           ? (e) => {

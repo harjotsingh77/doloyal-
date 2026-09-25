@@ -40,16 +40,33 @@ import { useCurrency } from "@/lib/currency-context";
 import { useResource } from "@/lib/use-resource";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
 
-const HEALTH_LABEL: Record<"healthy" | "fair" | "at_risk", string> = {
+const HEALTH_LABEL: Record<"healthy" | "fair" | "at_risk" | "building", string> = {
   healthy: "Healthy",
   fair: "Fair",
   at_risk: "At Risk",
+  building: "Building",
 };
 
-function healthStatusFromScore(score: number): keyof typeof HEALTH_LABEL {
+function healthStatusFromScore(
+  score: number,
+  earlyStage?: boolean,
+): keyof typeof HEALTH_LABEL {
+  if (earlyStage) return "building";
   if (score >= 70) return "healthy";
   if (score >= 40) return "fair";
   return "at_risk";
+}
+
+function factorTone(f: { positive: boolean; pending?: boolean }) {
+  if (f.pending) return "text-[rgb(var(--color-muted-foreground))]";
+  return f.positive
+    ? "text-[rgb(var(--color-success))]"
+    : "text-[rgb(var(--color-danger))]";
+}
+
+function factorStatusLabel(f: { positive: boolean; pending?: boolean }) {
+  if (f.pending) return "Building";
+  return f.positive ? "Good" : "Needs attention";
 }
 
 function healthSignalPrompt(label: string, from?: string, to?: string) {
@@ -104,12 +121,18 @@ export default function AnalyticsPage() {
     queryFn: () => api.getDashboardOverview(overviewParams),
     scopes: ["dashboard", "customers", "orders", "products", "reviews", "campaigns", "invoices", "loyalty", "appointments", "rewards"],
     keepPrevious: true,
+    staleTime: 12_000,
+    refetchOnMount: "always",
+    refetchInterval: 15_000,
   });
   const healthQuery = useResource<BusinessHealthInsight>({
     queryKey: ["analytics-health", range, customFrom, customTo],
     queryFn: () => api.getBusinessHealth(overviewParams),
     scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "loyalty", "appointments"],
     keepPrevious: true,
+    staleTime: 12_000,
+    refetchOnMount: "always",
+    refetchInterval: 15_000,
     // Let overview claim the connection pool first so the page can paint.
     enabled: Boolean(overviewQuery.data) || !overviewQuery.isLoading,
   });
@@ -184,28 +207,25 @@ export default function AnalyticsPage() {
 
   const revenueChange = compareValues(totalRevenue, kpis.previousPeriodRevenue ?? 0);
 
-  // Score only when this period has real commerce signal. Lifetime leftovers
-  // (inactive customers, reward catalog) must not invent an "AT RISK" gauge
-  // when revenue, customers, orders, and reviews are all empty.
-  const periodHasSignal =
-    totalRevenue > 0 ||
-    (kpis.previousPeriodRevenue ?? 0) > 0 ||
-    newInPeriod > 0 ||
-    orderCount > 0 ||
-    (kpis.approvedReviews ?? 0) > 0;
-  const healthUnavailable = !periodHasSignal || health?.available === false;
-
+  // Prefer the API period window (matches the analytics date filter). Only
+  // hide the gauge when the selected range truly has nothing to score.
+  const healthUnavailable = health?.available === false;
+  const healthEarly = Boolean(health?.earlyStage) || health?.status === "building";
   const healthScore = healthUnavailable ? 0 : (health?.score ?? 0);
   const healthFactors = healthUnavailable ? [] : health?.factors ?? [];
   const healthStatus = healthUnavailable
     ? "fair"
-    : health?.status ?? healthStatusFromScore(healthScore);
-  const healthBadge = HEALTH_LABEL[healthStatus];
+    : health?.status ?? healthStatusFromScore(healthScore, healthEarly);
+  const healthBadge = HEALTH_LABEL[healthStatus] ?? HEALTH_LABEL.fair;
 
   const periodLabel =
     range === "custom"
       ? `${customFrom} – ${customTo}`
       : `Last ${range} days`;
+  const healthPeriodLabel =
+    health?.period?.from && health?.period?.to
+      ? `${health.period.from} – ${health.period.to}`
+      : periodLabel;
 
   const topServices = (data as any).topServices ?? [];
 
@@ -412,7 +432,7 @@ export default function AnalyticsPage() {
             <div>
               <CardTitle>Business Health</CardTitle>
               <CardDescription>
-                Overall score based on key metrics ({periodLabel})
+                Live score for the selected analytics window ({healthPeriodLabel})
               </CardDescription>
             </div>
           </CardHeader>
@@ -420,7 +440,7 @@ export default function AnalyticsPage() {
             {healthUnavailable ? (
               <EmptyState
                 title="No activity in this period"
-                description="Business health is scored once this period has revenue, new customers, orders, or reviews. An empty period is not marked at risk."
+                description="Business health unlocks once this date range has customers, sales, appointments, or reviews. Change the analytics filter to match days that have real activity."
               />
             ) : (
               <>
@@ -441,8 +461,10 @@ export default function AnalyticsPage() {
                         r="42"
                         fill="none"
                         stroke={
-                          healthScore >= 70
-                            ? "rgb(var(--color-success))"
+                          healthEarly || healthScore >= 70
+                            ? healthEarly
+                              ? "rgb(var(--color-primary))"
+                              : "rgb(var(--color-success))"
                             : healthScore >= 40
                               ? "rgb(var(--color-warning))"
                               : "rgb(var(--color-danger))"
@@ -456,34 +478,34 @@ export default function AnalyticsPage() {
                   </div>
                   <Badge
                     variant={
-                      healthScore >= 70
-                        ? "success"
-                        : healthScore >= 40
-                          ? "warning"
-                          : "danger"
+                      healthEarly
+                        ? "primary"
+                        : healthScore >= 70
+                          ? "success"
+                          : healthScore >= 40
+                            ? "warning"
+                            : "danger"
                     }
                     className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wider"
                   >
                     {healthBadge}
                   </Badge>
                   <p className="mt-2 text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
-                    {health?.source === "ai" ? "Analyzed by Doloyal AI" : "Doloyal AI"}
+                    {healthEarly
+                      ? "Signals unlock as this period fills with real activity"
+                      : health?.source === "ai"
+                        ? "Analyzed by Doloyal AI"
+                        : "Doloyal AI"}
                   </p>
                 </div>
                 <div className="mt-4 space-y-2.5 border-t border-[rgb(var(--color-border))] pt-4">
                   {healthFactors.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-[rgb(var(--color-muted-foreground))]">
+                    <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 text-[rgb(var(--color-muted-foreground))]">
                         {f.label}
                       </span>
-                      <span
-                        className={`text-xs font-medium ${
-                          f.positive
-                            ? "text-[rgb(var(--color-success))]"
-                            : "text-[rgb(var(--color-danger))]"
-                        }`}
-                      >
-                        {f.positive ? "Good" : "Needs attention"}
+                      <span className={`shrink-0 text-xs font-medium ${factorTone(f)}`}>
+                        {factorStatusLabel(f)}
                       </span>
                     </div>
                   ))}
@@ -571,14 +593,19 @@ export default function AnalyticsPage() {
               <DialogHeader>
                 <DialogTitle>Business Health</DialogTitle>
                 <DialogDescription>
-                  {data.period?.from} to {data.period?.to} · {health?.source === "ai" ? "Doloyal AI using live SaaS data" : "score from current-period metrics"}
+                  {healthPeriodLabel} ·{" "}
+                  {healthEarly
+                    ? "Building — signals unlock with real activity in this window"
+                    : health?.source === "ai"
+                      ? "Doloyal AI using live SaaS data"
+                      : "score from current-period metrics"}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-5">
                 {healthUnavailable ? (
                   <EmptyState
                     title="No activity in this period"
-                    description="There is nothing to score yet. Health appears after this period has revenue, new customers, orders, or reviews."
+                    description="There is nothing to score yet. Health appears after this analytics date range has customers, sales, appointments, or reviews."
                   />
                 ) : (
                   <>
@@ -588,7 +615,15 @@ export default function AnalyticsPage() {
                       </p>
                       <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{healthScore}%</p>
                       <Badge
-                        variant={healthScore >= 70 ? "success" : healthScore >= 40 ? "warning" : "danger"}
+                        variant={
+                          healthEarly
+                            ? "primary"
+                            : healthScore >= 70
+                              ? "success"
+                              : healthScore >= 40
+                                ? "warning"
+                                : "danger"
+                        }
                         className="mt-2 text-[0.65rem] font-semibold uppercase tracking-wider"
                       >
                         {healthBadge}
@@ -639,22 +674,20 @@ export default function AnalyticsPage() {
                               setOpenPanel(null);
                               router.push(
                                 `/app/assistant?prompt=${encodeURIComponent(
-                                  healthSignalPrompt(f.label, data.period?.from, data.period?.to),
+                                  healthSignalPrompt(
+                                    f.label,
+                                    health?.period?.from ?? data.period?.from,
+                                    health?.period?.to ?? data.period?.to,
+                                  ),
                                 )}`,
                               );
                             }}
-                            className="flex w-full items-center justify-between rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 text-left text-sm transition-colors hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)]"
+                            className="flex w-full items-center justify-between gap-3 rounded-md border border-[rgb(var(--color-border))] px-3 py-2.5 text-left text-sm transition-colors hover:border-[rgb(var(--color-primary)/0.28)] hover:bg-[rgb(var(--color-muted)/0.35)]"
                           >
-                            <span>{f.label}</span>
-                            <span className="flex items-center gap-2">
-                              <span
-                                className={`text-xs font-medium ${
-                                  f.positive
-                                    ? "text-[rgb(var(--color-success))]"
-                                    : "text-[rgb(var(--color-danger))]"
-                                }`}
-                              >
-                                {f.positive ? "Good" : "Needs attention"}
+                            <span className="min-w-0">{f.label}</span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className={`text-xs font-medium ${factorTone(f)}`}>
+                                {factorStatusLabel(f)}
                               </span>
                               <span className="text-[10px] font-medium text-[rgb(var(--color-muted-foreground))]">
                                 Ask AI

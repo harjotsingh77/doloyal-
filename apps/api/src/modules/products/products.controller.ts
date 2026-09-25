@@ -221,10 +221,11 @@ class CreateProductDto {
   @MaxLength(160)
   name: string;
 
+  /** Optional — blank SKUs are auto-generated uniquely per tenant. */
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(64)
-  sku: string;
+  sku?: string;
 
   @IsString()
   @IsOptional()

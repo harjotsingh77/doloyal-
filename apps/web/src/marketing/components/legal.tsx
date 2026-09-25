@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Reveal } from "./ui";
 import { cn } from "@/lib/utils";
@@ -13,11 +14,13 @@ export function LegalPage({
   title,
   updated,
   sections,
+  children,
 }: {
   eyebrow: string;
   title: string;
   updated: string;
   sections: LegalSection[];
+  children?: ReactNode;
 }) {
   return (
     <div className="pt-32 pb-24 sm:pt-40">
@@ -60,6 +63,8 @@ export function LegalPage({
             </Reveal>
           ))}
         </div>
+
+        {children ? <div className="mt-8">{children}</div> : null}
 
         <Reveal className="mt-12">
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[rgb(var(--color-subtle))]">

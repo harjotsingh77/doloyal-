@@ -679,7 +679,8 @@ export type CreateProductCategoryInput = z.infer<typeof createProductCategorySch
 
 export const createProductSchema = z.object({
   name: z.string().min(1, "Product name is required").max(160),
-  sku: z.string().min(1, "SKU is required").max(64),
+  /** Blank/omitted SKUs are auto-generated uniquely by the API. */
+  sku: z.string().max(64).optional().or(z.literal("")),
   description: z.string().max(5000).optional().or(z.literal("")),
   categoryId: z.string().uuid().optional().nullable(),
   price: currency,
@@ -695,7 +696,11 @@ export const createProductSchema = z.object({
   availability: z.enum(["IN_STOCK", "OUT_OF_STOCK"]).default("IN_STOCK"),
 });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
-export const updateProductSchema = createProductSchema.partial();
+export const updateProductSchema = createProductSchema
+  .partial()
+  .extend({
+    sku: z.string().min(1, "SKU is required").max(64).optional(),
+  });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 
 export const productQuerySchema = z.object({

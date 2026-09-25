@@ -28,6 +28,7 @@ import {
   TestimonialsSection,
   VideoSection,
   WebsiteServices,
+  CheckoutSection,
 } from "./sections/site-sections";
 import {
   BookingSection,
@@ -216,6 +217,16 @@ export function MasterClientTemplate({
     }
     if (id === "cta") {
       return <FinalCta key={id} chrome={chrome} config={config} business={business} onBook={() => onBook()} onExplore={() => go("portal-services")} />;
+    }
+    if (id === "checkout") {
+      return (
+        <CheckoutSection
+          key={id}
+          chrome={chrome}
+          config={config}
+          title={title("checkout", FRIENDLY_TITLES.checkout)}
+        />
+      );
     }
     if (id === "booking") {
       return (

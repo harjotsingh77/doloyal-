@@ -16,9 +16,9 @@ import { useTenant } from "@/lib/tenant-query";
 import { useResource } from "@/lib/use-resource";
 import { ClientPageBuilder } from "./client-page-builder";
 
-type SectionId = "hero" | "intro" | "services" | "featured" | "booking" | "loyalty" | "rewards" | "membership" | "referrals" | "reviews" | "about" | "contact" | "footer" | "gallery" | "offers" | "faq" | "testimonials" | "hours" | "video" | "social" | "map" | "cta";
+type SectionId = "hero" | "intro" | "services" | "featured" | "booking" | "loyalty" | "rewards" | "membership" | "referrals" | "reviews" | "about" | "contact" | "footer" | "gallery" | "offers" | "faq" | "testimonials" | "hours" | "video" | "social" | "map" | "cta" | "checkout";
 type ClientSection = { id: SectionId; enabled: boolean; title?: string; hidden?: boolean };
-type ClientConfig = { sections: ClientSection[]; heroHeading?: string; heroDescription?: string; heroBadge?: string; showSearch?: boolean; featuredTitle?: string; clientPageCreated?: boolean; clientPageVersion?: number; websiteLayout?: number };
+type ClientConfig = { sections: ClientSection[]; heroHeading?: string; heroDescription?: string; heroBadge?: string; showSearch?: boolean; featuredTitle?: string; clientPageCreated?: boolean; clientPageVersion?: number; websiteLayout?: number; checkoutCashEnabled?: boolean; checkout?: { cashEnabled?: boolean } };
 
 const SECTIONS: Record<string, { label: string; description: string; icon: React.ElementType; category: string }> = {
   hero: { label: "Hero", description: "Full-width image, video, or slider.", icon: LayoutTemplate, category: "Business" },
@@ -43,6 +43,7 @@ const SECTIONS: Record<string, { label: string; description: string; icon: React
   social: { label: "Social", description: "Follow links and social proof.", icon: Contact, category: "Engagement" },
   map: { label: "Map", description: "Directions and an embedded map.", icon: MapPin, category: "Information" },
   cta: { label: "Final CTA", description: "Closing banner before the footer.", icon: Sparkles, category: "Business" },
+  checkout: { label: "Checkout", description: "Payment options for Buy now and booking.", icon: Sparkles, category: "Business" },
 };
 const RECOMMENDED: SectionId[] = ["hero", "intro", "services", "featured", "about", "offers", "gallery", "testimonials", "faq", "contact", "map", "cta", "footer"];
 const DEFAULT_CONFIG: ClientConfig = { sections: RECOMMENDED.map((id) => ({ id, enabled: true })) };

@@ -276,11 +276,40 @@ export class ProductsService {
     return sku.trim().toUpperCase();
   }
 
+  private skuBaseFromName(name: string) {
+    const base = name
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    return base || 'PRD';
+  }
+
+  /** Allocates a tenant-unique SKU when the client leaves SKU blank. */
+  private async allocateUniqueSku(tenantId: string, name: string) {
+    const base = this.skuBaseFromName(name);
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const suffix = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
+      const sku = `${base}-${suffix}`.slice(0, 64);
+      const exists = await this.prisma.product.findFirst({
+        where: { tenantId, sku },
+        select: { id: true },
+      });
+      if (!exists) return sku;
+    }
+    return `PRD-${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+  }
+
+  private skuConflictMessage(sku: string) {
+    return `A product with SKU "${sku}" already exists. Choose a different SKU.`;
+  }
+
   async create(
     tenantId: string,
     dto: {
       name: string;
-      sku: string;
+      sku?: string;
       description?: string | null;
       categoryId?: string | null;
       price: number;
@@ -302,12 +331,16 @@ export class ProductsService {
       });
       if (!category) throw new BadRequestException('Category not found');
     }
+    const requestedSku = dto.sku?.trim() ?? '';
+    const sku = requestedSku
+      ? this.normalizeSku(requestedSku)
+      : await this.allocateUniqueSku(tenantId, dto.name);
     try {
       const row = await this.prisma.product.create({
         data: {
           tenantId,
           name: dto.name.trim(),
-          sku: this.normalizeSku(dto.sku),
+          sku,
           description: dto.description?.trim() || null,
           categoryId: dto.categoryId || null,
           price: dto.price,
@@ -327,7 +360,7 @@ export class ProductsService {
       return this.afterProductChange(this.mapProduct(row));
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('A product with this SKU already exists');
+        throw new ConflictException(this.skuConflictMessage(sku));
       }
       throw err;
     }
@@ -366,12 +399,17 @@ export class ProductsService {
       dto.imageUrl !== undefined
         ? await this.persistIncomingImage(tenantId, current.imageUrl, dto.imageUrl)
         : undefined;
+    let nextSku: string | undefined;
+    if (dto.sku !== undefined) {
+      nextSku = this.normalizeSku(dto.sku);
+      if (!nextSku) throw new BadRequestException('SKU is required');
+    }
     try {
       const row = await this.prisma.product.update({
         where: { id },
         data: {
           ...(dto.name != null ? { name: dto.name.trim() } : {}),
-          ...(dto.sku != null ? { sku: this.normalizeSku(dto.sku) } : {}),
+          ...(nextSku != null ? { sku: nextSku } : {}),
           ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
           ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId || null } : {}),
           ...(dto.price != null ? { price: dto.price } : {}),
@@ -391,7 +429,7 @@ export class ProductsService {
       return this.afterProductChange(this.mapProduct(row));
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('A product with this SKU already exists');
+        throw new ConflictException(this.skuConflictMessage(nextSku ?? this.normalizeSku(dto.sku ?? '')));
       }
       throw err;
     }

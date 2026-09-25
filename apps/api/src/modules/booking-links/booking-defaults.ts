@@ -114,12 +114,17 @@ export const DEFAULT_PAGE_SECTIONS = [
   { id: 'footer', enabled: true },
 ] as const;
 
+export const DEFAULT_CHECKOUT = {
+  cashEnabled: true,
+};
+
 export const DEFAULT_PAGE_CONFIG = {
   sections: DEFAULT_PAGE_SECTIONS.map((s) => ({ ...s })),
   tagline: 'Book your next appointment online',
   about:
     'We provide premium services with experienced professionals. Book online in minutes.',
   heroCta: 'Book Now',
+  checkout: { ...DEFAULT_CHECKOUT },
   policies:
     'Cancellations must be made at least 24 hours in advance. Late arrivals may shorten your appointment.',
   faqs: [

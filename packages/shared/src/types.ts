@@ -1054,11 +1054,13 @@ export interface DashboardOverview {
   recentActivity: ActivityEntry[];
 }
 
-export type BusinessHealthStatus = "healthy" | "fair" | "at_risk";
+export type BusinessHealthStatus = "healthy" | "fair" | "at_risk" | "building";
 
 export interface BusinessHealthFactor {
   label: string;
   positive: boolean;
+  /** Not enough data in this period yet — show as Building, not Needs attention. */
+  pending?: boolean;
 }
 
 export interface BusinessHealthInsight {
@@ -1071,6 +1073,8 @@ export interface BusinessHealthInsight {
   period: { from: string; to: string };
   /** False when the period has no activity worth scoring. */
   available?: boolean;
+  /** True while the business is still collecting a baseline in this window. */
+  earlyStage?: boolean;
 }
 
 export type DashboardMetricId =
@@ -1330,6 +1334,11 @@ export interface BookingPageTestimonial {
   text: string;
 }
 
+export interface BookingPageCheckoutConfig {
+  /** When true, at-store (buy now) offers Cash alongside online/card. Booking never uses cash. */
+  cashEnabled?: boolean;
+}
+
 export interface BookingPageConfig {
   sections: BookingPageSection[];
   tagline?: string;
@@ -1343,6 +1352,28 @@ export interface BookingPageConfig {
   loyaltyBlurb?: string;
   /** Per-website AI Knowledge Wall. Stored on this Client Page only. */
   knowledgeWall?: WebsiteKnowledgeWall;
+  /** Checkout / payment options for the public client page. */
+  checkout?: BookingPageCheckoutConfig;
+}
+
+export interface PublicPurchaseConfirmation {
+  id: string;
+  orderNumber: string;
+  productName: string;
+  customerName: string;
+  total: number;
+  paymentStatus: string;
+  paymentMethod: string;
+  paymentIntent?: {
+    provider?: string;
+    orderId?: string | null;
+    clientSecret?: string | null;
+    keyId?: string | null;
+    amount?: number;
+    currency?: string;
+    failed?: boolean;
+    message?: string;
+  } | null;
 }
 
 export interface BookingSeoConfig {
@@ -1521,6 +1552,8 @@ export interface PublicService {
   category: string;
   isActive: boolean;
   imageUrl?: string | null;
+  /** Catalog unit — Piece is retail/buy-only; Service/Session/Package are bookable. */
+  unit?: string | null;
 }
 
 export interface PublicStaff {

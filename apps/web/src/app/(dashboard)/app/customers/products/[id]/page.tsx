@@ -162,7 +162,7 @@ export default function ProductDetailPage() {
 
   const handleSave = async () => {
     if (!product) return;
-    const payload = buildProductPayload(form);
+    const payload = buildProductPayload(form, { requireSku: true });
     if (!payload) return;
     try {
       setSaving(true);

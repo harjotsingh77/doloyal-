@@ -201,6 +201,31 @@ class ConfirmPaymentDto {
   @IsString() @IsOptional() razorpaySignature?: string;
 }
 
+class CreatePublicPurchaseDto {
+  @IsString() @IsOptional() productId?: string;
+  @IsString() @IsOptional() serviceId?: string;
+  @IsString() @IsOptional() customerName?: string;
+  @IsString() @IsOptional() firstName?: string;
+  @IsString() @IsOptional() lastName?: string;
+  @IsString() @IsOptional() customerPhone?: string;
+  @IsString() @IsOptional() phone?: string;
+  @IsString() @IsOptional() customerEmail?: string;
+  @IsString() @IsOptional() email?: string;
+  @IsString() @IsOptional() notes?: string;
+  @IsNumber() @IsOptional() quantity?: number;
+  @IsString() @IsOptional() paymentMethod?: string;
+  @IsString() @IsOptional() honeypot?: string;
+}
+
+class ConfirmPurchasePaymentDto {
+  @IsString() @IsNotEmpty() orderId: string;
+  @IsString() @IsNotEmpty() provider: string;
+  @IsString() @IsOptional() paymentIntentId?: string;
+  @IsString() @IsOptional() razorpayOrderId?: string;
+  @IsString() @IsOptional() razorpayPaymentId?: string;
+  @IsString() @IsOptional() razorpaySignature?: string;
+}
+
 @Controller()
 export class BookingLinksController {
   constructor(
@@ -353,6 +378,32 @@ export class BookingLinksController {
   confirmPublicPayment(@Param('slug') slug: string, @Body() dto: ConfirmPaymentDto) {
     return this.bookingLinksService.findBySlug(slug).then(({ tenant }) =>
       this.orchestrator.confirmPayment(tenant.id, dto.appointmentId, {
+        provider: dto.provider as 'STRIPE' | 'RAZORPAY',
+        paymentIntentId: dto.paymentIntentId,
+        razorpayOrderId: dto.razorpayOrderId,
+        razorpayPaymentId: dto.razorpayPaymentId,
+        razorpaySignature: dto.razorpaySignature,
+      }),
+    );
+  }
+
+  @Public()
+  @Post('public/book/:slug/purchase')
+  createPublicPurchase(
+    @Param('slug') slug: string,
+    @Body() dto: CreatePublicPurchaseDto,
+    @Headers('x-forwarded-for') forwarded?: string,
+  ) {
+    const ip = (forwarded || '').split(',')[0]?.trim() || 'local';
+    const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
+    return this.orchestrator.purchase(slug, dto, { ipHash });
+  }
+
+  @Public()
+  @Post('public/book/:slug/confirm-purchase-payment')
+  confirmPublicPurchasePayment(@Param('slug') slug: string, @Body() dto: ConfirmPurchasePaymentDto) {
+    return this.bookingLinksService.findBySlug(slug).then(({ tenant }) =>
+      this.orchestrator.confirmPurchasePayment(tenant.id, dto.orderId, {
         provider: dto.provider as 'STRIPE' | 'RAZORPAY',
         paymentIntentId: dto.paymentIntentId,
         razorpayOrderId: dto.razorpayOrderId,

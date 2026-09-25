@@ -19,6 +19,7 @@ import { siteCopy } from "./website-copy";
 import { SectionInspector } from "./section-inspector";
 import { useLiveTenant } from "./use-live-tenant";
 import { useCommerceLive } from "@/lib/data-sync";
+import { useCurrency } from "@/lib/currency-context";
 
 type SectionId = string;
 type Section = { id: SectionId; enabled: boolean; hidden?: boolean; title?: string };
@@ -39,6 +40,7 @@ const LIBRARY: Array<[SectionId, string, React.ElementType, string]> = [
   ["contact", "Contact", MapPin, "Call, email, maps, and booking."],
   ["map", "Map", Map, "Directions and an embedded map."],
   ["cta", "Final CTA", Sparkles, "Closing banner before the footer."],
+  ["checkout", "Checkout", Sparkles, "Payment options for Buy now and booking."],
   ["booking", "Your visits", CalendarDays, "Upcoming appointments after sign-in."],
   ["loyalty", "Loyalty", Sparkles, "Points and progress."],
   ["rewards", "Rewards", Gift, "Rewards guests can redeem."],
@@ -55,6 +57,7 @@ const DEVICE_ICONS: Record<PreviewDevice, React.ElementType> = { desktop: Monito
 
 export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onSave }: { tenant: Tenant | null; link: BookingLink | null; initialConfig: Config; onSave: (config: Config, publish?: boolean) => Promise<void> }) {
   const { tenant, draft, patchBrand, flush } = useLiveTenant(tenantProp);
+  const { currency: displayCurrency } = useCurrency();
   const [config, setConfig] = React.useState<Config>(initialConfig);
   const [selected, setSelected] = React.useState<string>(initialConfig.sections[0]?.id ?? "hero");
   const [focusKey, setFocusKey] = React.useState(0);
@@ -217,7 +220,8 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
     backgroundColor: tenant?.backgroundColor ?? null,
     textColor: tenant?.textColor ?? null,
     fontFamily: tenant?.fontFamily ?? null,
-    currency: tenant?.currency ?? "INR",
+    // Prefer header display currency so builder preview matches CurrencySelect immediately.
+    currency: displayCurrency || tenant?.currency || "INR",
     timezone: tenant?.timezone ?? "Asia/Kolkata",
     tagline: tenant?.tagline ?? null,
     about: tenant?.description ?? null,
@@ -238,7 +242,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
     services: [],
     staff: [],
     bookingLink: { id: link?.id ?? "preview", slug: link?.slug ?? "preview", name: link?.name ?? null } as any,
-  } as any), [tenant, link, draft.brandColor]);
+  } as any), [tenant, link, draft.brandColor, displayCurrency]);
 
   const masterConfig: MasterConfig = React.useMemo(() => {
     const sectionTitles: Record<string, string> = {};
@@ -294,6 +298,7 @@ export function ClientPageBuilder({ tenant: tenantProp, link, initialConfig, onS
             ]
           : undefined),
       sectionUi: (config.sectionUi as MasterConfig["sectionUi"]) || undefined,
+      checkoutCashEnabled: config.checkoutCashEnabled !== false,
       websiteVersion: 2,
     };
   }, [config, heroHeading, heroDescription, heroBadge, heroButtonLabel, bookingButtonLabel, showSearch, pinChrome, featuredTitle, brandPrimary, sections]);

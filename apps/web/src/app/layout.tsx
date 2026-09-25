@@ -55,8 +55,26 @@ export default function RootLayout({
         />
         <Script id="cookiehub-init" strategy="lazyOnload">
           {`
+            function hideCookiehubIcon() {
+              try {
+                if (window.__cookiehub && window.__cookiehub.core && window.__cookiehub.core.closeIcon) {
+                  window.__cookiehub.core.closeIcon();
+                }
+              } catch (e) {}
+              var icons = document.querySelectorAll(".ch2-icon");
+              for (var i = 0; i < icons.length; i++) {
+                icons[i].style.setProperty("display", "none", "important");
+              }
+            }
             function startCookiehub() {
-              var cpm = {};
+              var cpm = {
+                onInitialise: function () {
+                  if (this.hasAnswered && this.hasAnswered()) hideCookiehubIcon();
+                },
+                onStatusChange: function () {
+                  hideCookiehubIcon();
+                },
+              };
               if (window.cookiehub) window.cookiehub.load(cpm);
             }
             if (document.readyState === "loading") {

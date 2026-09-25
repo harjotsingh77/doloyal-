@@ -1421,15 +1421,15 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
     );
     const fingerprint = JSON.stringify(lean);
     const result = this.ruleBasedHealth(lean, range.currentFromYmd, range.currentToYmd);
+    // Keep free for ~12s so analytics date changes and new customers show up quickly.
+    // Never long-cache an unavailable/early empty score.
+    const ttl = result.available === false ? 5_000 : 12_000;
     this.healthCache.set(cacheKey, {
       fingerprint,
       result,
-      expiresAt: now + 60_000,
+      expiresAt: now + ttl,
     });
 
-    // Score from the lean snapshot only. The full 20+ query snapshot used to
-    // run in the background and steal the connection pool from the page the
-    // user was opening next.
     return result;
   }
 
@@ -1443,18 +1443,27 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
   ): Promise<HealthSnapshot> {
     const period = { gte: from, lte: to };
     const prev = { gte: prevFrom, lte: prevTo };
+    const orderPredicate = {
+      status: { not: 'CANCELLED' as const },
+      OR: [{ paymentStatus: 'PAID' as const }, { status: 'COMPLETED' as const }],
+    };
     const [
+      customersTotal,
       customersNew,
       inactiveCustomers,
       paidInvoiceAgg,
       prevPaidInvoiceAgg,
+      orderAgg,
+      prevOrderAgg,
       repeatGroups,
       rewardsActive,
       reviewsApproved,
       reviewRating,
       campaignsSent,
       orderCount,
+      appointments,
     ] = await Promise.all([
+      this.prisma.customer.count({ where: { tenantId, createdAt: { lte: to } } }),
       this.prisma.customer.count({ where: { tenantId, createdAt: period } }),
       this.prisma.customer.count({
         where: { tenantId, lastVisitAt: { lt: from, not: null }, status: 'ACTIVE' },
@@ -1467,6 +1476,20 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
         where: { tenantId, status: 'PAID', createdAt: prev },
         _sum: { total: true },
       }),
+      this.prisma.clientOrder
+        .aggregate({
+          where: { tenantId, orderDate: period, ...orderPredicate },
+          _sum: { total: true },
+          _count: true,
+        })
+        .catch(() => ({ _sum: { total: 0 }, _count: 0 })),
+      this.prisma.clientOrder
+        .aggregate({
+          where: { tenantId, orderDate: prev, ...orderPredicate },
+          _sum: { total: true },
+          _count: true,
+        })
+        .catch(() => ({ _sum: { total: 0 }, _count: 0 })),
       this.prisma.invoice.groupBy({
         by: ['customerId'],
         where: { tenantId, status: 'PAID', createdAt: period },
@@ -1489,10 +1512,23 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
           where: { tenantId, orderDate: period, status: { not: 'CANCELLED' } },
         })
         .catch(() => 0),
+      this.prisma.appointment
+        .count({
+          where: {
+            tenantId,
+            startTime: period,
+            status: { not: 'CANCELLED' },
+          },
+        })
+        .catch(() => 0),
     ]);
 
-    const revenue = paidInvoiceAgg._sum.total || 0;
-    const prevRevenue = prevPaidInvoiceAgg._sum.total || 0;
+    const invoiceRev = paidInvoiceAgg._sum.total || 0;
+    const prevInvoiceRev = prevPaidInvoiceAgg._sum.total || 0;
+    const orderRev = Number(orderAgg._sum?.total || 0) || 0;
+    const prevOrderRev = Number(prevOrderAgg._sum?.total || 0) || 0;
+    const revenue = invoiceRev + orderRev;
+    const prevRevenue = prevInvoiceRev + prevOrderRev;
     const repeatCustomers = repeatGroups.length;
     const repeatDenom = repeatCustomers + customersNew;
     const repeatRate = repeatDenom > 0 ? (repeatCustomers / repeatDenom) * 100 : 0;
@@ -1502,8 +1538,10 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
     return {
       periodRevenue: revenue,
       previousRevenue: prevRevenue,
+      customersTotal: Number(customersTotal) || 0,
       customersNew,
-      orders: Number(orderCount) || 0,
+      orders: Number(orderCount) || Number(orderAgg._count) || 0,
+      appointments: Number(appointments) || 0,
       repeatRate: Math.round(repeatRate * 10) / 10,
       revenueChangePct: Math.round(revenueChangePct * 10) / 10,
       rewardsActive: Number(rewardsActive) || 0,
@@ -1807,21 +1845,36 @@ The numbers say this is a **retention leak**, not a traffic problem. Appointment
     });
   }
 
-  private statusFromScore(score: number): BusinessHealthStatus {
+  private statusFromScore(score: number, earlyStage = false): BusinessHealthStatus {
+    if (earlyStage) return 'building';
     if (score >= 70) return 'healthy';
     if (score >= 40) return 'fair';
     return 'at_risk';
   }
 
   private ruleBasedHealth(snapshot: HealthSnapshot, from: string, to: string): BusinessHealthInsight {
-    // Empty commerce period → no score. Do not treat inactive customers or
-    // reward catalog size as enough signal to mark the business "at risk".
+    const periodRevenue = snapshot.periodRevenue ?? 0;
+    const previousRevenue = snapshot.previousRevenue ?? 0;
+    const customersNew = snapshot.customersNew ?? 0;
+    const customersTotal = snapshot.customersTotal ?? customersNew;
+    const orders = snapshot.orders ?? 0;
+    const appointments = snapshot.appointments ?? 0;
+    const reviewsApproved = snapshot.reviewsApproved ?? 0;
+    const repeatRate = snapshot.repeatRate ?? 0;
+    const revenueChangePct = snapshot.revenueChangePct ?? 0;
+    const rewardsActive = snapshot.rewardsActive ?? 0;
+    const inactiveCustomers = snapshot.inactiveCustomers ?? 0;
+    const averageRating = snapshot.averageRating ?? 0;
+    const campaignsSent = snapshot.campaignsSent ?? 0;
+
+    // Empty commerce period → no score. Catalog leftovers must not invent risk.
     const noActivity =
-      (snapshot.periodRevenue ?? 0) === 0 &&
-      (snapshot.previousRevenue ?? 0) === 0 &&
-      (snapshot.customersNew ?? 0) === 0 &&
-      (snapshot.reviewsApproved ?? 0) === 0 &&
-      (snapshot.orders ?? 0) === 0;
+      periodRevenue === 0 &&
+      previousRevenue === 0 &&
+      customersNew === 0 &&
+      reviewsApproved === 0 &&
+      orders === 0 &&
+      appointments === 0;
     if (noActivity) {
       return {
         score: 0,
@@ -1832,70 +1885,164 @@ The numbers say this is a **retention leak**, not a traffic problem. Appointment
         generatedAt: new Date().toISOString(),
         period: { from, to },
         available: false,
+        earlyStage: true,
       };
     }
 
-    const score = Math.min(
-      100,
-      Math.max(
-        0,
-        Math.round(
-          (Math.min(snapshot.repeatRate, 100) / 100) * 30 +
-            (snapshot.revenueChangePct > 0 ? Math.min(snapshot.revenueChangePct / 2, 20) : 8) +
-            Math.min(snapshot.rewardsActive * 4, 16) +
-            (snapshot.inactiveCustomers === 0 ? 16 : Math.max(16 - snapshot.inactiveCustomers, 4)) +
-            Math.min(snapshot.averageRating * 3, 10) +
-            (snapshot.campaignsSent > 0 ? 8 : 4),
-        ),
-      ),
-    );
+    // Brand-new windows (1–2 customers, little/no paid history) unlock signals
+    // as real activity arrives — never punish with "Needs attention" yet.
+    const earlyStage =
+      customersTotal < 5 ||
+      (previousRevenue === 0 && periodRevenue === 0 && orders < 3 && customersTotal < 10);
 
-    const factors = [
-      {
-        label: snapshot.repeatRate >= 50 ? 'Repeat rate is strong' : 'Repeat rate needs improvement',
-        positive: snapshot.repeatRate >= 50,
-      },
-      {
-        label:
-          (snapshot.periodRevenue ?? 0) === 0 && (snapshot.previousRevenue ?? 0) === 0
-            ? 'No revenue in this period'
-            : snapshot.revenueChangePct > 0
-              ? 'Revenue is growing'
-              : 'Revenue is declining',
-        positive: snapshot.revenueChangePct > 0 && (snapshot.periodRevenue ?? 0) > 0,
-      },
-      {
-        label: snapshot.rewardsActive >= 5 ? 'Active rewards program' : 'Few active rewards',
-        positive: snapshot.rewardsActive >= 5,
-      },
-      {
-        label:
-          snapshot.inactiveCustomers <= 5
-            ? 'Low customer inactivity'
-            : `${snapshot.inactiveCustomers} inactive customers`,
-        positive: snapshot.inactiveCustomers <= 5,
-      },
-    ];
+    const canJudgeRepeat = customersTotal >= 5 && (orders >= 3 || periodRevenue > 0 || repeatRate > 0);
+    const canJudgeRevenue = previousRevenue > 0 || periodRevenue > 0;
+    const canJudgeRewards = customersTotal >= 5 || rewardsActive >= 1;
+    const canJudgeInactive = customersTotal >= 5;
 
-    if (snapshot.reviewsApproved > 0) {
+    type Factor = { label: string; positive: boolean; pending?: boolean };
+    const factors: Factor[] = [];
+
+    if (!canJudgeRepeat) {
       factors.push({
         label:
-          snapshot.averageRating >= 4
-            ? `${snapshot.averageRating} star reviews`
-            : 'Review rating needs attention',
-        positive: snapshot.averageRating >= 4,
+          customersNew > 0
+            ? `${customersNew} new customer${customersNew === 1 ? '' : 's'} this period — repeat rate unlocks after return visits`
+            : 'Repeat rate unlocks after customers return',
+        positive: true,
+        pending: true,
       });
+    } else {
+      factors.push({
+        label: repeatRate >= 50 ? 'Repeat rate is strong' : 'Repeat rate needs improvement',
+        positive: repeatRate >= 50,
+      });
+    }
+
+    if (!canJudgeRevenue) {
+      factors.push({
+        label: 'Revenue tracking starts after the first paid sale in this period',
+        positive: true,
+        pending: true,
+      });
+    } else if (previousRevenue === 0 && periodRevenue > 0) {
+      factors.push({
+        label: 'First revenue in this period — growth baseline starts next window',
+        positive: true,
+        pending: true,
+      });
+    } else if (periodRevenue === 0 && previousRevenue > 0) {
+      factors.push({
+        label: 'No revenue in this period',
+        positive: false,
+      });
+    } else {
+      factors.push({
+        label: revenueChangePct > 0 ? 'Revenue is growing' : 'Revenue is declining',
+        positive: revenueChangePct > 0 && periodRevenue > 0,
+      });
+    }
+
+    if (!canJudgeRewards) {
+      factors.push({
+        label: 'Loyalty rewards unlock as you set up your program',
+        positive: true,
+        pending: true,
+      });
+    } else {
+      factors.push({
+        label: rewardsActive >= 3 ? 'Active rewards program' : 'Few active rewards',
+        positive: rewardsActive >= 3,
+      });
+    }
+
+    if (!canJudgeInactive) {
+      factors.push({
+        label:
+          customersNew > 0
+            ? 'New customers just arrived — inactivity is measured after visits'
+            : 'Inactivity tracking needs a larger customer base',
+        positive: true,
+        pending: true,
+      });
+    } else {
+      factors.push({
+        label:
+          inactiveCustomers <= 5
+            ? 'Low customer inactivity'
+            : `${inactiveCustomers} inactive customers`,
+        positive: inactiveCustomers <= 5,
+      });
+    }
+
+    if (reviewsApproved > 0) {
+      factors.push({
+        label:
+          averageRating >= 4
+            ? `${averageRating} star reviews`
+            : 'Review rating needs attention',
+        positive: averageRating >= 4,
+      });
+    } else if (earlyStage) {
+      factors.push({
+        label: 'Reviews appear here after customers leave feedback',
+        positive: true,
+        pending: true,
+      });
+    }
+
+    if (appointments > 0 && earlyStage) {
+      factors.push({
+        label: `${appointments} appointment${appointments === 1 ? '' : 's'} in this period`,
+        positive: true,
+      });
+    }
+
+    // Score only from factors that are ready. Early stage stays in a calm
+    // "building" band so one new customer never looks like a 28% crisis.
+    let score: number;
+    if (earlyStage) {
+      let building = 48;
+      if (customersNew > 0) building += 8;
+      if (periodRevenue > 0 || orders > 0) building += 12;
+      if (appointments > 0) building += 6;
+      if (reviewsApproved > 0) building += 6;
+      if (rewardsActive > 0) building += 4;
+      if (campaignsSent > 0) building += 4;
+      score = Math.min(72, building);
+    } else {
+      score = Math.min(
+        100,
+        Math.max(
+          0,
+          Math.round(
+            (Math.min(repeatRate, 100) / 100) * 30 +
+              (revenueChangePct > 0
+                ? Math.min(revenueChangePct / 2, 20)
+                : periodRevenue > 0
+                  ? 8
+                  : 4) +
+              Math.min(rewardsActive * 4, 16) +
+              (inactiveCustomers === 0 ? 16 : Math.max(16 - inactiveCustomers, 4)) +
+              Math.min(averageRating * 3, 10) +
+              (campaignsSent > 0 ? 8 : 4),
+          ),
+        ),
+      );
     }
 
     return {
       score,
-      status: this.statusFromScore(score),
-      summary: `Business health is ${score}% for ${from} to ${to}, based on revenue, retention, loyalty, and activity across Doloyal.`,
+      status: this.statusFromScore(score, earlyStage),
+      summary: earlyStage
+        ? `Business health is building for ${from} to ${to}. Signals unlock as customers, sales, and loyalty activity accumulate in this window.`
+        : `Business health is ${score}% for ${from} to ${to}, based on revenue, retention, loyalty, and activity across Doloyal.`,
       factors: factors.slice(0, 6),
       source: 'rules',
       generatedAt: new Date().toISOString(),
       period: { from, to },
       available: true,
+      earlyStage,
     };
   }
 

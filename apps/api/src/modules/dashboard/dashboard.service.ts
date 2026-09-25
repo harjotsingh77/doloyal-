@@ -37,15 +37,19 @@ export class DashboardService {
 
     const cacheKey = `${tenantId}:${range.currentFromYmd}:${range.currentToYmd}`;
     const cached = this.overviewCache.get(cacheKey);
-    if (cached && now.getTime() - cached.at < 20_000) return cached.data;
+    // Keep occupied-tenant results briefly; never reuse an empty snapshot —
+    // the first customer/order after an empty window must show up immediately.
+    if (cached && cached.data?.kpis?.totalCustomers > 0 && now.getTime() - cached.at < 8_000) {
+      return cached.data;
+    }
 
     // One existence check, in parallel with nothing else — empty tenants skip
     // the aggregate scans. Occupied tenants go straight into indexed scans.
     const occupied = await this.hasTenantActivity(tenantId);
     if (!occupied) {
-      const empty = this.emptyOverview(now, range);
-      this.rememberOverview(cacheKey, empty);
-      return empty;
+      // Do not remember empty results — a create arriving a second later
+      // would otherwise keep returning zeros from this function instance.
+      return this.emptyOverview(now, range);
     }
 
     const dayEnd = new Date(startOfDay.getTime() + 86400000);

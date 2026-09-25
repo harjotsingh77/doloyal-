@@ -17,6 +17,10 @@ export function useResource<T>(options: {
   scopes: AppDataScope[];
   enabled?: boolean;
   keepPrevious?: boolean;
+  /** Override default 90s — use a short window for live dashboards. */
+  staleTime?: number;
+  refetchInterval?: number | false;
+  refetchOnMount?: boolean | "always";
 }) {
   const keyText = JSON.stringify(options.queryKey);
 
@@ -36,11 +40,13 @@ export function useResource<T>(options: {
       return data;
     },
     enabled: options.enabled ?? true,
-    staleTime: 90_000,
+    staleTime: options.staleTime ?? 90_000,
     gcTime: 30 * 60_000,
     initialData: snapshot?.data,
     initialDataUpdatedAt: snapshot?.at,
     placeholderData: options.keepPrevious ? keepPreviousData : undefined,
+    refetchInterval: options.refetchInterval,
+    refetchOnMount: options.refetchOnMount,
     meta: { scopes: options.scopes },
   });
 

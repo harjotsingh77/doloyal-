@@ -437,6 +437,27 @@ export function SectionInspector({
     );
   }
 
+  if (selected === "checkout") {
+    const cashEnabled = config.checkoutCashEnabled !== false;
+    return (
+      <>
+        <Field label="Section heading" value={heading} onChange={setHeading} placeholder="Checkout" />
+        <Field label="Supporting text" value={ui.body ?? ""} onChange={(v) => patchUi({ body: v })} multiline placeholder="How customers pay when they buy or book." />
+        <Group title="At-store purchases">
+          <Toggle
+            label="Cash"
+            hint="When on, walk-in customers can pay cash. Booking always uses online payment only."
+            checked={cashEnabled}
+            onChange={(c) => updateConfig({ checkoutCashEnabled: c, checkout: { cashEnabled: c } })}
+          />
+        </Group>
+        <p className="text-xs leading-5 text-black/50">
+          Product Buy opens a choice: take now (at store) or book. Booking never shows cash.
+        </p>
+      </>
+    );
+  }
+
   if (selected === "reviews") {
     return (
       <>
