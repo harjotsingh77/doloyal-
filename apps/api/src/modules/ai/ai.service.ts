@@ -1267,8 +1267,15 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
   }
 
   private async getChurnRiskData(tenantId: string, level: string) {
+    const minDays =
+      level === 'CRITICAL' ? 90 : level === 'HIGH' ? 60 : level === 'MEDIUM' ? 30 : 0;
+    const cutoff = new Date(Date.now() - minDays * 86400000);
     const customers = await this.prisma.customer.findMany({
-      where: { tenantId, status: 'ACTIVE' },
+      where: {
+        tenantId,
+        status: 'ACTIVE',
+        OR: [{ lastVisitAt: { lt: cutoff } }, { lastVisitAt: null }],
+      },
       select: {
         id: true,
         firstName: true,
@@ -1277,6 +1284,8 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
         totalVisits: true,
         totalSpent: true,
       },
+      take: 200,
+      orderBy: { lastVisitAt: 'asc' },
     });
     return customers
       .map((c) => {
@@ -1310,6 +1319,8 @@ When the user message starts with "Business Health signal" or "KPI detail:" or a
         status: 'ACTIVE',
       },
       select: { id: true, firstName: true, lastName: true, lastVisitAt: true, totalSpent: true },
+      take: 200,
+      orderBy: { lastVisitAt: 'asc' },
     });
     return customers.map((c) => ({
       id: c.id,

@@ -91,21 +91,30 @@ export class WorkflowService {
   }
 
   private async attachRunStats(items: any[]) {
-    const out: any[] = [];
-    for (const item of items) {
-      const [completed, failed] = await Promise.all([
-        this.prisma.workflowRun.count({ where: { workflowId: item.id, status: 'COMPLETED' } }),
-        this.prisma.workflowRun.count({ where: { workflowId: item.id, status: 'FAILED' } }),
-      ]);
-      const runs = (item._count?.runs || 0);
-      out.push({
-        ...this.toSummary(item),
-        completedRuns: completed,
-        failedRuns: failed,
-        successRate: runs > 0 ? Math.round(((runs - failed) / runs) * 1000) / 10 : undefined,
-      });
+    if (!items.length) return [];
+    const ids = items.map((i) => i.id);
+    const grouped = await this.prisma.workflowRun.groupBy({
+      by: ['workflowId', 'status'],
+      where: { workflowId: { in: ids }, status: { in: ['COMPLETED', 'FAILED'] } },
+      _count: { _all: true },
+    });
+    const completed = new Map<string, number>();
+    const failed = new Map<string, number>();
+    for (const row of grouped) {
+      const n = row._count._all;
+      if (row.status === 'COMPLETED') completed.set(row.workflowId, n);
+      if (row.status === 'FAILED') failed.set(row.workflowId, n);
     }
-    return out;
+    return items.map((item) => {
+      const runs = item._count?.runs || 0;
+      const fail = failed.get(item.id) || 0;
+      return {
+        ...this.toSummary(item),
+        completedRuns: completed.get(item.id) || 0,
+        failedRuns: fail,
+        successRate: runs > 0 ? Math.round(((runs - fail) / runs) * 1000) / 10 : undefined,
+      };
+    });
   }
 
   // ─── List / Get ────────────────────────────────────────────────────────────
@@ -148,43 +157,60 @@ export class WorkflowService {
         where: { workflowId: id },
         orderBy: { createdAt: 'desc' },
         take: 25,
-        include: { steps: { orderBy: { createdAt: 'asc' } } },
+        include: {
+          steps: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              nodeKey: true,
+              type: true,
+              status: true,
+              attempt: true,
+              startedAt: true,
+              completedAt: true,
+              error: true,
+              output: true,
+            },
+          },
+        },
       }),
     ]);
 
-    const runInfos = await Promise.all(
-      runs.map(async (r) => {
-        let customerName: string | undefined;
-        if (r.customerId) {
-          const c = await this.prisma.customer.findFirst({ where: { id: r.customerId, tenantId } });
-          customerName = c ? `${c.firstName} ${c.lastName}` : undefined;
-        }
-        return {
-          id: r.id,
-          workflowId: r.workflowId,
-          customerId: r.customerId,
-          customerName,
-          version: r.version,
-          status: r.status,
-          trigger: r.trigger,
-          startedAt: r.startedAt?.toISOString(),
-          completedAt: r.completedAt?.toISOString(),
-          error: r.error,
-          createdAt: r.createdAt.toISOString(),
-          steps: r.steps.map((s) => ({
-            id: s.id,
-            nodeKey: s.nodeKey,
-            type: s.type,
-            status: s.status,
-            attempt: s.attempt,
-            startedAt: s.startedAt?.toISOString(),
-            completedAt: s.completedAt?.toISOString(),
-            error: s.error,
-            output: s.output,
-          })),
-        };
-      }),
+    const runCustomerIds = [...new Set(runs.map((r) => r.customerId).filter(Boolean))] as string[];
+    const customers = runCustomerIds.length
+      ? await this.prisma.customer.findMany({
+          where: { tenantId, id: { in: runCustomerIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [];
+    const customerNameById = new Map(
+      customers.map((c) => [c.id, `${c.firstName} ${c.lastName}`]),
     );
+
+    const runInfos = runs.map((r) => ({
+      id: r.id,
+      workflowId: r.workflowId,
+      customerId: r.customerId,
+      customerName: r.customerId ? customerNameById.get(r.customerId) : undefined,
+      version: r.version,
+      status: r.status,
+      trigger: r.trigger,
+      startedAt: r.startedAt?.toISOString(),
+      completedAt: r.completedAt?.toISOString(),
+      error: r.error,
+      createdAt: r.createdAt.toISOString(),
+      steps: r.steps.map((s) => ({
+        id: s.id,
+        nodeKey: s.nodeKey,
+        type: s.type,
+        status: s.status,
+        attempt: s.attempt,
+        startedAt: s.startedAt?.toISOString(),
+        completedAt: s.completedAt?.toISOString(),
+        error: s.error,
+        output: s.output,
+      })),
+    }));
 
     const base = this.toSummary(wf);
     return {
@@ -498,41 +524,57 @@ export class WorkflowService {
       where: { workflowId: id, ...(query.status ? { status: query.status as any } : {}) },
       orderBy: { createdAt: 'desc' },
       take: Math.min(query.limit || 25, 100),
-      include: { steps: { orderBy: { createdAt: 'asc' as const } } },
+      include: {
+        steps: {
+          orderBy: { createdAt: 'asc' as const },
+          select: {
+            id: true,
+            nodeKey: true,
+            type: true,
+            status: true,
+            attempt: true,
+            startedAt: true,
+            completedAt: true,
+            error: true,
+            output: true,
+          },
+        },
+      },
     });
-    return Promise.all(
-      runs.map(async (r) => {
-        let customerName: string | undefined;
-        if (r.customerId) {
-          const c = await this.prisma.customer.findFirst({ where: { id: r.customerId, tenantId } });
-          customerName = c ? `${c.firstName} ${c.lastName}` : undefined;
-        }
-        return {
-          id: r.id,
-          workflowId: r.workflowId,
-          customerId: r.customerId,
-          customerName,
-          version: r.version,
-          status: r.status,
-          trigger: r.trigger,
-          startedAt: r.startedAt?.toISOString(),
-          completedAt: r.completedAt?.toISOString(),
-          error: r.error,
-          createdAt: r.createdAt.toISOString(),
-          steps: r.steps.map((s) => ({
-            id: s.id,
-            nodeKey: s.nodeKey,
-            type: s.type,
-            status: s.status,
-            attempt: s.attempt,
-            startedAt: s.startedAt?.toISOString(),
-            completedAt: s.completedAt?.toISOString(),
-            error: s.error,
-            output: s.output,
-          })),
-        };
-      }),
+    const runCustomerIds = [...new Set(runs.map((r) => r.customerId).filter(Boolean))] as string[];
+    const customers = runCustomerIds.length
+      ? await this.prisma.customer.findMany({
+          where: { tenantId, id: { in: runCustomerIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [];
+    const customerNameById = new Map(
+      customers.map((c) => [c.id, `${c.firstName} ${c.lastName}`]),
     );
+    return runs.map((r) => ({
+      id: r.id,
+      workflowId: r.workflowId,
+      customerId: r.customerId,
+      customerName: r.customerId ? customerNameById.get(r.customerId) : undefined,
+      version: r.version,
+      status: r.status,
+      trigger: r.trigger,
+      startedAt: r.startedAt?.toISOString(),
+      completedAt: r.completedAt?.toISOString(),
+      error: r.error,
+      createdAt: r.createdAt.toISOString(),
+      steps: r.steps.map((s) => ({
+        id: s.id,
+        nodeKey: s.nodeKey,
+        type: s.type,
+        status: s.status,
+        attempt: s.attempt,
+        startedAt: s.startedAt?.toISOString(),
+        completedAt: s.completedAt?.toISOString(),
+        error: s.error,
+        output: s.output,
+      })),
+    }));
   }
 
   async getRun(tenantId: string, runId: string) {
@@ -599,10 +641,12 @@ export class WorkflowService {
         this.prisma.workflowRun.count({ where: { workflowId: id, customerId: { not: null } } }),
       ]);
 
-    // Count messaging + reward actions from completed runs' step outputs.
+    // Sample recent completed action steps instead of loading the full history.
     const completedSteps = await this.prisma.workflowRunStep.findMany({
       where: { run: { workflowId: id, status: 'COMPLETED' }, type: 'action', status: 'COMPLETED' },
       select: { output: true },
+      take: 500,
+      orderBy: { createdAt: 'desc' },
     });
     let messagesSent = 0;
     let rewardsGenerated = 0;

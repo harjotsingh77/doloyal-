@@ -41,15 +41,15 @@ export class BookingAnalyticsService {
   }
 
   async getRevenue(tenantId: string, from: Date, to: Date): Promise<number> {
-    const invoices = await this.prisma.invoice.findMany({
+    const agg = await this.prisma.invoice.aggregate({
       where: {
         tenantId,
         createdAt: { gte: from, lte: to },
         status: 'PAID',
       },
-      select: { total: true },
+      _sum: { total: true },
     });
-    return invoices.reduce((sum, inv) => sum + inv.total, 0);
+    return agg._sum.total || 0;
   }
 
   async getTopServices(tenantId: string, from: Date, to: Date, limit: number) {
@@ -107,36 +107,24 @@ export class BookingAnalyticsService {
   }
 
   async getPeakHours(tenantId: string, from: Date, to: Date) {
-    const appointments = await this.prisma.appointment.findMany({
-      where: {
-        tenantId,
-        startTime: { gte: from, lte: to },
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-      },
-      select: { startTime: true },
-    });
-
-    const hourCounts = new Map<number, number>();
-    for (const apt of appointments) {
-      const hour = new Date(apt.startTime).getHours();
-      hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
-    }
-
-    return Array.from(hourCounts.entries())
-      .map(([hour, count]) => ({ hour, count }))
-      .sort((a, b) => a.hour - b.hour);
+    const rows = await this.prisma.$queryRaw<{ hour: number; count: number }[]>`
+      SELECT EXTRACT(HOUR FROM "startTime")::int AS hour, COUNT(*)::int AS count
+      FROM "Appointment"
+      WHERE "tenantId" = ${tenantId}
+        AND "startTime" >= ${from} AND "startTime" <= ${to}
+        AND status NOT IN ('CANCELLED', 'NO_SHOW')
+      GROUP BY 1
+      ORDER BY 1
+    `;
+    return rows.map((r) => ({ hour: Number(r.hour), count: Number(r.count) }));
   }
 
   async getSourceBreakdown(tenantId: string, from: Date, to: Date) {
-    const appointments = await this.prisma.appointment.findMany({
+    const rows = await this.prisma.appointment.groupBy({
+      by: ['source'],
       where: { tenantId, createdAt: { gte: from, lte: to } },
-      select: { source: true },
+      _count: { _all: true },
     });
-    const map = new Map<string, number>();
-    for (const a of appointments) {
-      const s = a.source || 'DASHBOARD';
-      map.set(s, (map.get(s) || 0) + 1);
-    }
-    return [...map.entries()].map(([source, count]) => ({ source, count }));
+    return rows.map((r) => ({ source: r.source || 'DASHBOARD', count: r._count._all }));
   }
 }

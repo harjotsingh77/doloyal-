@@ -114,6 +114,7 @@ export class AdminDashboardService {
       }),
       this.prisma.subscription.findMany({
         where: { status: 'ACTIVE', tenant: realTenant },
+        take: 5_000,
         select: {
           plan: true,
           tenantId: true,
@@ -130,6 +131,7 @@ export class AdminDashboardService {
           tenant: realTenant,
           OR: [{ status: 'TRIALING' }, { trialEndsAt: { gt: now } }],
         },
+        take: 5_000,
         select: {
           plan: true,
           tenantId: true,
@@ -147,6 +149,7 @@ export class AdminDashboardService {
       }),
       this.prisma.tenant.findMany({
         where: realTenantWhere({ createdAt: { gte: ninetyAgo } }),
+        take: 500,
         select: {
           id: true,
           name: true,
@@ -412,11 +415,15 @@ export class AdminDashboardService {
         type: { in: ['PAYMENT_SUCCEEDED', 'PAYMENT_FAILED'] },
         createdAt: { gte: start, lte: end },
       },
+      select: { type: true, amount: true, createdAt: true, metadata: true },
+      take: 10_000,
     });
 
     // Admin-issued refunds (recorded in audit log with amount).
     const refunds = await this.prisma.adminAuditLog.findMany({
       where: { action: 'billing.refund', createdAt: { gte: start, lte: end } },
+      select: { createdAt: true, metadata: true },
+      take: 5_000,
     });
 
     const eventByDay = new Map<string, { revenue: number; refunds: number }>();
@@ -502,14 +509,17 @@ export class AdminDashboardService {
     const tenants = await this.prisma.tenant.findMany({
       where: realTenantWhere({ createdAt: { gte: start } }),
       select: { id: true, createdAt: true },
+      take: 10_000,
     });
     const users = await this.prisma.user.findMany({
       where: realUserWhere({ createdAt: { gte: start } }),
       select: { id: true, createdAt: true },
+      take: 10_000,
     });
     const subs = await this.prisma.subscription.findMany({
       where: { status: 'ACTIVE', tenant: realTenantWhere() },
       select: { tenantId: true, createdAt: true, plan: true, status: true, stripeSubId: true, stripeId: true, paymentMethod: true },
+      take: 5_000,
     });
     const activeTenantSet = new Set(subs.map((s) => s.tenantId));
 

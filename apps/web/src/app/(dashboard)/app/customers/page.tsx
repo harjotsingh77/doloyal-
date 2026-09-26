@@ -420,7 +420,14 @@ export default function CustomersPage() {
                     className="cursor-pointer"
                     onClick={() => router.push(`/app/customers/${c.id}`)}
                   >
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{c.name}</div>
+                      {c.clientNumber ? (
+                        <div className="mt-0.5 text-xs tabular-nums text-[rgb(var(--color-muted-foreground))]">
+                          ID: {c.clientNumber}
+                        </div>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{c.phone}</TableCell>
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{c.email ?? "—"}</TableCell>
                     <TableCell>

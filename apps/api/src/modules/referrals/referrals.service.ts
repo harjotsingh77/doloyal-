@@ -106,71 +106,75 @@ export class ReferralsService {
 
   async getOverview(tenantId: string, range = '30d', from?: string, to?: string) {
     const { start, end } = parseRange(range, from, to);
-    const dateFilter = { gte: start, lte: end };
 
-    const [
-      links,
-      shares,
-      clicks,
-      visits,
-      conversions,
-      pending,
-      rewards,
-      revenueAgg,
-      topReferrer,
-    ] = await Promise.all([
-      this.prisma.referralLink.count({ where: { tenantId, deletedAt: null, createdAt: dateFilter } }),
-      this.prisma.referralShare.count({ where: { tenantId, createdAt: dateFilter } }),
-      this.prisma.referralVisit.count({ where: { tenantId, createdAt: dateFilter } }),
-      this.prisma.referralVisit.count({
-        where: { tenantId, createdAt: dateFilter, isUnique: true },
-      }),
-      this.prisma.referralConversion.count({
-        where: {
-          tenantId,
-          status: { in: ['CONVERTED', 'REWARD_SENT'] },
-          convertedAt: dateFilter,
-        },
-      }),
-      this.prisma.referralConversion.count({
-        where: {
-          tenantId,
-          status: { in: ['PENDING', 'VISITED', 'SIGNED_UP', 'BOOKED'] },
-        },
-      }),
-      this.prisma.referralRewardRecord.count({
-        where: { tenantId, createdAt: dateFilter },
-      }),
-      this.prisma.referralConversion.aggregate({
-        where: {
-          tenantId,
-          status: { in: ['CONVERTED', 'REWARD_SENT'] },
-          convertedAt: dateFilter,
-        },
-        _sum: { orderValue: true, bookingValue: true },
-      }),
-      this.prisma.referralConversion.groupBy({
-        by: ['referrerId'],
-        where: {
-          tenantId,
-          referrerId: { not: null },
-          status: { in: ['CONVERTED', 'REWARD_SENT'] },
-        },
-        _count: { _all: true },
-        _sum: { orderValue: true, bookingValue: true },
-        orderBy: { _count: { referrerId: 'desc' } },
-        take: 1,
-      }),
-    ]);
+    type OvRow = {
+      links: number;
+      shares: number;
+      clicks: number;
+      visits: number;
+      conversions: number;
+      pending: number;
+      rewards: number;
+      order_rev: number;
+      booking_rev: number;
+      top_referrer_id: string | null;
+    };
 
-    const revenue =
-      (revenueAgg._sum.orderValue || 0) + (revenueAgg._sum.bookingValue || 0);
+    const [row] = await this.prisma.$queryRaw<OvRow[]>`
+      SELECT
+        (SELECT COUNT(*)::int FROM "ReferralLink"
+          WHERE "tenantId" = ${tenantId} AND "deletedAt" IS NULL
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}) AS links,
+        (SELECT COUNT(*)::int FROM "ReferralShare"
+          WHERE "tenantId" = ${tenantId}
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}) AS shares,
+        (SELECT COUNT(*)::int FROM "ReferralVisit"
+          WHERE "tenantId" = ${tenantId}
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}) AS clicks,
+        (SELECT COUNT(*)::int FROM "ReferralVisit"
+          WHERE "tenantId" = ${tenantId} AND "isUnique" = true
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}) AS visits,
+        (SELECT COUNT(*)::int FROM "ReferralConversion"
+          WHERE "tenantId" = ${tenantId}
+            AND status IN ('CONVERTED', 'REWARD_SENT')
+            AND "convertedAt" >= ${start} AND "convertedAt" <= ${end}) AS conversions,
+        (SELECT COUNT(*)::int FROM "ReferralConversion"
+          WHERE "tenantId" = ${tenantId}
+            AND status IN ('PENDING', 'VISITED', 'SIGNED_UP', 'BOOKED')) AS pending,
+        (SELECT COUNT(*)::int FROM "ReferralRewardRecord"
+          WHERE "tenantId" = ${tenantId}
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}) AS rewards,
+        (SELECT COALESCE(SUM("orderValue"), 0)::float8 FROM "ReferralConversion"
+          WHERE "tenantId" = ${tenantId}
+            AND status IN ('CONVERTED', 'REWARD_SENT')
+            AND "convertedAt" >= ${start} AND "convertedAt" <= ${end}) AS order_rev,
+        (SELECT COALESCE(SUM("bookingValue"), 0)::float8 FROM "ReferralConversion"
+          WHERE "tenantId" = ${tenantId}
+            AND status IN ('CONVERTED', 'REWARD_SENT')
+            AND "convertedAt" >= ${start} AND "convertedAt" <= ${end}) AS booking_rev,
+        (SELECT "referrerId" FROM "ReferralConversion"
+          WHERE "tenantId" = ${tenantId} AND "referrerId" IS NOT NULL
+            AND status IN ('CONVERTED', 'REWARD_SENT')
+          GROUP BY "referrerId"
+          ORDER BY COUNT(*) DESC
+          LIMIT 1) AS top_referrer_id
+    `;
+
+    const links = Number(row?.links || 0);
+    const shares = Number(row?.shares || 0);
+    const clicks = Number(row?.clicks || 0);
+    const visits = Number(row?.visits || 0);
+    const conversions = Number(row?.conversions || 0);
+    const pending = Number(row?.pending || 0);
+    const rewards = Number(row?.rewards || 0);
+    const revenue = Number(row?.order_rev || 0) + Number(row?.booking_rev || 0);
     const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
 
     let topReferrerName = '—';
-    if (topReferrer[0]?.referrerId) {
+    if (row?.top_referrer_id) {
       const c = await this.prisma.customer.findUnique({
-        where: { id: topReferrer[0].referrerId },
+        where: { id: row.top_referrer_id },
+        select: { firstName: true, lastName: true },
       });
       topReferrerName = c ? `${c.firstName} ${c.lastName}` : '—';
     }
@@ -192,127 +196,149 @@ export class ReferralsService {
 
   async getAnalytics(tenantId: string, range = '30d', from?: string, to?: string) {
     const { start, end } = parseRange(range, from, to);
-    const conversions = await this.prisma.referralConversion.findMany({
-      where: { tenantId, createdAt: { gte: start, lte: end } },
-      select: {
-        createdAt: true,
-        status: true,
-        orderValue: true,
-        bookingValue: true,
-        convertedAt: true,
-      },
+
+    type DayRow = {
+      day: Date;
+      referrals: number;
+      conversions: number;
+      revenue: number;
+      clicks: number;
+      visits: number;
+    };
+    type SourceRow = { source: string; count: number };
+    type MonthRow = { month: string; value: number };
+
+    const [dayRows, sourceRows, monthRows, rewardCostAgg, topLink, topRevenueLink, campaigns] =
+      await Promise.all([
+        this.prisma.$queryRaw<DayRow[]>`
+          WITH days AS (
+            SELECT generate_series(${start}::date, ${end}::date, '1 day'::interval)::date AS day
+          ),
+          conv AS (
+            SELECT
+              "createdAt"::date AS day,
+              COUNT(*) FILTER (WHERE status IN ('SIGNED_UP', 'BOOKED', 'CONVERTED', 'REWARD_SENT'))::int AS referrals,
+              COUNT(*) FILTER (WHERE status IN ('CONVERTED', 'REWARD_SENT'))::int AS conversions,
+              COALESCE(SUM("orderValue" + "bookingValue") FILTER (WHERE status IN ('CONVERTED', 'REWARD_SENT')), 0)::float8 AS revenue
+            FROM "ReferralConversion"
+            WHERE "tenantId" = ${tenantId}
+              AND "createdAt" >= ${start} AND "createdAt" <= ${end}
+            GROUP BY 1
+          ),
+          vis AS (
+            SELECT
+              "createdAt"::date AS day,
+              COUNT(*)::int AS clicks,
+              COUNT(*) FILTER (WHERE "isUnique" = true)::int AS visits
+            FROM "ReferralVisit"
+            WHERE "tenantId" = ${tenantId}
+              AND "createdAt" >= ${start} AND "createdAt" <= ${end}
+            GROUP BY 1
+          )
+          SELECT
+            d.day,
+            COALESCE(c.referrals, 0)::int AS referrals,
+            COALESCE(c.conversions, 0)::int AS conversions,
+            COALESCE(c.revenue, 0)::float8 AS revenue,
+            COALESCE(v.clicks, 0)::int AS clicks,
+            COALESCE(v.visits, 0)::int AS visits
+          FROM days d
+          LEFT JOIN conv c ON c.day = d.day
+          LEFT JOIN vis v ON v.day = d.day
+          ORDER BY d.day
+        `,
+        this.prisma.$queryRaw<SourceRow[]>`
+          SELECT COALESCE(source, 'direct') AS source, COUNT(*)::int AS count
+          FROM "ReferralVisit"
+          WHERE "tenantId" = ${tenantId}
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}
+          GROUP BY 1
+          ORDER BY count DESC
+          LIMIT 20
+        `,
+        this.prisma.$queryRaw<MonthRow[]>`
+          SELECT to_char("createdAt", 'YYYY-MM') AS month, COUNT(*)::int AS value
+          FROM "ReferralConversion"
+          WHERE "tenantId" = ${tenantId}
+            AND "createdAt" >= ${start} AND "createdAt" <= ${end}
+            AND status IN ('SIGNED_UP', 'BOOKED', 'CONVERTED', 'REWARD_SENT')
+          GROUP BY 1
+          ORDER BY 1
+        `,
+        this.prisma.referralRewardRecord.aggregate({
+          where: { tenantId, createdAt: { gte: start, lte: end } },
+          _sum: { amount: true },
+        }),
+        this.prisma.referralLink.findFirst({
+          where: { tenantId, deletedAt: null },
+          orderBy: [{ shareCount: 'desc' }, { clickCount: 'desc' }],
+          select: { code: true, name: true, shareCount: true, revenue: true },
+        }),
+        this.prisma.referralLink.findFirst({
+          where: { tenantId, deletedAt: null },
+          orderBy: { revenue: 'desc' },
+          select: { code: true, name: true, revenue: true },
+        }),
+        this.prisma.referralCampaign.findMany({
+          where: { tenantId, deletedAt: null },
+          orderBy: { conversionCount: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            name: true,
+            conversionCount: true,
+            clickCount: true,
+            revenueTotal: true,
+            status: true,
+          },
+        }),
+      ]);
+
+    const days = dayRows.map((r) => {
+      const d = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
+      return {
+        date: d,
+        referrals: Number(r.referrals || 0),
+        conversions: Number(r.conversions || 0),
+        revenue: Number(r.revenue || 0),
+        clicks: Number(r.clicks || 0),
+        visits: Number(r.visits || 0),
+      };
     });
-    const visits = await this.prisma.referralVisit.findMany({
-      where: { tenantId, createdAt: { gte: start, lte: end } },
-      select: { createdAt: true, source: true, isUnique: true },
-    });
 
-    const dailyMap = new Map<string, number>();
-    const monthlyMap = new Map<string, number>();
-    const revenueDaily = new Map<string, number>();
-    const conversionsDaily = new Map<string, number>();
-    const clicksDaily = new Map<string, number>();
-    const visitsDaily = new Map<string, number>();
-
-    for (const c of conversions) {
-      const d = c.createdAt.toISOString().slice(0, 10);
-      const m = d.slice(0, 7);
-      if (['SIGNED_UP', 'BOOKED', 'CONVERTED', 'REWARD_SENT'].includes(c.status)) {
-        dailyMap.set(d, (dailyMap.get(d) || 0) + 1);
-        monthlyMap.set(m, (monthlyMap.get(m) || 0) + 1);
-      }
-      if (c.status === 'CONVERTED' || c.status === 'REWARD_SENT') {
-        conversionsDaily.set(d, (conversionsDaily.get(d) || 0) + 1);
-        revenueDaily.set(
-          d,
-          (revenueDaily.get(d) || 0) + (c.orderValue || 0) + (c.bookingValue || 0),
-        );
-      }
-    }
-
-    for (const v of visits) {
-      const d = v.createdAt.toISOString().slice(0, 10);
-      clicksDaily.set(d, (clicksDaily.get(d) || 0) + 1);
-      if (v.isUnique) {
-        visitsDaily.set(d, (visitsDaily.get(d) || 0) + 1);
-      }
-    }
-
-    const sourceMap = new Map<string, number>();
-    for (const v of visits) {
-      sourceMap.set(v.source, (sourceMap.get(v.source) || 0) + 1);
-    }
-
-    const campaigns = await this.prisma.referralCampaign.findMany({
-      where: { tenantId, deletedAt: null },
-      orderBy: { conversionCount: 'desc' },
-      take: 5,
-      select: {
-        id: true,
-        name: true,
-        conversionCount: true,
-        clickCount: true,
-        revenueTotal: true,
-        status: true,
-      },
-    });
-
-    const days: string[] = [];
-    const cursor = new Date(start);
-    while (cursor <= end) {
-      days.push(cursor.toISOString().slice(0, 10));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
-    const totalClicks = [...clicksDaily.values()].reduce((a, b) => a + b, 0);
-    const totalVisits = [...visitsDaily.values()].reduce((a, b) => a + b, 0);
-    const totalConversions = [...conversionsDaily.values()].reduce((a, b) => a + b, 0);
-    const totalRevenue = [...revenueDaily.values()].reduce((a, b) => a + b, 0);
-    const totalReferrals = [...dailyMap.values()].reduce((a, b) => a + b, 0);
-    const rewardCostAgg = await this.prisma.referralRewardRecord.aggregate({
-      where: { tenantId, createdAt: { gte: start, lte: end } },
-      _sum: { amount: true },
-    });
+    const totalClicks = days.reduce((a, b) => a + b.clicks, 0);
+    const totalVisits = days.reduce((a, b) => a + b.visits, 0);
+    const totalConversions = days.reduce((a, b) => a + b.conversions, 0);
+    const totalRevenue = days.reduce((a, b) => a + b.revenue, 0);
+    const totalReferrals = days.reduce((a, b) => a + b.referrals, 0);
     const rewardCost = rewardCostAgg._sum.amount || 0;
-    const topLink = await this.prisma.referralLink.findFirst({
-      where: { tenantId, deletedAt: null },
-      orderBy: [{ shareCount: 'desc' }, { clickCount: 'desc' }],
-      select: { code: true, name: true, shareCount: true, revenue: true },
-    });
-    const topRevenueLink = await this.prisma.referralLink.findFirst({
-      where: { tenantId, deletedAt: null },
-      orderBy: { revenue: 'desc' },
-      select: { code: true, name: true, revenue: true },
-    });
 
     return {
       series: days.map((d) => ({
-        date: d,
-        referrals: dailyMap.get(d) || 0,
-        conversions: conversionsDaily.get(d) || 0,
-        revenue: revenueDaily.get(d) || 0,
-        clicks: clicksDaily.get(d) || 0,
-        visits: visitsDaily.get(d) || 0,
+        date: d.date,
+        referrals: d.referrals,
+        conversions: d.conversions,
+        revenue: d.revenue,
+        clicks: d.clicks,
+        visits: d.visits,
       })),
-      // Alias used by older UI clients
       timeseries: days.map((d) => ({
-        date: d,
-        referrals: dailyMap.get(d) || 0,
-        conversions: conversionsDaily.get(d) || 0,
-        revenue: revenueDaily.get(d) || 0,
-        clicks: clicksDaily.get(d) || 0,
-        visits: visitsDaily.get(d) || 0,
+        date: d.date,
+        referrals: d.referrals,
+        conversions: d.conversions,
+        revenue: d.revenue,
+        clicks: d.clicks,
+        visits: d.visits,
       })),
-      dailyReferrals: days.map((d) => ({ date: d, value: dailyMap.get(d) || 0 })),
-      monthlyReferrals: [...monthlyMap.entries()].map(([date, value]) => ({ date, value })),
-      referralRevenue: days.map((d) => ({ date: d, value: revenueDaily.get(d) || 0 })),
-      conversionRate: days.map((d) => {
-        const dayClicks = clicksDaily.get(d) || 0;
-        const dayConv = conversionsDaily.get(d) || 0;
-        return { date: d, value: dayClicks ? Math.round((dayConv / dayClicks) * 1000) / 10 : 0 };
-      }),
-      sources: [...sourceMap.entries()]
-        .map(([source, clicks]) => ({ source, clicks }))
+      dailyReferrals: days.map((d) => ({ date: d.date, value: d.referrals })),
+      monthlyReferrals: monthRows.map((m) => ({ date: m.month, value: Number(m.value || 0) })),
+      referralRevenue: days.map((d) => ({ date: d.date, value: d.revenue })),
+      conversionRate: days.map((d) => ({
+        date: d.date,
+        value: d.clicks ? Math.round((d.conversions / d.clicks) * 1000) / 10 : 0,
+      })),
+      sources: sourceRows
+        .map((s) => ({ source: s.source, clicks: Number(s.count || 0) }))
         .sort((a, b) => b.clicks - a.clicks),
       topCampaigns: campaigns,
       summary: {
@@ -461,6 +487,7 @@ export class ReferralsService {
     const campaigns = await this.prisma.referralCampaign.findMany({
       where: { tenantId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
+      take: 100,
       include: {
         _count: { select: { links: true, conversions: true } },
       },
@@ -758,8 +785,8 @@ export class ReferralsService {
         ...(customerId ? { customerId } : {}),
       },
       include: {
-        customer: true,
-        campaign: true,
+        customer: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        campaign: { select: { id: true, name: true, status: true } },
         _count: {
           select: {
             visits: true,
@@ -1228,162 +1255,205 @@ export class ReferralsService {
   }
 
   async creditRewards(tenantId: string, conversionId: string) {
+    const claimed = await this.prisma.referralConversion.updateMany({
+      where: {
+        id: conversionId,
+        tenantId,
+        rewardStatus: { not: 'CREDITED' },
+        status: { not: 'REJECTED' },
+      },
+      data: {
+        rewardStatus: 'CREDITING',
+      },
+    });
+    if (claimed.count === 0) {
+      const existing = await this.prisma.referralConversion.findFirst({
+        where: { id: conversionId, tenantId },
+        include: { campaign: true, referrer: true, friend: true },
+      });
+      if (!existing) throw new NotFoundException('Referral not found');
+      if (existing.status === 'REJECTED') {
+        throw new BadRequestException('Cannot reward rejected referral');
+      }
+      if (existing.rewardStatus === 'CREDITED') return existing;
+      throw new BadRequestException('Referral reward already in progress');
+    }
+
     const conversion = await this.prisma.referralConversion.findFirst({
       where: { id: conversionId, tenantId },
       include: { campaign: true, referrer: true, friend: true },
     });
     if (!conversion) throw new NotFoundException('Referral not found');
-    if (conversion.rewardStatus === 'CREDITED') return conversion;
-    if (conversion.status === 'REJECTED') {
-      throw new BadRequestException('Cannot reward rejected referral');
-    }
 
     const rewardType = conversion.rewardType || 'POINTS';
     const rewardValue = conversion.rewardValue || 0;
     const friendType = conversion.friendRewardType || 'POINTS';
     const friendValue = conversion.friendRewardValue || 0;
 
-    // Credit referrer (skipped for generic / public links without a customer)
-    if (conversion.referrerId && conversion.referrer) {
-      if (rewardType === 'POINTS' && rewardValue > 0) {
-        const bal = conversion.referrer.pointsBalance + Math.round(rewardValue);
-        await this.prisma.customer.update({
-          where: { id: conversion.referrerId },
-          data: { pointsBalance: bal },
+    try {
+      // Credit referrer (skipped for generic / public links without a customer)
+      if (conversion.referrerId && conversion.referrer) {
+        if (rewardType === 'POINTS' && rewardValue > 0) {
+          const pts = Math.round(rewardValue);
+          await this.prisma.$transaction(async (tx) => {
+            const locked = await tx.$queryRaw<{ pointsBalance: number }[]>`
+              SELECT "pointsBalance" FROM "Customer"
+              WHERE id = ${conversion.referrerId!} AND "tenantId" = ${tenantId}
+              FOR UPDATE
+            `;
+            const bal = (locked[0]?.pointsBalance ?? 0) + pts;
+            await tx.customer.update({
+              where: { id: conversion.referrerId! },
+              data: { pointsBalance: { increment: pts } },
+            });
+            await tx.pointsLedger.create({
+              data: {
+                tenantId,
+                customerId: conversion.referrerId!,
+                amount: pts,
+                balanceAfter: bal,
+                reason: `Referral reward`,
+              },
+            });
+          });
+        } else if (rewardType === 'CASHBACK' && rewardValue > 0) {
+          await this.prisma.customer.update({
+            where: { id: conversion.referrerId },
+            data: { cashbackBalance: { increment: rewardValue } },
+          });
+        }
+
+        await this.prisma.referralRewardRecord.create({
+          data: {
+            tenantId,
+            conversionId,
+            customerId: conversion.referrerId,
+            role: 'REFERRER',
+            rewardType,
+            amount: rewardValue,
+            status: 'CREDITED',
+            creditedAt: new Date(),
+            walletTransactionId:
+              rewardType === 'POINTS' || rewardType === 'CASHBACK' ? `wallet:${conversion.referrerId}` : null,
+          },
         });
-        await this.prisma.pointsLedger.create({
+      }
+
+      if (conversion.friendId && friendValue > 0) {
+        if (friendType === 'POINTS') {
+          const pts = Math.round(friendValue);
+          await this.prisma.$transaction(async (tx) => {
+            const locked = await tx.$queryRaw<{ pointsBalance: number }[]>`
+              SELECT "pointsBalance" FROM "Customer"
+              WHERE id = ${conversion.friendId!} AND "tenantId" = ${tenantId}
+              FOR UPDATE
+            `;
+            const bal = (locked[0]?.pointsBalance ?? 0) + pts;
+            await tx.customer.update({
+              where: { id: conversion.friendId! },
+              data: { pointsBalance: { increment: pts } },
+            });
+            await tx.pointsLedger.create({
+              data: {
+                tenantId,
+                customerId: conversion.friendId!,
+                amount: pts,
+                balanceAfter: bal,
+                reason: `Referral friend bonus`,
+              },
+            });
+          });
+        }
+        await this.prisma.referralRewardRecord.create({
+          data: {
+            tenantId,
+            conversionId,
+            customerId: conversion.friendId,
+            role: 'FRIEND',
+            rewardType: friendType,
+            amount: friendValue,
+            status: 'CREDITED',
+          },
+        });
+      }
+
+      if (conversion.linkId) {
+        const earned = (conversion.orderValue || 0) + (conversion.bookingValue || 0);
+        await this.prisma.referralLink.update({
+          where: { id: conversion.linkId },
+          data: {
+            conversionCount: { increment: 1 },
+            revenue: { increment: earned },
+          },
+        });
+      }
+      if (conversion.campaignId) {
+        await this.prisma.referralCampaign.update({
+          where: { id: conversion.campaignId },
+          data: {
+            conversionCount: { increment: 1 },
+            usageCount: { increment: 1 },
+            rewardsGiven: { increment: 1 },
+            revenueTotal: {
+              increment: (conversion.orderValue || 0) + (conversion.bookingValue || 0),
+            },
+          },
+        });
+      }
+
+      const updated = await this.updateConversion(tenantId, conversionId, {
+        status: 'REWARD_SENT',
+        rewardStatus: 'CREDITED',
+        rewardedAt: new Date(),
+      });
+
+      if (conversion.linkId) {
+        await this.bumpSource(
+          tenantId,
+          conversion.linkId,
+          conversion.source || 'direct',
+          { conversions: 1 },
+        );
+      }
+      await this.recomputeLeaderboard(tenantId);
+
+      await this.emit(tenantId, 'REWARD_CREDITED', {
+        conversionId,
+        customerId: conversion.referrerId || undefined,
+      });
+
+      if (conversion.referrerId) {
+        await this.prisma.notification.create({
           data: {
             tenantId,
             customerId: conversion.referrerId,
-            amount: Math.round(rewardValue),
-            balanceAfter: bal,
-            reason: `Referral reward`,
+            type: 'REFERRAL_REWARD',
+            channel: 'EMAIL',
+            subject: 'Referral reward credited',
+            body: `You earned ${rewardValue} ${rewardType.toLowerCase()} for a successful referral.`,
+            status: 'PENDING',
           },
         });
-      } else if (rewardType === 'CASHBACK' && rewardValue > 0) {
-        await this.prisma.customer.update({
-          where: { id: conversion.referrerId },
-          data: { cashbackBalance: { increment: rewardValue } },
-        });
-      }
 
-      await this.prisma.referralRewardRecord.create({
-        data: {
-          tenantId,
-          conversionId,
-          customerId: conversion.referrerId,
-          role: 'REFERRER',
-          rewardType,
-          amount: rewardValue,
-          status: 'CREDITED',
-          creditedAt: new Date(),
-          walletTransactionId:
-            rewardType === 'POINTS' || rewardType === 'CASHBACK' ? `wallet:${conversion.referrerId}` : null,
-        },
-      });
-    }
-
-    if (conversion.friendId && friendValue > 0) {
-      if (friendType === 'POINTS') {
-        const friend = conversion.friend!;
-        const bal = friend.pointsBalance + Math.round(friendValue);
-        await this.prisma.customer.update({
-          where: { id: conversion.friendId },
-          data: { pointsBalance: bal },
-        });
-        await this.prisma.pointsLedger.create({
+        await this.prisma.activity.create({
           data: {
             tenantId,
-            customerId: conversion.friendId,
-            amount: Math.round(friendValue),
-            balanceAfter: bal,
-            reason: `Referral friend bonus`,
+            customerId: conversion.referrerId,
+            type: 'POINTS_EARNED',
+            message: `Referral reward credited (${rewardType} ${rewardValue})`,
+            metadata: { conversionId },
           },
         });
       }
-      await this.prisma.referralRewardRecord.create({
-        data: {
-          tenantId,
-          conversionId,
-          customerId: conversion.friendId,
-          role: 'FRIEND',
-          rewardType: friendType,
-          amount: friendValue,
-          status: 'CREDITED',
-        },
+
+      return updated;
+    } catch (err) {
+      await this.prisma.referralConversion.updateMany({
+        where: { id: conversionId, tenantId, rewardStatus: 'CREDITING' },
+        data: { rewardStatus: 'PENDING' },
       });
+      throw err;
     }
-
-    if (conversion.linkId) {
-      const earned = (conversion.orderValue || 0) + (conversion.bookingValue || 0);
-      await this.prisma.referralLink.update({
-        where: { id: conversion.linkId },
-        data: {
-          conversionCount: { increment: 1 },
-          revenue: { increment: earned },
-        },
-      });
-    }
-    if (conversion.campaignId) {
-      await this.prisma.referralCampaign.update({
-        where: { id: conversion.campaignId },
-        data: {
-          conversionCount: { increment: 1 },
-          usageCount: { increment: 1 },
-          rewardsGiven: { increment: 1 },
-          revenueTotal: {
-            increment: (conversion.orderValue || 0) + (conversion.bookingValue || 0),
-          },
-        },
-      });
-    }
-
-    const updated = await this.updateConversion(tenantId, conversionId, {
-      status: 'REWARD_SENT',
-      rewardStatus: 'CREDITED',
-      rewardedAt: new Date(),
-    });
-
-    if (conversion.linkId) {
-      await this.bumpSource(
-        tenantId,
-        conversion.linkId,
-        conversion.source || 'direct',
-        { conversions: 1 },
-      );
-    }
-    await this.recomputeLeaderboard(tenantId);
-
-    await this.emit(tenantId, 'REWARD_CREDITED', {
-      conversionId,
-      customerId: conversion.referrerId || undefined,
-    });
-
-    if (conversion.referrerId) {
-      await this.prisma.notification.create({
-        data: {
-          tenantId,
-          customerId: conversion.referrerId,
-          type: 'REFERRAL_REWARD',
-          channel: 'EMAIL',
-          subject: 'Referral reward credited',
-          body: `You earned ${rewardValue} ${rewardType.toLowerCase()} for a successful referral.`,
-          status: 'PENDING',
-        },
-      });
-
-      await this.prisma.activity.create({
-        data: {
-          tenantId,
-          customerId: conversion.referrerId,
-          type: 'POINTS_EARNED',
-          message: `Referral reward credited (${rewardType} ${rewardValue})`,
-          metadata: { conversionId },
-        },
-      });
-    }
-
-    return updated;
   }
 
   // ─── Conversions list ──────────────────────────────────────────────────────

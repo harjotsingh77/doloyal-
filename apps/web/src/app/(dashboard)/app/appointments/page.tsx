@@ -328,12 +328,7 @@ export default function AppointmentsPage() {
     setIsSpinning(true);
     setShowRefreshMsg(false);
 
-    const start = Date.now();
     await loadAppointments();
-    const elapsed = Date.now() - start;
-    if (elapsed < 650) {
-      await new Promise((resolve) => setTimeout(resolve, 650 - elapsed));
-    }
 
     setIsSpinning(false);
     setShowRefreshMsg(true);
@@ -351,7 +346,7 @@ export default function AppointmentsPage() {
 
   const loadCustomers = React.useCallback(async () => {
     try {
-      const result = await api.listCustomers({ limit: 200 });
+      const result = await api.listCustomers({ limit: 100 });
       setCustomers(result.items.map((c) => ({ id: c.id, name: c.name })));
     } catch {
       // non-critical
@@ -359,8 +354,10 @@ export default function AppointmentsPage() {
   }, []);
 
   React.useEffect(() => {
-    loadCustomers();
-  }, [loadCustomers]);
+    if (addOpen && customers.length === 0) {
+      void loadCustomers();
+    }
+  }, [addOpen, customers.length, loadCustomers]);
 
   // Poll every 30s
   React.useEffect(() => {

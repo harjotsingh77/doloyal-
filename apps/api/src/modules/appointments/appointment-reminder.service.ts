@@ -59,6 +59,11 @@ export class AppointmentReminderService implements OnModuleInit, OnModuleDestroy
       where: {
         status: { in: ['BOOKED', 'CONFIRMED'] },
         startTime: { gte: in24h, lt: in26h },
+        NOT: {
+          notifications: {
+            some: { type: 'REMINDER_24H', status: 'SENT' },
+          },
+        },
       },
       include: { customer: true, tenant: true },
       take: 200,
@@ -67,11 +72,6 @@ export class AppointmentReminderService implements OnModuleInit, OnModuleDestroy
     let sent = 0;
     for (const appointment of appointments) {
       if (!appointment.customer?.email) continue;
-
-      const existing = await this.prisma.notification.findFirst({
-        where: { appointmentId: appointment.id, type: 'REMINDER_24H', status: 'SENT' },
-      });
-      if (existing) continue;
 
       try {
         await this.notifications.sendAppointmentEmail(

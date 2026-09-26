@@ -124,20 +124,25 @@ export class CampaignsService {
     }
 
     const audienceWhere = AUDIENCE_WHERE[campaign.audience || 'All'] || {};
+    const AUDIENCE_CAP = 2_000;
 
     let customers: any[];
     if (campaign.channel === 'EMAIL') {
       await this.requireResendConnected(tenantId);
       customers = await this.prisma.customer.findMany({
-        where: { tenantId, ...audienceWhere },
+        where: { tenantId, email: { not: null }, ...audienceWhere },
         select: { id: true, firstName: true, lastName: true, email: true },
+        take: AUDIENCE_CAP,
+        orderBy: { createdAt: 'asc' },
       });
       customers = customers.filter((c) => c.email);
     } else {
       // WHATSAPP
       customers = await this.prisma.customer.findMany({
-        where: { tenantId, ...audienceWhere },
+        where: { tenantId, phone: { not: '' }, ...audienceWhere },
         select: { id: true, firstName: true, lastName: true, phone: true },
+        take: AUDIENCE_CAP,
+        orderBy: { createdAt: 'asc' },
       });
       customers = customers.filter((c) => c.phone);
     }

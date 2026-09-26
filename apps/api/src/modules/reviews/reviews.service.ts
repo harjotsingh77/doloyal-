@@ -168,43 +168,59 @@ export class ReviewsService {
   }
 
   async summary(tenantId: string) {
-    const approvedWhere = this.approvedWhere(tenantId);
-    const [approvedAgg, grouped, total, pending, rejected, video, approvedVideo] = await Promise.all([
-      this.prisma.review.aggregate({
-        where: approvedWhere,
-        _avg: { rating: true },
-        _count: { _all: true },
-      }),
-      this.prisma.review.groupBy({
-        by: ['rating'],
-        where: approvedWhere,
-        _count: { _all: true },
-      }),
-      this.prisma.review.count({ where: { tenantId } }),
-      this.prisma.review.count({ where: { tenantId, status: 'PENDING' } }),
-      this.prisma.review.count({ where: { tenantId, status: 'REJECTED' } }),
-      this.prisma.review.count({ where: { tenantId, type: 'VIDEO' } }),
-      this.prisma.review.count({ where: { tenantId, type: 'VIDEO', status: 'APPROVED' } }),
-    ]);
+    type SumRow = {
+      approved_count: number;
+      avg_rating: number | null;
+      total: number;
+      pending: number;
+      rejected: number;
+      video: number;
+      approved_video: number;
+      r1: number;
+      r2: number;
+      r3: number;
+      r4: number;
+      r5: number;
+    };
+    const [row] = await this.prisma.$queryRaw<SumRow[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'APPROVED')::int AS approved_count,
+        AVG(rating) FILTER (WHERE status = 'APPROVED')::float8 AS avg_rating,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'PENDING')::int AS pending,
+        COUNT(*) FILTER (WHERE status = 'REJECTED')::int AS rejected,
+        COUNT(*) FILTER (WHERE type = 'VIDEO')::int AS video,
+        COUNT(*) FILTER (WHERE type = 'VIDEO' AND status = 'APPROVED')::int AS approved_video,
+        COUNT(*) FILTER (WHERE status = 'APPROVED' AND rating = 1)::int AS r1,
+        COUNT(*) FILTER (WHERE status = 'APPROVED' AND rating = 2)::int AS r2,
+        COUNT(*) FILTER (WHERE status = 'APPROVED' AND rating = 3)::int AS r3,
+        COUNT(*) FILTER (WHERE status = 'APPROVED' AND rating = 4)::int AS r4,
+        COUNT(*) FILTER (WHERE status = 'APPROVED' AND rating = 5)::int AS r5
+      FROM "Review"
+      WHERE "tenantId" = ${tenantId}
+    `;
 
-    const breakdown = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    for (const row of grouped) {
-      if (row.rating >= 1 && row.rating <= 5) {
-        breakdown[row.rating as 1 | 2 | 3 | 4 | 5] = row._count._all;
-      }
-    }
-
-    const approvedCount = approvedAgg._count._all;
+    const approvedCount = Number(row?.approved_count || 0);
+    const total = Number(row?.total || 0);
+    const video = Number(row?.video || 0);
     return {
-      averageRating: approvedCount ? Math.round((approvedAgg._avg.rating || 0) * 10) / 10 : 0,
+      averageRating: approvedCount
+        ? Math.round((Number(row?.avg_rating || 0)) * 10) / 10
+        : 0,
       approvedCount,
       totalReviews: total,
-      pendingCount: pending,
-      rejectedCount: rejected,
+      pendingCount: Number(row?.pending || 0),
+      rejectedCount: Number(row?.rejected || 0),
       videoCount: video,
-      approvedVideoCount: approvedVideo,
+      approvedVideoCount: Number(row?.approved_video || 0),
       textCount: total - video,
-      breakdown,
+      breakdown: {
+        1: Number(row?.r1 || 0),
+        2: Number(row?.r2 || 0),
+        3: Number(row?.r3 || 0),
+        4: Number(row?.r4 || 0),
+        5: Number(row?.r5 || 0),
+      },
     };
   }
 

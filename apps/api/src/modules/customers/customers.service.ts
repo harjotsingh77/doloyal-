@@ -100,7 +100,10 @@ export class CustomersService {
     if (and.length) where.AND = and;
 
     const [total, customers] = await Promise.all([
-      this.prisma.customer.count({ where: where as any }),
+      // Skip expensive count(*) on cursor pages — FE already uses hasMore.
+      query.cursor
+        ? Promise.resolve(-1)
+        : this.prisma.customer.count({ where: where as any }),
       this.prisma.customer.findMany({
         where: where as any,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -116,45 +119,52 @@ export class CustomersService {
       items: page,
       nextCursor: hasMore ? page[page.length - 1]?.id || null : null,
       hasMore,
-      total,
+      total: total < 0 ? undefined : total,
     };
   }
 
   async getById(tenantId: string, id: string) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id, tenantId },
-      include: {
-        appointments: {
-          take: 10,
-          orderBy: { startTime: 'desc' },
-          include: { staff: true },
+    const load = () =>
+      this.prisma.customer.findFirst({
+        where: { id, tenantId },
+        include: {
+          appointments: {
+            take: 10,
+            orderBy: { startTime: 'desc' },
+            include: { staff: true },
+          },
+          invoices: {
+            take: 20,
+            orderBy: { createdAt: 'desc' },
+            include: { items: true },
+          },
+          orders: {
+            take: 50,
+            orderBy: { orderDate: 'desc' },
+            include: { product: { select: { name: true, sku: true } } },
+          },
+          reviews: {
+            take: 20,
+            orderBy: { createdAt: 'desc' },
+          },
+          pointsLedger: {
+            take: 50,
+            orderBy: { createdAt: 'desc' },
+          },
+          memberships: {
+            include: { tier: true },
+            take: 1,
+          },
         },
-        invoices: {
-          take: 20,
-          orderBy: { createdAt: 'desc' },
-          include: { items: true },
-        },
-        orders: {
-          take: 20,
-          orderBy: { orderDate: 'desc' },
-          include: { product: { select: { name: true } } },
-        },
-        reviews: {
-          take: 20,
-          orderBy: { createdAt: 'desc' },
-        },
-        pointsLedger: {
-          take: 50,
-          orderBy: { createdAt: 'desc' },
-        },
-        memberships: {
-          include: { tier: true },
-          take: 1,
-        },
-      },
-    });
+      });
 
+    let customer = await load();
     if (!customer) throw new NotFoundException('Customer not found');
+
+    if (!customer.clientNumber) {
+      const withId = await ensureClientNumber(this.prisma, customer);
+      customer = { ...customer, clientNumber: withId.clientNumber };
+    }
 
     const shared = prismaCustomerToShared(customer);
 
@@ -245,6 +255,31 @@ export class CustomersService {
       membership,
       timeline,
       pointsLedger: customer.pointsLedger.map(prismaPointsLedgerToShared),
+      relatedOrders: (customer.orders || []).map((order) => ({
+        id: order.id,
+        tenantId: order.tenantId,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+        customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        productId: order.productId,
+        productName: order.product?.name ?? 'Order',
+        productSku: order.product?.sku ?? '',
+        quantity: order.quantity,
+        unitPrice: order.unitPrice,
+        discount: order.discount,
+        tax: order.tax,
+        total: order.total,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        orderDate: order.orderDate.toISOString(),
+        notes: order.notes,
+        assignedStaffId: order.assignedStaffId,
+        assignedStaffName: order.assignedStaffName,
+        createdAt: order.createdAt.toISOString(),
+        updatedAt: order.updatedAt.toISOString(),
+      })),
       predictedNextVisitDays: null,
       upgradeRecommendation: null,
     };
@@ -662,9 +697,11 @@ export class CustomersService {
   }
 
   async exportToExcel(tenantId: string): Promise<{ buffer: Buffer; filename: string }> {
+    const EXPORT_CAP = 10_000;
     const customers = await this.prisma.customer.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
+      take: EXPORT_CAP,
     });
 
     const shared = customers.map((c) => {

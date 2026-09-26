@@ -76,10 +76,9 @@ export default function CustomerProfilePage() {
         setLoading(true);
         setError(null);
         const data = await api.getCustomer(params.id as string);
-        const related = await api.listOrders({ customerId: params.id as string, limit: 50 }).catch(() => ({ items: [] as ClientOrder[] }));
         if (!cancelled) {
           setCustomer(data);
-          setOrders(related.items);
+          setOrders(data.relatedOrders ?? []);
         }
       } catch (err) {
         if (!cancelled) {
@@ -207,6 +206,11 @@ export default function CustomerProfilePage() {
                     {customer.loyaltyBand}
                   </Badge>
                 </div>
+                {customer.clientNumber ? (
+                  <p className="mt-1 text-sm tabular-nums text-[rgb(var(--color-muted-foreground))]">
+                    ID: {customer.clientNumber}
+                  </p>
+                ) : null}
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[rgb(var(--color-muted-foreground))]">
                   {customer.phone && (
                     <span className="flex items-center gap-1">

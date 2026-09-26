@@ -223,7 +223,20 @@ export class AdminBillingService {
     const [subs, events, refundLogs] = await Promise.all([
       this.prisma.subscription.findMany({
         where: { tenant: realTenantWhere() },
-        include: { tenant: { select: { currency: true } } },
+        take: 5_000,
+        select: {
+          id: true,
+          tenantId: true,
+          plan: true,
+          status: true,
+          createdAt: true,
+          currentPeriodEnd: true,
+          stripeSubId: true,
+          stripeId: true,
+          paymentMethod: true,
+          trialEndsAt: true,
+          tenant: { select: { currency: true } },
+        },
       }),
       this.prisma.subscriptionEvent.findMany({
         where: { tenant: realTenantWhere() },
@@ -240,6 +253,7 @@ export class AdminBillingService {
 
     const contracts = await this.prisma.enterpriseContract.findMany({
       where: { tenant: realTenantWhere() },
+      take: 5_000,
     });
     const cMap = new Map(contracts.map((c) => [c.tenantId, c]));
 

@@ -341,12 +341,15 @@ export class DashboardMetricsService {
       memberships: [],
     };
 
+    const ROW_CAP = 5_000;
     const [invoices, orders, allCustomers, points, reviews, appointments, memberships] =
       await Promise.all([
         needs.invoices
           ? this.prisma.invoice.findMany({
               where: { tenantId, status: 'PAID', createdAt: { gte: windowFrom, lte: windowTo } },
               select: { customerId: true, total: true, createdAt: true },
+              take: ROW_CAP,
+              orderBy: { createdAt: 'desc' },
             })
           : Promise.resolve([] as InvoiceRow[]),
         needs.orders
@@ -362,6 +365,8 @@ export class DashboardMetricsService {
                   orderDate: true,
                   orderNumber: true,
                 },
+                take: ROW_CAP,
+                orderBy: { orderDate: 'desc' },
               })
               .catch(() => [] as OrderRow[])
           : Promise.resolve([] as OrderRow[]),
@@ -377,12 +382,16 @@ export class DashboardMetricsService {
                 totalSpent: true,
                 status: true,
               },
+              take: ROW_CAP,
+              orderBy: { createdAt: 'desc' },
             })
           : Promise.resolve([] as CustomerRow[]),
         needs.points
           ? this.prisma.pointsLedger.findMany({
               where: { tenantId, amount: { lt: 0 }, createdAt: { gte: windowFrom, lte: windowTo } },
               select: { customerId: true, amount: true, createdAt: true, reason: true },
+              take: ROW_CAP,
+              orderBy: { createdAt: 'desc' },
             })
           : Promise.resolve([] as PointsRow[]),
         needs.reviews
@@ -398,6 +407,8 @@ export class DashboardMetricsService {
                   publishedAt: true,
                   customerId: true,
                 },
+                take: ROW_CAP,
+                orderBy: { publishedAt: 'desc' },
               })
               .catch(() => [] as ReviewRow[])
           : Promise.resolve([] as ReviewRow[]),
@@ -405,6 +416,8 @@ export class DashboardMetricsService {
           ? this.prisma.appointment.findMany({
               where: { tenantId, startTime: { gte: windowFrom, lte: windowTo } },
               select: { id: true, status: true, startTime: true, serviceName: true, customerId: true },
+              take: ROW_CAP,
+              orderBy: { startTime: 'desc' },
             })
           : Promise.resolve([] as AppointmentRow[]),
         needs.memberships
@@ -416,6 +429,8 @@ export class DashboardMetricsService {
                   customerId: true,
                   tier: { select: { name: true, price: true, validityDays: true } },
                 },
+                take: ROW_CAP,
+                orderBy: { assignedAt: 'desc' },
               })
               .catch(() => [] as MembershipRow[])
           : Promise.resolve([] as MembershipRow[]),

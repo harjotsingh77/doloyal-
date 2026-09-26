@@ -259,24 +259,36 @@ export class StaffService {
   // ─── Stats ───────────────────────────────────────────────────────────────
 
   async getStats(tenantId: string): Promise<StaffStats> {
-    const [profiles, pending] = await Promise.all([
-      this.prisma.staffProfile.findMany({
+    const [byRole, byStatus, online, pending] = await Promise.all([
+      this.prisma.staffProfile.groupBy({
+        by: ['role'],
         where: { tenantId },
-        select: { role: true, status: true, isOnline: true },
+        _count: { _all: true },
       }),
+      this.prisma.staffProfile.groupBy({
+        by: ['status'],
+        where: { tenantId },
+        _count: { _all: true },
+      }),
+      this.prisma.staffProfile.count({ where: { tenantId, isOnline: true } }),
       this.prisma.invitation.count({ where: { tenantId, status: 'PENDING' } }),
     ]);
-    const stats: StaffStats = {
-      total: profiles.length,
-      admins: profiles.filter((p) => p.role === 'OWNER').length,
-      managers: profiles.filter((p) => p.role === 'MANAGER').length,
-      staff: profiles.filter((p) => p.role === 'RECEPTIONIST' || p.role === 'STAFF').length,
+
+    const roleCount = (role: string) =>
+      byRole.find((r) => r.role === role)?._count._all || 0;
+    const statusCount = (status: string) =>
+      byStatus.find((r) => r.status === status)?._count._all || 0;
+
+    return {
+      total: byRole.reduce((s, r) => s + r._count._all, 0),
+      admins: roleCount('OWNER'),
+      managers: roleCount('MANAGER'),
+      staff: roleCount('RECEPTIONIST') + roleCount('STAFF'),
       pendingInvitations: pending,
-      online: profiles.filter((p) => p.isOnline).length,
-      inactive: profiles.filter((p) => p.status === 'INACTIVE').length,
-      suspended: profiles.filter((p) => p.status === 'SUSPENDED').length,
+      online,
+      inactive: statusCount('INACTIVE'),
+      suspended: statusCount('SUSPENDED'),
     };
-    return stats;
   }
 
   // ─── List / search / filter ──────────────────────────────────────────────

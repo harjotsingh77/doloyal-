@@ -459,6 +459,7 @@ model Membership {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([userId, tenantId])
+  @@index([tenantId])
 }
 
 // ─── Team Management ────────────────────────────────────────────────────────
@@ -642,6 +643,7 @@ model EmployeeNote {
   author User?        @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([staffProfileId])
+  @@index([tenantId, staffProfileId])
 }
 
 /// Profile photo history for members.
@@ -670,6 +672,8 @@ model Branch {
   tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   staff            Staff[]
   staffAssignments StaffBranch[]
+
+  @@index([tenantId])
 }
 
 model Staff {
@@ -690,6 +694,9 @@ model Staff {
   appointments       Appointment[]
   blockedDateEntries BlockedDate[]
   bookingLinks       BookingLink[]
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, isAvailable])
 }
 
 model Customer {
@@ -778,6 +785,8 @@ model Service {
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoiceItems InvoiceItem[]
+
+  @@index([tenantId, isActive])
 }
 
 /// Tenant-scoped catalog of products and services used across client
@@ -891,6 +900,10 @@ model Appointment {
 
   @@index([bookingLinkId])
   @@index([tenantId, startTime])
+  @@index([tenantId, status, startTime])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, customerId])
+  @@index([tenantId, staffId, startTime])
 }
 
 model Invoice {
@@ -966,6 +979,7 @@ model PointsLedger {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, customerId])
+  @@index([tenantId, customerId, createdAt])
 }
 
 model Reward {
@@ -1022,6 +1036,8 @@ model RewardRedemption {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@index([rewardId])
 }
 
 /// Automated reward program settings (birthday, anniversary, review, social, whatsapp, cashback).
@@ -1099,6 +1115,8 @@ model MembershipTier {
 
   tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   memberships CustomerMembership[]
+
+  @@index([tenantId, rank])
 }
 
 model CustomerMembership {
@@ -1111,6 +1129,7 @@ model CustomerMembership {
   tier     MembershipTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
 
   @@unique([customerId, tierId])
+  @@index([tierId])
 }
 
 model Campaign {
@@ -1453,6 +1472,9 @@ model ReferralConversion {
   @@index([referrerId])
   @@index([friendId])
   @@index([tenantId, rewardStatus])
+  @@index([tenantId, convertedAt])
+  @@index([campaignId])
+  @@index([linkId])
 }
 
 model ReferralRewardRecord {
@@ -3208,6 +3230,7 @@ model WorkflowRunStep {
   run WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([runId])
+  @@index([status, type])
 }
 
 /// Seedable workflow templates used as structured starting points.

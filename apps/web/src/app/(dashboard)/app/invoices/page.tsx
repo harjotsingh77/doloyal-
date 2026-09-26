@@ -641,22 +641,35 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [activeTab, setActiveTab] = React.useState<ActiveTab>("invoices");
 
-  const bootQuery = useResource<{ invoices: Invoice[]; customers: Customer[] }>({
+  const bootQuery = useResource<{ invoices: Invoice[] }>({
     queryKey: ["invoices-page", statusFilter],
     queryFn: async () => {
       const params: { status?: string } = {};
       if (statusFilter !== "ALL") params.status = statusFilter;
-      const [custResult, invResult] = await Promise.all([
-        api.listCustomers({ limit: 200 }),
-        api.listInvoices(params),
-      ]);
-      return { invoices: invResult, customers: custResult.items };
+      const invResult = await api.listInvoices(params);
+      return { invoices: invResult };
     },
     scopes: ["invoices", "customers", "dashboard"],
     keepPrevious: true,
   });
 
-  const customers = bootQuery.data?.customers ?? [];
+  const [customers, setCustomers] = React.useState<Customer[]>([]);
+  const [customersLoaded, setCustomersLoaded] = React.useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!createDialogOpen || customersLoaded) return;
+    let cancelled = false;
+    void api.listCustomers({ limit: 100 }).then((res) => {
+      if (!cancelled) {
+        setCustomers(res.items);
+        setCustomersLoaded(true);
+      }
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [createDialogOpen, customersLoaded]);
   const invoices = React.useMemo(() => {
     const rows = bootQuery.data?.invoices ?? [];
     if (!debouncedSearch) return rows;
@@ -903,7 +916,6 @@ export default function InvoicesPage() {
     toast.success("Custom template deleted");
   };
 
-  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [viewDialogOpen, setViewDialogOpen] = React.useState(false);
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
 

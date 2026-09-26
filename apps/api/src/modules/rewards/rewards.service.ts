@@ -419,30 +419,43 @@ export class RewardsService {
     const daysBefore = Number(cfg.daysBefore || 0);
     const daysAfter = Number(cfg.daysAfter || 0);
     const today = new Date();
-    const customers = await this.prisma.customer.findMany({
-      where: { tenantId, dob: { not: null }, status: 'ACTIVE' },
-    });
+
+    // Cap birthday candidates — filter month in SQL, day-window in app.
+    const customers = await this.prisma.$queryRaw<
+      { id: string; dob: Date }[]
+    >`
+      SELECT id, dob FROM "Customer"
+      WHERE "tenantId" = ${tenantId}
+        AND status = 'ACTIVE'
+        AND dob IS NOT NULL
+        AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM CURRENT_DATE)
+      LIMIT 500
+    `;
+
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+    const yearEnd = new Date(today.getFullYear() + 1, 0, 1);
+    const customerIds = customers.map((c) => c.id);
+    const alreadyIssued = customerIds.length
+      ? await this.prisma.rewardRedemption.findMany({
+          where: {
+            tenantId,
+            customerId: { in: customerIds },
+            reward: { category: 'BIRTHDAY' },
+            createdAt: { gte: yearStart, lt: yearEnd },
+          },
+          select: { customerId: true },
+        })
+      : [];
+    const alreadySet = new Set(alreadyIssued.map((r) => r.customerId));
 
     let issued = 0;
     for (const c of customers) {
       if (!c.dob) continue;
       const anniversary = this.daysFromBirthday(c.dob, today);
       if (anniversary < -daysBefore || anniversary > daysAfter) continue;
+      if (alreadySet.has(c.id)) continue;
 
       const yearKey = `${today.getFullYear()}`;
-      const already = await this.prisma.rewardRedemption.findFirst({
-        where: {
-          tenantId,
-          customerId: c.id,
-          reward: { category: 'BIRTHDAY' },
-          createdAt: {
-            gte: new Date(today.getFullYear(), 0, 1),
-            lt: new Date(today.getFullYear() + 1, 0, 1),
-          },
-        },
-      });
-      if (already) continue;
-
       await this.issueAutomatedReward(tenantId, c.id, 'BIRTHDAY', cfg, `Birthday ${yearKey}`);
       issued++;
     }
@@ -460,7 +473,32 @@ export class RewardsService {
     const customers = await this.prisma.customer.findMany({
       where: { tenantId, status: 'ACTIVE' },
       include: { memberships: { orderBy: { assignedAt: 'asc' }, take: 1 } },
+      take: 500,
+      orderBy: { createdAt: 'asc' },
     });
+
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+    const candidateIds = customers
+      .filter((c) => {
+        const start = c.memberships[0]?.assignedAt || c.createdAt;
+        const years = this.fullYearsBetween(start, today);
+        if (years < yearsRequired) return false;
+        return start.getMonth() === today.getMonth() && start.getDate() === today.getDate();
+      })
+      .map((c) => c.id);
+
+    const alreadyIssued = candidateIds.length
+      ? await this.prisma.rewardRedemption.findMany({
+          where: {
+            tenantId,
+            customerId: { in: candidateIds },
+            reward: { category: 'ANNIVERSARY' },
+            createdAt: { gte: yearStart },
+          },
+          select: { customerId: true },
+        })
+      : [];
+    const alreadySet = new Set(alreadyIssued.map((r) => r.customerId));
 
     let issued = 0;
     for (const c of customers) {
@@ -468,18 +506,7 @@ export class RewardsService {
       const years = this.fullYearsBetween(start, today);
       if (years < yearsRequired) continue;
       if (start.getMonth() !== today.getMonth() || start.getDate() !== today.getDate()) continue;
-
-      const already = await this.prisma.rewardRedemption.findFirst({
-        where: {
-          tenantId,
-          customerId: c.id,
-          reward: { category: 'ANNIVERSARY' },
-          createdAt: {
-            gte: new Date(today.getFullYear(), 0, 1),
-          },
-        },
-      });
-      if (already) continue;
+      if (alreadySet.has(c.id)) continue;
 
       await this.issueAutomatedReward(
         tenantId,

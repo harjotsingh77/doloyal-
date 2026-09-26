@@ -17,10 +17,22 @@ export class InvoicesService {
     const invoices = await this.prisma.invoice.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { items: true, customer: true },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            avatarUrl: true,
+            status: true,
+          },
+        },
+      },
       take: 100,
     });
-    return invoices.map(prismaInvoiceToShared);
+    return invoices.map((inv) => prismaInvoiceToShared(inv as any));
   }
 
   async create(tenantId: string, data: {

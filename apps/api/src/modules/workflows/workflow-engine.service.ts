@@ -723,6 +723,8 @@ export class WorkflowEngineService {
 
     const dueSteps = await this.prisma.workflowRunStep.findMany({
       where: { status: 'PENDING', type: { in: ['delay', 'action'] } },
+      take: 100,
+      orderBy: { createdAt: 'asc' },
     });
     const now = Date.now();
     for (const step of dueSteps) {

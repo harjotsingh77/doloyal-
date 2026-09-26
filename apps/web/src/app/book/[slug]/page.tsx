@@ -656,6 +656,10 @@ export default function BookingPage() {
 
   React.useEffect(() => {
     if (step < 2 || !slug) return;
+    if (services.length > 0) {
+      setServicesLoading(false);
+      return;
+    }
     async function load() {
       try {
         setServicesLoading(true);
@@ -669,10 +673,14 @@ export default function BookingPage() {
       }
     }
     load();
-  }, [slug, step]);
+  }, [slug, step, services.length]);
 
   React.useEffect(() => {
     if (step < 3 || !slug) return;
+    if (staff.length > 0) {
+      setStaffLoading(false);
+      return;
+    }
     async function load() {
       try {
         setStaffLoading(true);
@@ -686,7 +694,7 @@ export default function BookingPage() {
       }
     }
     load();
-  }, [slug, step]);
+  }, [slug, step, staff.length]);
 
   const loadId = React.useRef(0);
   React.useEffect(() => {

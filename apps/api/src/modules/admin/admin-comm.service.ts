@@ -287,10 +287,13 @@ export class AdminCommService {
   // ─── CSV exports ───────────────────────────────────────────────────────────
 
   async exportCsv(actor: any, entity: string) {
+    const EXPORT_CAP = 5_000;
     let rows: string[][];
     switch (entity) {
       case 'businesses': {
         const data = await this.prisma.tenant.findMany({
+          take: EXPORT_CAP,
+          orderBy: { createdAt: 'desc' },
           include: {
             subscriptions: { select: { plan: true, status: true }, orderBy: { createdAt: 'desc' }, take: 1 },
             memberships: { where: { role: 'OWNER' }, include: { user: { select: { email: true } } }, take: 1 },
@@ -309,7 +312,10 @@ export class AdminCommService {
         break;
       }
       case 'users': {
-        const data = await this.prisma.user.findMany();
+        const data = await this.prisma.user.findMany({
+          take: EXPORT_CAP,
+          orderBy: { createdAt: 'desc' },
+        });
         rows = [
           ['Name', 'Email', 'Admin', 'Created'],
           ...data.map((u) => [`${u.firstName} ${u.lastName}`.trim(), u.email, u.isAdmin ? 'Yes' : 'No', u.createdAt.toISOString()]),
@@ -317,7 +323,11 @@ export class AdminCommService {
         break;
       }
       case 'subscriptions': {
-        const data = await this.prisma.subscription.findMany({ include: { tenant: { select: { name: true } } } });
+        const data = await this.prisma.subscription.findMany({
+          take: EXPORT_CAP,
+          orderBy: { createdAt: 'desc' },
+          include: { tenant: { select: { name: true } } },
+        });
         rows = [
           ['Business', 'Plan', 'Status', 'Amount', 'Renews', 'Created'],
           ...data.map((s) => [
@@ -332,7 +342,11 @@ export class AdminCommService {
         break;
       }
       case 'invoices': {
-        const data = await this.prisma.invoice.findMany({ include: { tenant: { select: { name: true } } } });
+        const data = await this.prisma.invoice.findMany({
+          take: EXPORT_CAP,
+          orderBy: { createdAt: 'desc' },
+          include: { tenant: { select: { name: true } } },
+        });
         rows = [
           ['Invoice', 'Business', 'Total', 'Status', 'Created'],
           ...data.map((i) => [i.invoiceNumber, i.tenant.name, String(i.total), i.status, i.createdAt.toISOString()]),
@@ -340,7 +354,11 @@ export class AdminCommService {
         break;
       }
       case 'tickets': {
-        const data = await this.prisma.supportTicket.findMany({ include: { tenant: { select: { name: true } } } });
+        const data = await this.prisma.supportTicket.findMany({
+          take: EXPORT_CAP,
+          orderBy: { createdAt: 'desc' },
+          include: { tenant: { select: { name: true } } },
+        });
         rows = [
           ['Ticket', 'Business', 'Subject', 'Priority', 'Status', 'Created'],
           ...data.map((t) => [t.ticketNumber, t.tenant.name, t.subject, t.priority, t.status, t.createdAt.toISOString()]),

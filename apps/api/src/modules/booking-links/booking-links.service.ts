@@ -165,7 +165,11 @@ export class BookingLinksService {
   }
 
   private async buildStaffMap(tenantId: string) {
-    const staff = await this.prisma.staff.findMany({ where: { tenantId } });
+    const staff = await this.prisma.staff.findMany({
+      where: { tenantId },
+      select: { id: true, name: true },
+      take: 500,
+    });
     return new Map(staff.map((s) => [s.id, s.name]));
   }
 
@@ -204,15 +208,45 @@ export class BookingLinksService {
     const links = await this.prisma.bookingLink.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
+    if (!links.length) return [];
+
     const staffMap = await this.buildStaffMap(tenantId);
-    const enriched = await Promise.all(
-      links.map(async (link) => {
-        const metrics = await this.computeLinkMetrics(tenantId, link.id, link);
-        return this.enrichLink(link, staffMap, metrics);
-      }),
+    const now = new Date();
+    const linkIds = links.map((l) => l.id);
+
+    // One batch for upcoming counts instead of N full appointment scans.
+    const upcomingRows = await this.prisma.appointment.groupBy({
+      by: ['bookingLinkId'],
+      where: {
+        tenantId,
+        bookingLinkId: { in: linkIds },
+        startTime: { gte: now },
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+      },
+      _count: { _all: true },
+    });
+    const upcomingMap = new Map(
+      upcomingRows.map((r) => [r.bookingLinkId as string, r._count._all]),
     );
-    return enriched;
+
+    return links.map((link) => {
+      const visits = link.visitCount ?? 0;
+      const bookings = link.bookingCount ?? 0;
+      const revenue = link.revenueGenerated ?? 0;
+      const metrics = {
+        totalVisits: visits,
+        totalBookings: bookings,
+        conversionRate: visits > 0 ? Math.round((bookings / visits) * 1000) / 10 : 0,
+        revenueGenerated: revenue,
+        totalCustomers: 0,
+        upcomingAppointments: upcomingMap.get(link.id) || 0,
+        averageBookingValue: bookings > 0 ? Math.round((revenue / bookings) * 100) / 100 : 0,
+        lastBookingAt: link.lastBookingAt?.toISOString?.() ?? link.lastBookingAt ?? null,
+      };
+      return this.enrichLink(link, staffMap, metrics);
+    });
   }
 
   async getById(tenantId: string, id: string) {
@@ -517,6 +551,7 @@ export class BookingLinksService {
       where: { tenantId: tenant.id, status: 'ACTIVE' },
       include: { category: { select: { name: true } } },
       orderBy: { updatedAt: 'desc' },
+      take: 200,
     });
 
     const catalog = products.length
@@ -965,64 +1000,93 @@ export class BookingLinksService {
 
     const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 86400000);
     const toDate = to ? new Date(to) : new Date();
+    const dateFilter = { gte: fromDate, lte: toDate };
 
-    const visits = await this.prisma.bookingLinkVisit.findMany({
-      where: { bookingLinkId: id, createdAt: { gte: fromDate, lte: toDate } },
-    });
-    const appointments = await this.prisma.appointment.findMany({
-      where: {
-        tenantId,
-        bookingLinkId: id,
-        createdAt: { gte: fromDate, lte: toDate },
-      },
-      include: { staff: true },
-    });
+    const [
+      visitCount,
+      uniqueVisitRows,
+      sourceGroups,
+      appointmentAgg,
+      serviceGroups,
+      staffGroups,
+      cancelledCount,
+      rescheduledCount,
+      peakRows,
+    ] = await Promise.all([
+      this.prisma.bookingLinkVisit.count({
+        where: { bookingLinkId: id, createdAt: dateFilter },
+      }),
+      this.prisma.$queryRaw<{ n: number }[]>`
+        SELECT COUNT(DISTINCT COALESCE("sessionId", "ipHash", id))::int AS n
+        FROM "BookingLinkVisit"
+        WHERE "bookingLinkId" = ${id}
+          AND "createdAt" >= ${fromDate} AND "createdAt" <= ${toDate}
+      `,
+      this.prisma.bookingLinkVisit.groupBy({
+        by: ['source'],
+        where: { bookingLinkId: id, createdAt: dateFilter },
+        _count: { _all: true },
+      }),
+      this.prisma.appointment.aggregate({
+        where: { tenantId, bookingLinkId: id, createdAt: dateFilter },
+        _count: { _all: true },
+        _sum: { paymentAmount: true },
+      }),
+      this.prisma.appointment.groupBy({
+        by: ['serviceName'],
+        where: { tenantId, bookingLinkId: id, createdAt: dateFilter },
+        _count: { _all: true },
+        _sum: { paymentAmount: true },
+        orderBy: { _count: { serviceName: 'desc' } },
+        take: 20,
+      }),
+      this.prisma.appointment.groupBy({
+        by: ['staffId'],
+        where: { tenantId, bookingLinkId: id, createdAt: dateFilter, staffId: { not: null } },
+        _count: { _all: true },
+        _sum: { paymentAmount: true },
+        orderBy: { _count: { staffId: 'desc' } },
+        take: 20,
+      }),
+      this.prisma.appointment.count({
+        where: { tenantId, bookingLinkId: id, createdAt: dateFilter, status: 'CANCELLED' },
+      }),
+      this.prisma.appointment.count({
+        where: {
+          tenantId,
+          bookingLinkId: id,
+          createdAt: dateFilter,
+          rescheduledFrom: { not: null },
+        },
+      }),
+      this.prisma.$queryRaw<{ hour: number; count: number }[]>`
+        SELECT EXTRACT(HOUR FROM "startTime")::int AS hour, COUNT(*)::int AS count
+        FROM "Appointment"
+        WHERE "tenantId" = ${tenantId}
+          AND "bookingLinkId" = ${id}
+          AND "createdAt" >= ${fromDate} AND "createdAt" <= ${toDate}
+        GROUP BY 1
+        ORDER BY count DESC
+        LIMIT 1
+      `,
+    ]);
 
-    const uniqueSessions = new Set(visits.map((v) => v.sessionId || v.ipHash || v.id));
-    const customerIds = appointments.map((a) => a.customerId);
-    const uniqueCustomers = new Set(customerIds);
-    const repeat = customerIds.length - uniqueCustomers.size;
+    const staffIds = staffGroups.map((s) => s.staffId!).filter(Boolean);
+    const staffRows = staffIds.length
+      ? await this.prisma.staff.findMany({
+          where: { tenantId, id: { in: staffIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const staffName = new Map(staffRows.map((s) => [s.id, s.name]));
 
-    const sourceMap = new Map<string, number>();
-    for (const v of visits) {
-      const s = v.source || 'direct';
-      sourceMap.set(s, (sourceMap.get(s) || 0) + 1);
-    }
-
-    const serviceMap = new Map<string, { count: number; revenue: number }>();
-    for (const a of appointments) {
-      const cur = serviceMap.get(a.serviceName) || { count: 0, revenue: 0 };
-      cur.count += 1;
-      cur.revenue += a.paymentAmount || 0;
-      serviceMap.set(a.serviceName, cur);
-    }
-
-    const staffMap = new Map<string, { id: string; name: string; count: number; revenue: number }>();
-    for (const a of appointments) {
-      if (!a.staffId) continue;
-      const cur = staffMap.get(a.staffId) || {
-        id: a.staffId,
-        name: a.staff?.name || 'Staff',
-        count: 0,
-        revenue: 0,
-      };
-      cur.count += 1;
-      cur.revenue += a.paymentAmount || 0;
-      staffMap.set(a.staffId, cur);
-    }
-
-    const cancelled = appointments.filter((a) => a.status === 'CANCELLED').length;
-    const rescheduled = appointments.filter((a) => !!a.rescheduledFrom).length;
-    const revenue = appointments.reduce((s, a) => s + (a.paymentAmount || 0), 0);
-    const bookings = appointments.length;
-    const visitCount = visits.length || link.visitCount || 0;
-
-    const peakHours = new Map<number, number>();
-    for (const a of appointments) {
-      const h = new Date(a.startTime).getHours();
-      peakHours.set(h, (peakHours.get(h) || 0) + 1);
-    }
-    const peakHour = [...peakHours.entries()].sort((a, b) => b[1] - a[1])[0];
+    const uniqueSessions = Number(uniqueVisitRows[0]?.n || 0);
+    const bookings = appointmentAgg._count._all;
+    const revenue = appointmentAgg._sum.paymentAmount || 0;
+    const visits = visitCount || link.visitCount || 0;
+    const cancelled = cancelledCount;
+    const rescheduled = rescheduledCount;
+    const peakHour = peakRows[0] ? ([peakRows[0].hour, peakRows[0].count] as [number, number]) : null;
 
     const insights: { title: string; body: string; severity: 'info' | 'warning' | 'success' }[] = [];
     if (peakHour && peakHour[0] >= 18) {
@@ -1039,15 +1103,19 @@ export class BookingLinksService {
         severity: 'warning',
       });
     }
-    const topServices = [...serviceMap.entries()].sort((a, b) => b[1].count - a[1].count);
+    const topServices = serviceGroups.map((g) => ({
+      name: g.serviceName,
+      count: g._count._all,
+      revenue: g._sum.paymentAmount || 0,
+    }));
     if (topServices.length >= 2) {
       insights.push({
         title: 'Combo offer opportunity',
-        body: `Customers frequently book ${topServices[0][0]}. Suggest bundling with ${topServices[1][0]}.`,
+        body: `Customers frequently book ${topServices[0].name}. Suggest bundling with ${topServices[1].name}.`,
         severity: 'success',
       });
     }
-    if (visitCount > 20 && bookings / visitCount < 0.1) {
+    if (visits > 20 && bookings / visits < 0.1) {
       insights.push({
         title: 'Low conversion rate',
         body: 'Many visitors are not booking. Simplify the form or enable guest checkout.',
@@ -1055,21 +1123,37 @@ export class BookingLinksService {
       });
     }
 
+    const uniqueCustomersAgg = await this.prisma.appointment.groupBy({
+      by: ['customerId'],
+      where: { tenantId, bookingLinkId: id, createdAt: dateFilter },
+      _count: { _all: true },
+    });
+    const newCustomers = uniqueCustomersAgg.length;
+    const repeat = Math.max(0, bookings - newCustomers);
+
     return {
       linkId: id,
-      visits: visitCount,
-      uniqueVisitors: uniqueSessions.size || visitCount,
+      visits,
+      uniqueVisitors: uniqueSessions || visits,
       bookings,
-      conversionRate: visitCount > 0 ? Math.round((bookings / visitCount) * 1000) / 10 : 0,
+      conversionRate: visits > 0 ? Math.round((bookings / visits) * 1000) / 10 : 0,
       revenue,
       averageBookingValue: bookings > 0 ? Math.round((revenue / bookings) * 100) / 100 : 0,
-      topServices: topServices.slice(0, 5).map(([name, v]) => ({ name, ...v })),
-      topStaff: [...staffMap.values()].sort((a, b) => b.count - a.count).slice(0, 5),
-      repeatCustomers: Math.max(0, repeat),
-      newCustomers: uniqueCustomers.size,
+      topServices: topServices.slice(0, 5),
+      topStaff: staffGroups.map((g) => ({
+        id: g.staffId!,
+        name: staffName.get(g.staffId!) || 'Staff',
+        count: g._count._all,
+        revenue: g._sum.paymentAmount || 0,
+      })),
+      repeatCustomers: repeat,
+      newCustomers,
       cancelledBookings: cancelled,
       rescheduledBookings: rescheduled,
-      trafficSources: [...sourceMap.entries()].map(([source, count]) => ({ source, count })),
+      trafficSources: sourceGroups.map((g) => ({
+        source: g.source || 'direct',
+        count: g._count._all,
+      })),
       insights,
       period: { from: fromDate.toISOString(), to: toDate.toISOString() },
     };

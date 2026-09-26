@@ -520,23 +520,44 @@ export class LoyaltyService {
   async listChallenges(tenantId: string) {
     let challenges = await this.prisma.loyaltyChallenge.findMany({
       where: { tenantId },
-      include: { participants: true },
+      include: { _count: { select: { participants: true } } },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
     if (challenges.length === 0) {
       await this.seedDefaultChallenges(tenantId);
       challenges = await this.prisma.loyaltyChallenge.findMany({
         where: { tenantId },
-        include: { participants: true },
+        include: { _count: { select: { participants: true } } },
         orderBy: { createdAt: 'desc' },
+        take: 100,
       });
     }
+
+    const ids = challenges.map((c) => c.id);
+    const progressRows = ids.length
+      ? await this.prisma.challengeParticipant.groupBy({
+          by: ['challengeId'],
+          where: { challengeId: { in: ids } },
+          _avg: { progress: true },
+          _count: { _all: true },
+        })
+      : [];
+    const completedRows = ids.length
+      ? await this.prisma.challengeParticipant.groupBy({
+          by: ['challengeId'],
+          where: { challengeId: { in: ids }, completedAt: { not: null } },
+          _count: { _all: true },
+        })
+      : [];
+    const avgMap = new Map(progressRows.map((r) => [r.challengeId, r._avg.progress || 0]));
+    const completedMap = new Map(completedRows.map((r) => [r.challengeId, r._count._all]));
+
     const now = Date.now();
     return challenges.map((c) => {
-      const completed = c.participants.filter((p) => p.completedAt).length;
-      const total = c.participants.length || 1;
-      const avgProgress =
-        c.participants.reduce((s, p) => s + p.progress, 0) / (c.participants.length || 1);
+      const total = c._count.participants || 1;
+      const completed = completedMap.get(c.id) || 0;
+      const avgProgress = avgMap.get(c.id) || 0;
       return {
         id: c.id,
         title: c.title,
@@ -549,7 +570,7 @@ export class LoyaltyService {
         endsAt: c.endsAt?.toISOString() ?? null,
         status: c.status,
         aiGenerated: c.aiGenerated,
-        participants: c.participants.length,
+        participants: c._count.participants,
         completionRate: Math.round((completed / total) * 100),
         avgProgress: Math.min(100, Math.round((avgProgress / c.targetValue) * 100)),
         remainingDays: c.endsAt
@@ -676,6 +697,7 @@ export class LoyaltyService {
       where: { tenantId },
       include: { _count: { select: { unlocks: true } } },
       orderBy: { createdAt: 'asc' },
+      take: 100,
     });
     return badges.map((b) => ({
       id: b.id,
@@ -723,104 +745,116 @@ export class LoyaltyService {
   // ─── Segments ─────────────────────────────────────────────────────────────
 
   async getSegments(tenantId: string) {
-    const customers = await this.prisma.customer.findMany({ where: { tenantId } });
-    const now = Date.now();
-    const daysSince = (d: Date | null) =>
-      d ? Math.floor((now - d.getTime()) / 86400000) : 999;
-
-    const groups: Record<
-      string,
-      { name: string; description: string; color: string; campaign: string; filter: (c: (typeof customers)[0]) => boolean }
-    > = {
-      vip: {
-        name: 'VIP',
-        description: 'Highest value loyalty members',
-        color: '#7C3AED',
-        campaign: 'VIP Exclusive Double Points',
-        filter: (c) => c.totalSpent >= 50000 || c.pointsBalance >= 5000,
-      },
-      at_risk: {
-        name: 'At Risk',
-        description: 'Inactive or declining engagement',
-        color: '#EF4444',
-        campaign: 'Win-back offer',
-        filter: (c) => daysSince(c.lastVisitAt) > 45,
-      },
-      new: {
-        name: 'New Customers',
-        description: 'Joined in the last 30 days',
-        color: '#0EA5E9',
-        campaign: 'Welcome series + bonus',
-        filter: (c) => daysSince(c.createdAt) <= 30,
-      },
-      high_spenders: {
-        name: 'High Spenders',
-        description: 'Above-average lifetime value',
-        color: '#F59E0B',
-        campaign: 'Premium membership upgrade',
-        filter: (c) => c.totalSpent >= 20000,
-      },
-      inactive: {
-        name: 'Inactive',
-        description: 'No visit in 90+ days',
-        color: '#64748B',
-        campaign: 'Reactivation SMS',
-        filter: (c) => daysSince(c.lastVisitAt) >= 90,
-      },
-      frequent: {
-        name: 'Frequent Visitors',
-        description: '10+ lifetime visits',
-        color: '#10B981',
-        campaign: 'Streak challenge',
-        filter: (c) => c.totalVisits >= 10,
-      },
-      referral: {
-        name: 'Referral Champions',
-        description: 'Tagged as referrers',
-        color: '#2563EB',
-        campaign: 'Referral boost weekend',
-        filter: (c) => c.tags.includes('Referrer') || c.tags.includes('referral'),
-      },
-      low: {
-        name: 'Low Engagement',
-        description: 'Low visits and points',
-        color: '#94A3B8',
-        campaign: 'Engagement nudge',
-        filter: (c) => c.totalVisits <= 2 && c.pointsBalance < 200,
-      },
-      one_time: {
-        name: 'One-Time Buyers',
-        description: 'Exactly one visit',
-        color: '#F97316',
-        campaign: 'Second-visit incentive',
-        filter: (c) => c.totalVisits === 1,
-      },
-      near_tier: {
-        name: 'Near Tier Upgrade',
-        description: 'Close to next loyalty band',
-        color: '#8B5CF6',
-        campaign: 'Tier push offer',
-        filter: (c) =>
-          (c.pointsBalance >= 800 && c.pointsBalance < 1000) ||
-          (c.totalSpent >= 8000 && c.totalSpent < 10000),
-      },
+    type SegRow = {
+      vip: number;
+      at_risk: number;
+      new_customers: number;
+      high_spenders: number;
+      inactive: number;
+      frequent: number;
+      referral: number;
+      low: number;
+      one_time: number;
+      near_tier: number;
+      vip_rev: number;
+      at_risk_rev: number;
+      new_rev: number;
+      high_rev: number;
+      inactive_rev: number;
+      frequent_rev: number;
+      referral_rev: number;
+      low_rev: number;
+      one_time_rev: number;
+      near_tier_rev: number;
+      vip_ret: number;
+      at_risk_ret: number;
+      new_ret: number;
+      high_ret: number;
+      inactive_ret: number;
+      frequent_ret: number;
+      referral_ret: number;
+      low_ret: number;
+      one_time_ret: number;
+      near_tier_ret: number;
     };
 
-    return Object.entries(groups).map(([id, g]) => {
-      const members = customers.filter(g.filter);
-      const revenue = members.reduce((s, c) => s + c.totalSpent, 0);
-      const retained = members.filter((c) => daysSince(c.lastVisitAt) <= 30).length;
-      return {
-        id,
-        name: g.name,
-        description: g.description,
-        customerCount: members.length,
-        revenue: Math.round(revenue),
-        retention: members.length ? Math.round((retained / members.length) * 100) : 0,
-        suggestedCampaign: g.campaign,
-        color: g.color,
-      };
-    });
+    const [row] = await this.prisma.$queryRaw<SegRow[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE "totalSpent" >= 50000 OR "pointsBalance" >= 5000)::int AS vip,
+        COUNT(*) FILTER (WHERE "lastVisitAt" IS NULL OR "lastVisitAt" < NOW() - INTERVAL '45 days')::int AS at_risk,
+        COUNT(*) FILTER (WHERE "createdAt" >= NOW() - INTERVAL '30 days')::int AS new_customers,
+        COUNT(*) FILTER (WHERE "totalSpent" >= 20000)::int AS high_spenders,
+        COUNT(*) FILTER (WHERE "lastVisitAt" IS NULL OR "lastVisitAt" < NOW() - INTERVAL '90 days')::int AS inactive,
+        COUNT(*) FILTER (WHERE "totalVisits" >= 10)::int AS frequent,
+        COUNT(*) FILTER (WHERE 'Referrer' = ANY(tags) OR 'referral' = ANY(tags))::int AS referral,
+        COUNT(*) FILTER (WHERE "totalVisits" <= 2 AND "pointsBalance" < 200)::int AS low,
+        COUNT(*) FILTER (WHERE "totalVisits" = 1)::int AS one_time,
+        COUNT(*) FILTER (
+          WHERE ("pointsBalance" >= 800 AND "pointsBalance" < 1000)
+             OR ("totalSpent" >= 8000 AND "totalSpent" < 10000)
+        )::int AS near_tier,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "totalSpent" >= 50000 OR "pointsBalance" >= 5000), 0)::float8 AS vip_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "lastVisitAt" IS NULL OR "lastVisitAt" < NOW() - INTERVAL '45 days'), 0)::float8 AS at_risk_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "createdAt" >= NOW() - INTERVAL '30 days'), 0)::float8 AS new_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "totalSpent" >= 20000), 0)::float8 AS high_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "lastVisitAt" IS NULL OR "lastVisitAt" < NOW() - INTERVAL '90 days'), 0)::float8 AS inactive_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "totalVisits" >= 10), 0)::float8 AS frequent_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE 'Referrer' = ANY(tags) OR 'referral' = ANY(tags)), 0)::float8 AS referral_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "totalVisits" <= 2 AND "pointsBalance" < 200), 0)::float8 AS low_rev,
+        COALESCE(SUM("totalSpent") FILTER (WHERE "totalVisits" = 1), 0)::float8 AS one_time_rev,
+        COALESCE(SUM("totalSpent") FILTER (
+          WHERE ("pointsBalance" >= 800 AND "pointsBalance" < 1000)
+             OR ("totalSpent" >= 8000 AND "totalSpent" < 10000)
+        ), 0)::float8 AS near_tier_rev,
+        COUNT(*) FILTER (WHERE ("totalSpent" >= 50000 OR "pointsBalance" >= 5000) AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS vip_ret,
+        COUNT(*) FILTER (WHERE ("lastVisitAt" IS NULL OR "lastVisitAt" < NOW() - INTERVAL '45 days') AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS at_risk_ret,
+        COUNT(*) FILTER (WHERE "createdAt" >= NOW() - INTERVAL '30 days' AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS new_ret,
+        COUNT(*) FILTER (WHERE "totalSpent" >= 20000 AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS high_ret,
+        COUNT(*) FILTER (WHERE ("lastVisitAt" IS NULL OR "lastVisitAt" < NOW() - INTERVAL '90 days') AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS inactive_ret,
+        COUNT(*) FILTER (WHERE "totalVisits" >= 10 AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS frequent_ret,
+        COUNT(*) FILTER (WHERE ('Referrer' = ANY(tags) OR 'referral' = ANY(tags)) AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS referral_ret,
+        COUNT(*) FILTER (WHERE "totalVisits" <= 2 AND "pointsBalance" < 200 AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS low_ret,
+        COUNT(*) FILTER (WHERE "totalVisits" = 1 AND "lastVisitAt" >= NOW() - INTERVAL '30 days')::int AS one_time_ret,
+        COUNT(*) FILTER (
+          WHERE (("pointsBalance" >= 800 AND "pointsBalance" < 1000) OR ("totalSpent" >= 8000 AND "totalSpent" < 10000))
+            AND "lastVisitAt" >= NOW() - INTERVAL '30 days'
+        )::int AS near_tier_ret
+      FROM "Customer"
+      WHERE "tenantId" = ${tenantId}
+    `;
+
+    const defs: Array<{
+      id: string;
+      name: string;
+      description: string;
+      color: string;
+      campaign: string;
+      count: number;
+      revenue: number;
+      retained: number;
+    }> = [
+      { id: 'vip', name: 'VIP', description: 'Highest value loyalty members', color: '#7C3AED', campaign: 'VIP Exclusive Double Points', count: Number(row?.vip || 0), revenue: Number(row?.vip_rev || 0), retained: Number(row?.vip_ret || 0) },
+      { id: 'at_risk', name: 'At Risk', description: 'Inactive or declining engagement', color: '#EF4444', campaign: 'Win-back offer', count: Number(row?.at_risk || 0), revenue: Number(row?.at_risk_rev || 0), retained: Number(row?.at_risk_ret || 0) },
+      { id: 'new', name: 'New Customers', description: 'Joined in the last 30 days', color: '#0EA5E9', campaign: 'Welcome series + bonus', count: Number(row?.new_customers || 0), revenue: Number(row?.new_rev || 0), retained: Number(row?.new_ret || 0) },
+      { id: 'high_spenders', name: 'High Spenders', description: 'Above-average lifetime value', color: '#F59E0B', campaign: 'Premium membership upgrade', count: Number(row?.high_spenders || 0), revenue: Number(row?.high_rev || 0), retained: Number(row?.high_ret || 0) },
+      { id: 'inactive', name: 'Inactive', description: 'No visit in 90+ days', color: '#64748B', campaign: 'Reactivation SMS', count: Number(row?.inactive || 0), revenue: Number(row?.inactive_rev || 0), retained: Number(row?.inactive_ret || 0) },
+      { id: 'frequent', name: 'Frequent Visitors', description: '10+ lifetime visits', color: '#10B981', campaign: 'Streak challenge', count: Number(row?.frequent || 0), revenue: Number(row?.frequent_rev || 0), retained: Number(row?.frequent_ret || 0) },
+      { id: 'referral', name: 'Referral Champions', description: 'Tagged as referrers', color: '#2563EB', campaign: 'Referral boost weekend', count: Number(row?.referral || 0), revenue: Number(row?.referral_rev || 0), retained: Number(row?.referral_ret || 0) },
+      { id: 'low', name: 'Low Engagement', description: 'Low visits and points', color: '#94A3B8', campaign: 'Engagement nudge', count: Number(row?.low || 0), revenue: Number(row?.low_rev || 0), retained: Number(row?.low_ret || 0) },
+      { id: 'one_time', name: 'One-Time Buyers', description: 'Exactly one visit', color: '#F97316', campaign: 'Second-visit incentive', count: Number(row?.one_time || 0), revenue: Number(row?.one_time_rev || 0), retained: Number(row?.one_time_ret || 0) },
+      { id: 'near_tier', name: 'Near Tier Upgrade', description: 'Close to next loyalty band', color: '#8B5CF6', campaign: 'Tier push offer', count: Number(row?.near_tier || 0), revenue: Number(row?.near_tier_rev || 0), retained: Number(row?.near_tier_ret || 0) },
+    ];
+
+    return defs.map((g) => ({
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      customerCount: g.count,
+      revenue: Math.round(g.revenue),
+      retention: g.count ? Math.round((g.retained / g.count) * 100) : 0,
+      suggestedCampaign: g.campaign,
+      color: g.color,
+    }));
   }
 
   // ─── Churn ────────────────────────────────────────────────────────────────
@@ -870,61 +904,70 @@ export class LoyaltyService {
   // ─── Analytics ────────────────────────────────────────────────────────────
 
   async getAnalytics(tenantId: string) {
-    const labels: string[] = [];
     const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      labels.push(d.toLocaleString('en', { month: 'short' }));
-    }
+    const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-    const series = async (fn: (from: Date, to: Date) => Promise<number>) => {
-      const out: number[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const from = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const to = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-        out.push(await fn(from, to));
-      }
-      return out;
+    type MonthRow = {
+      month: Date;
+      customers: number;
+      points_issued: number;
+      points_redeemed: number;
+      revenue: number;
     };
 
-    const [
-      customerGrowth,
-      pointsIssued,
-      pointsRedeemed,
-      revenueGenerated,
-      tiers,
-    ] = await Promise.all([
-      series((from, to) =>
-        this.prisma.customer.count({
-          where: { tenantId, createdAt: { gte: from, lt: to } },
-        }),
-      ),
-      series(async (from, to) => {
-        const a = await this.prisma.pointsLedger.aggregate({
-          where: { tenantId, amount: { gt: 0 }, createdAt: { gte: from, lt: to } },
-          _sum: { amount: true },
-        });
-        return a._sum.amount || 0;
-      }),
-      series(async (from, to) => {
-        const a = await this.prisma.pointsLedger.aggregate({
-          where: { tenantId, amount: { lt: 0 }, createdAt: { gte: from, lt: to } },
-          _sum: { amount: true },
-        });
-        return Math.abs(a._sum.amount || 0);
-      }),
-      series(async (from, to) => {
-        const a = await this.prisma.invoice.aggregate({
-          where: { tenantId, status: 'PAID' as any, createdAt: { gte: from, lt: to } },
-          _sum: { total: true },
-        });
-        return Math.round(a._sum.total || 0);
-      }),
+    const [monthRows, tiers] = await Promise.all([
+      this.prisma.$queryRaw<MonthRow[]>`
+        WITH months AS (
+          SELECT generate_series(
+            date_trunc('month', ${from}::timestamp),
+            date_trunc('month', ${now}::timestamp),
+            '1 month'::interval
+          ) AS month
+        )
+        SELECT
+          m.month,
+          COALESCE((
+            SELECT COUNT(*)::int FROM "Customer"
+            WHERE "tenantId" = ${tenantId}
+              AND "createdAt" >= m.month
+              AND "createdAt" < (m.month + interval '1 month')
+          ), 0) AS customers,
+          COALESCE((
+            SELECT SUM(amount)::int FROM "PointsLedger"
+            WHERE "tenantId" = ${tenantId} AND amount > 0
+              AND "createdAt" >= m.month
+              AND "createdAt" < (m.month + interval '1 month')
+          ), 0) AS points_issued,
+          COALESCE((
+            SELECT ABS(SUM(amount))::int FROM "PointsLedger"
+            WHERE "tenantId" = ${tenantId} AND amount < 0
+              AND "createdAt" >= m.month
+              AND "createdAt" < (m.month + interval '1 month')
+          ), 0) AS points_redeemed,
+          COALESCE((
+            SELECT ROUND(SUM(total))::int FROM "Invoice"
+            WHERE "tenantId" = ${tenantId} AND status = 'PAID'
+              AND "createdAt" >= m.month
+              AND "createdAt" < (m.month + interval '1 month')
+          ), 0) AS revenue
+        FROM months m
+        ORDER BY m.month
+      `,
       this.prisma.membershipTier.findMany({
         where: { tenantId },
         include: { _count: { select: { memberships: true } } },
+        take: 20,
       }),
     ]);
+
+    const labels = monthRows.map((r) => {
+      const d = r.month instanceof Date ? r.month : new Date(r.month);
+      return d.toLocaleString('en', { month: 'short' });
+    });
+    const customerGrowth = monthRows.map((r) => Number(r.customers || 0));
+    const pointsIssued = monthRows.map((r) => Number(r.points_issued || 0));
+    const pointsRedeemed = monthRows.map((r) => Number(r.points_redeemed || 0));
+    const revenueGenerated = monthRows.map((r) => Number(r.revenue || 0));
 
     const repeatRate = customerGrowth.map((_, i) => 42 + i * 3 + (i % 2) * 2);
     const retentionRate = repeatRate.map((v) => Math.min(95, v + 18));
@@ -1120,20 +1163,33 @@ export class LoyaltyService {
   }
 
   async getStreaks(tenantId: string) {
-    const customers = await this.prisma.customer.findMany({
-      where: { tenantId },
-      select: { visitStreak: true, longestStreak: true },
-    });
-    const milestones = [3, 7, 15, 30, 100].map((days) => ({
+    const [activeStreaks, topRow, ...milestoneCounts] = await Promise.all([
+      this.prisma.customer.count({ where: { tenantId, visitStreak: { gt: 0 } } }),
+      this.prisma.customer.findFirst({
+        where: { tenantId },
+        orderBy: { longestStreak: 'desc' },
+        select: { longestStreak: true },
+      }),
+      ...[3, 7, 15, 30, 100].map((days) =>
+        this.prisma.customer.count({
+          where: {
+            tenantId,
+            OR: [{ visitStreak: { gte: days } }, { longestStreak: { gte: days } }],
+          },
+        }),
+      ),
+    ]);
+    const milestones = [3, 7, 15, 30, 100].map((days, i) => ({
       days,
       label: `${days}-day streak`,
       rewardPoints: days * 10,
-      customersReached: customers.filter(
-        (c) => Math.max(c.visitStreak, c.longestStreak) >= days,
-      ).length,
+      customersReached: milestoneCounts[i] || 0,
     }));
-    const topStreak = Math.max(0, ...customers.map((c) => c.longestStreak), 0);
-    return { milestones, topStreak, activeStreaks: customers.filter((c) => c.visitStreak > 0).length };
+    return {
+      milestones,
+      topStreak: topRow?.longestStreak || 0,
+      activeStreaks,
+    };
   }
 
   // ─── Surprise / Automations / Activity / Campaigns ────────────────────────
@@ -1374,40 +1430,49 @@ export class LoyaltyService {
       }
     }
 
-    const newBalance = customer.pointsBalance + points;
+    const prevBalance = customer.pointsBalance;
 
-    const ledger = await this.prisma.pointsLedger.create({
-      data: { tenantId, customerId, amount: points, balanceAfter: newBalance, reason },
-    });
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { pointsBalance: newBalance },
-    });
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        customerId,
-        type: 'POINTS_EARNED',
-        message: `${points} points earned - ${reason}`,
-      },
+    const ledger = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string; pointsBalance: number }[]>`
+        SELECT id, "pointsBalance" FROM "Customer"
+        WHERE id = ${customerId} AND "tenantId" = ${tenantId}
+        FOR UPDATE
+      `;
+      if (!locked.length) throw new NotFoundException('Customer not found');
+      const balance = locked[0].pointsBalance + points;
+      const entry = await tx.pointsLedger.create({
+        data: { tenantId, customerId, amount: points, balanceAfter: balance, reason },
+      });
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { pointsBalance: { increment: points } },
+      });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          customerId,
+          type: 'POINTS_EARNED',
+          message: `${points} points earned - ${reason}`,
+        },
+      });
+      return { entry, balance };
     });
 
     try {
       await this.workflowEngine.handleEvent(tenantId, 'points_earned', {
         customerId,
         amount: points,
-        balanceAfter: newBalance,
+        balanceAfter: ledger.balance,
         reason,
       });
-      const prevBalance = customer.pointsBalance;
       const threshold = 500;
       const crossedThreshold =
-        Math.floor(newBalance / threshold) > Math.floor(prevBalance / threshold);
+        Math.floor(ledger.balance / threshold) > Math.floor(prevBalance / threshold);
       if (crossedThreshold) {
         await this.workflowEngine.handleEvent(tenantId, 'points_threshold_reached', {
           customerId,
           amount: points,
-          balanceAfter: newBalance,
+          balanceAfter: ledger.balance,
           threshold,
         });
       }
@@ -1415,15 +1480,10 @@ export class LoyaltyService {
       // Workflows must never block point earning
     }
 
-    return prismaPointsLedgerToShared(ledger);
+    return prismaPointsLedgerToShared(ledger.entry);
   }
 
   async redeem(tenantId: string, customerId: string, rewardId: string) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: customerId, tenantId },
-    });
-    if (!customer) throw new NotFoundException('Customer not found');
-
     const reward = await this.prisma.reward.findFirst({
       where: { id: rewardId, tenantId, status: 'ACTIVE' as any },
     });
@@ -1453,18 +1513,54 @@ export class LoyaltyService {
       throw new BadRequestException(`Unknown reward category: ${category}`);
     }
 
-    if (customer.pointsBalance < reward.pointsCost) {
-      throw new BadRequestException('Insufficient points balance');
-    }
-    if (reward.quantity != null && reward.redeemedCount >= reward.quantity) {
-      throw new BadRequestException('Reward is out of stock');
-    }
-
     const code = `RDM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    const newBalance = customer.pointsBalance - reward.pointsCost;
 
-    const [redemption] = await this.prisma.$transaction([
-      this.prisma.rewardRedemption.create({
+    const result = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string; pointsBalance: number }[]>`
+        SELECT id, "pointsBalance" FROM "Customer"
+        WHERE id = ${customerId} AND "tenantId" = ${tenantId}
+        FOR UPDATE
+      `;
+      if (!locked.length) throw new NotFoundException('Customer not found');
+      const customer = locked[0];
+      if (customer.pointsBalance < reward.pointsCost) {
+        throw new BadRequestException('Insufficient points balance');
+      }
+
+      if (reward.quantity != null) {
+        const stock = await tx.reward.updateMany({
+          where: {
+            id: rewardId,
+            tenantId,
+            status: 'ACTIVE' as any,
+            redeemedCount: { lt: reward.quantity },
+          },
+          data: { redeemedCount: { increment: 1 } },
+        });
+        if (stock.count === 0) {
+          throw new BadRequestException('Reward is out of stock');
+        }
+      } else {
+        await tx.reward.update({
+          where: { id: rewardId },
+          data: { redeemedCount: { increment: 1 } },
+        });
+      }
+
+      const debited = await tx.customer.updateMany({
+        where: {
+          id: customerId,
+          tenantId,
+          pointsBalance: { gte: reward.pointsCost },
+        },
+        data: { pointsBalance: { decrement: reward.pointsCost } },
+      });
+      if (debited.count === 0) {
+        throw new BadRequestException('Insufficient points balance');
+      }
+
+      const newBalance = customer.pointsBalance - reward.pointsCost;
+      const redemption = await tx.rewardRedemption.create({
         data: {
           tenantId,
           customerId,
@@ -1473,8 +1569,8 @@ export class LoyaltyService {
           status: 'FULFILLED',
           redeemedAt: new Date(),
         },
-      }),
-      this.prisma.pointsLedger.create({
+      });
+      await tx.pointsLedger.create({
         data: {
           tenantId,
           customerId,
@@ -1482,65 +1578,90 @@ export class LoyaltyService {
           balanceAfter: newBalance,
           reason: `Redeemed: ${reward.name}`,
         },
-      }),
-      this.prisma.customer.update({
-        where: { id: customerId },
-        data: { pointsBalance: newBalance },
-      }),
-      this.prisma.reward.update({
-        where: { id: rewardId },
-        data: { redeemedCount: { increment: 1 } },
-      }),
-    ]);
+      });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          customerId,
+          type: 'POINTS_REDEEMED',
+          message: `Redeemed ${reward.name} for ${reward.pointsCost} points`,
+        },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        customerId,
-        type: 'POINTS_REDEEMED',
-        message: `Redeemed ${reward.name} for ${reward.pointsCost} points`,
-      },
+      return {
+        redemption,
+        customer: {
+          id: customerId,
+          pointsBalance: newBalance,
+        },
+      };
     });
 
+    const fullCustomer = await this.prisma.customer.findFirst({
+      where: { id: customerId, tenantId },
+    });
+    if (!fullCustomer) throw new NotFoundException('Customer not found');
+
     return prismaRedemptionToShared({
-      ...redemption,
-      customer,
+      ...result.redemption,
+      customer: fullCustomer,
       reward,
       pointsUsed: reward.pointsCost,
     });
   }
 
   async adjust(tenantId: string, customerId: string, points: number, reason: string) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: customerId, tenantId },
-    });
-    if (!customer) throw new NotFoundException('Customer not found');
     if (points === 0) throw new BadRequestException('Points adjustment cannot be zero');
 
-    const newBalance = customer.pointsBalance + points;
-    if (newBalance < 0) throw new BadRequestException('Cannot deduct more points than available');
+    const ledger = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string; pointsBalance: number }[]>`
+        SELECT id, "pointsBalance" FROM "Customer"
+        WHERE id = ${customerId} AND "tenantId" = ${tenantId}
+        FOR UPDATE
+      `;
+      if (!locked.length) throw new NotFoundException('Customer not found');
+      const newBalance = locked[0].pointsBalance + points;
+      if (newBalance < 0) throw new BadRequestException('Cannot deduct more points than available');
 
-    const ledger = await this.prisma.pointsLedger.create({
-      data: {
-        tenantId,
-        customerId,
-        amount: points,
-        balanceAfter: newBalance,
-        reason: `Manual adjustment: ${reason}`,
-      },
+      if (points < 0) {
+        const debited = await tx.customer.updateMany({
+          where: {
+            id: customerId,
+            tenantId,
+            pointsBalance: { gte: Math.abs(points) },
+          },
+          data: { pointsBalance: { decrement: Math.abs(points) } },
+        });
+        if (debited.count === 0) {
+          throw new BadRequestException('Cannot deduct more points than available');
+        }
+      } else {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { pointsBalance: { increment: points } },
+        });
+      }
+
+      const entry = await tx.pointsLedger.create({
+        data: {
+          tenantId,
+          customerId,
+          amount: points,
+          balanceAfter: newBalance,
+          reason: `Manual adjustment: ${reason}`,
+        },
+      });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          customerId,
+          type: points > 0 ? 'POINTS_EARNED' : 'POINTS_REDEEMED',
+          message: `Manual adjustment ${points > 0 ? '+' : ''}${points}: ${reason}`,
+        },
+      });
+      return entry;
     });
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { pointsBalance: newBalance },
-    });
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        customerId,
-        type: points > 0 ? 'POINTS_EARNED' : 'POINTS_REDEEMED',
-        message: `Manual adjustment ${points > 0 ? '+' : ''}${points}: ${reason}`,
-      },
-    });
+
     return prismaPointsLedgerToShared(ledger);
   }
 

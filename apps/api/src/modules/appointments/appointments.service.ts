@@ -245,8 +245,12 @@ export class AppointmentsService {
         startTime: { gte: startOfDay, lt: endOfDay },
       },
       orderBy: { startTime: 'asc' },
-      include: { customer: true, staff: true },
+      take: 200,
+      include: {
+        customer: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
+        staff: { select: { id: true, name: true } },
+      },
     });
-    return appointments.map(prismaAppointmentToShared);
+    return appointments.map((a) => prismaAppointmentToShared(a as any));
   }
 }

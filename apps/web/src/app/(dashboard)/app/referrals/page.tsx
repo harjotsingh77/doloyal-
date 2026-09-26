@@ -209,11 +209,15 @@ export default function ReferralsPage() {
   }>({
     queryKey: ["referrals-page", rangeParams, search],
     queryFn: async () => {
-      const [ov, an, fn, lb, camps, ln, conv] = await Promise.all([
+      // Wave 1 — KPIs / charts needed for first paint
+      const [ov, an, fn, lb] = await Promise.all([
         api.getReferralOverview(rangeParams),
         api.getReferralAnalytics(rangeParams),
         api.getReferralFunnel(rangeParams),
         api.getReferralLeaderboard(),
+      ]);
+      // Wave 2 — tables (can arrive slightly after paint; still parallel)
+      const [camps, ln, conv] = await Promise.all([
         api.listReferralCampaigns(),
         api.listReferralLinks(),
         api.listReferralConversions({ search: search || undefined, pageSize: 30 }),
@@ -275,7 +279,7 @@ export default function ReferralsPage() {
   React.useEffect(() => {
     const t = setInterval(() => {
       if (document.visibilityState === "visible") void load({ soft: true });
-    }, 15000);
+    }, 60000);
     return () => {
       clearInterval(t);
     };

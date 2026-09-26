@@ -32,12 +32,17 @@ const TENANT_MODELS = new Set([
   'ConnectedWebsite', 'WebsiteApiKey', 'WebsiteWebhook', 'ConnectionLog', 'SdkInstallation',
   'Integration',
   'EmailLog', 'ResendDomain',
-  'StaffProfile', 'Invitation', 'EmployeeNote', 'StaffActivityLog',
+  'StaffProfile', 'Invitation', 'EmployeeNote', 'StaffActivityLog', 'AuditLog',
   'CashbackTransaction', 'RewardProgramConfig', 'RewardEngagementClaim',
   'FeatureFlag', 'SubscriptionEvent',
   'LoyaltyChallenge', 'LoyaltyBadge', 'LoyaltyAutomation', 'SurpriseRewardRule',
-  'LoyaltyFeatureEntity', 'LoyaltyConfigVersion', 'LoyaltyAuditLog',
+  'LoyaltyFeatureEntity', 'LoyaltyConfigVersion', 'LoyaltyAuditLog', 'LoyaltyReferral',
   'SupportTicket', 'SupportConversation', 'SupportConversationMessage',
+  'SupportMessage', 'SupportTicketEvent',
+  // Commerce + reviews (were missing — defense in depth):
+  'Product', 'ProductCategory', 'ClientOrder', 'Review',
+  // Website builder projects (tenant-scoped):
+  'WebsiteProject', 'WebsiteConversation', 'WebsiteMessage',
 ]);
 
 const ALL_MODELS = [

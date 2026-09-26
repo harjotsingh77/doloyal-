@@ -1193,6 +1193,8 @@ export interface CustomerProfile extends Customer {
   membership?: CustomerMembership | null;
   timeline: CustomerTimelineEntry[];
   pointsLedger: PointsLedgerEntry[];
+  /** Recent orders embedded on detail (avoids a second listOrders round-trip). */
+  relatedOrders?: ClientOrder[];
   predictedNextVisitDays?: number | null; // null = insufficient data
   upgradeRecommendation?: { tier: MembershipTierName; reason: string } | null;
 }

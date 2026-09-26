@@ -24,7 +24,11 @@ export class AdminAnalyticsService {
         where: realUserWhere({ createdAt: { gte: start } }),
         select: { id: true, createdAt: true },
       }),
-      this.prisma.subscription.findMany({ where: { status: 'ACTIVE', tenant: realTenantWhere() } }),
+      this.prisma.subscription.findMany({
+        where: { status: 'ACTIVE', tenant: realTenantWhere() },
+        take: 5_000,
+        select: { plan: true, tenantId: true, status: true, createdAt: true },
+      }),
       this.prisma.customer.groupBy({ by: ['tenantId'], where: { tenant: realTenantWhere() } }),
       this.prisma.appointment.groupBy({ by: ['tenantId'], where: { tenant: realTenantWhere() } }),
       this.prisma.aiConversation.groupBy({ by: ['tenantId'], where: { tenant: realTenantWhere() } }),
