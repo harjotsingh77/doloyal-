@@ -121,18 +121,18 @@ export default function AnalyticsPage() {
     queryFn: () => api.getDashboardOverview(overviewParams),
     scopes: ["dashboard", "customers", "orders", "products", "reviews", "campaigns", "invoices", "loyalty", "appointments", "rewards"],
     keepPrevious: true,
-    staleTime: 12_000,
-    refetchOnMount: "always",
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchOnMount: true,
+    refetchInterval: 60_000,
   });
   const healthQuery = useResource<BusinessHealthInsight>({
     queryKey: ["analytics-health", range, customFrom, customTo],
     queryFn: () => api.getBusinessHealth(overviewParams),
     scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "loyalty", "appointments"],
     keepPrevious: true,
-    staleTime: 12_000,
-    refetchOnMount: "always",
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchOnMount: true,
+    refetchInterval: 60_000,
     // Let overview claim the connection pool first so the page can paint.
     enabled: Boolean(overviewQuery.data) || !overviewQuery.isLoading,
   });

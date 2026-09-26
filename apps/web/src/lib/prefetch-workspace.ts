@@ -42,8 +42,13 @@ export function prefetchWorkspace() {
     () => warm(["membership-tiers"], () => api.getTiers()),
     () => warm(["appointments", "ALL", "", ""], () => api.listAppointments()),
     () => warm(["invoices-page", "ALL"], () => api.listInvoices()),
-    () => warm(["client-page-booking-links"], () => api.listBookingLinks()),
-    () => warm(["booking-links"], () => api.listBookingLinks()),
+    () =>
+      api.listBookingLinks().then((links) => {
+        const token = getStaffAuthToken();
+        writeQuerySnapshot(["client-page-booking-links"], token, links);
+        writeQuerySnapshot(["booking-links"], token, links);
+        return links;
+      }),
     () =>
       warm(["dashboard-overview", range.from, range.to], () =>
         api.getDashboardOverview({ from: range.from, to: range.to }),
@@ -353,6 +358,13 @@ export function prefetchHref(href: string, immediate = false) {
 export function warmAppShell() {
   if (typeof window === "undefined") return;
   void warm([...TENANT_QUERY_KEY], () => api.getTenant()).catch(() => undefined);
-  void warm(["client-page-booking-links"], () => api.listBookingLinks()).catch(() => undefined);
-  void warm(["booking-links"], () => api.listBookingLinks()).catch(() => undefined);
+  // One network call → both cache keys (client-page + booking-links pages).
+  void api
+    .listBookingLinks()
+    .then((links) => {
+      const token = getStaffAuthToken();
+      writeQuerySnapshot(["client-page-booking-links"], token, links);
+      writeQuerySnapshot(["booking-links"], token, links);
+    })
+    .catch(() => undefined);
 }

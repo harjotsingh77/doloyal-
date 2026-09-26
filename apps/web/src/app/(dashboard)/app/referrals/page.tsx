@@ -198,35 +198,45 @@ export default function ReferralsPage() {
     return { range: range === "custom" ? "30d" : range };
   }, [range, customFrom, customTo]);
 
-  const referralBoot = useResource<{
+  const referralCore = useResource<{
     overview: ReferralOverview;
     analytics: any;
     funnel: ReferralFunnelStage[];
     leaderboard: ReferralLeaderboardRow[];
-    campaigns: ReferralCampaign[];
-    links: ReferralLink[];
-    conversions: ReferralConversionRow[];
   }>({
-    queryKey: ["referrals-page", rangeParams, search],
+    queryKey: ["referrals-core", rangeParams],
     queryFn: async () => {
-      // Wave 1 — KPIs / charts needed for first paint
       const [ov, an, fn, lb] = await Promise.all([
         api.getReferralOverview(rangeParams),
         api.getReferralAnalytics(rangeParams),
         api.getReferralFunnel(rangeParams),
         api.getReferralLeaderboard(),
       ]);
-      // Wave 2 — tables (can arrive slightly after paint; still parallel)
+      return {
+        overview: ov,
+        analytics: an,
+        funnel: Array.isArray(fn) ? fn : [],
+        leaderboard: Array.isArray(lb) ? lb : [],
+      };
+    },
+    scopes: ["dashboard", "customers", "loyalty"],
+    keepPrevious: true,
+    staleTime: 45_000,
+  });
+
+  const referralTables = useResource<{
+    campaigns: ReferralCampaign[];
+    links: ReferralLink[];
+    conversions: ReferralConversionRow[];
+  }>({
+    queryKey: ["referrals-tables", search],
+    queryFn: async () => {
       const [camps, ln, conv] = await Promise.all([
         api.listReferralCampaigns(),
         api.listReferralLinks(),
         api.listReferralConversions({ search: search || undefined, pageSize: 30 }),
       ]);
       return {
-        overview: ov,
-        analytics: an,
-        funnel: Array.isArray(fn) ? fn : [],
-        leaderboard: Array.isArray(lb) ? lb : [],
         campaigns: (camps || []).map((c: any) => ({
           ...c,
           startsAt: c.startsAt?.toISOString?.() || c.startsAt,
@@ -240,30 +250,37 @@ export default function ReferralsPage() {
     },
     scopes: ["dashboard", "customers", "loyalty"],
     keepPrevious: true,
+    staleTime: 45_000,
   });
-  const displayLoading = referralBoot.isLoading && !overview && !referralBoot.data;
+
+  const displayLoading = referralCore.isLoading && !overview && !referralCore.data;
 
   React.useEffect(() => {
-    const d = referralBoot.data;
+    const d = referralCore.data;
     if (!d) return;
     setOverview(d.overview);
     setAnalytics(d.analytics);
     setFunnel(d.funnel);
     setLeaderboard(d.leaderboard);
+    setLoading(false);
+    setError(null);
+  }, [referralCore.data]);
+
+  React.useEffect(() => {
+    const d = referralTables.data;
+    if (!d) return;
     setCampaigns(d.campaigns);
     setLinks(d.links);
     setConversions(d.conversions);
-    setLoading(false);
-    setError(null);
-  }, [referralBoot.data]);
+  }, [referralTables.data]);
 
   const load = React.useCallback(
     async (opts?: { soft?: boolean }) => {
       try {
         if (opts?.soft) setRefreshing(true);
-        else if (!overview && !referralBoot.data) setLoading(true);
+        else if (!overview && !referralCore.data) setLoading(true);
         setError(null);
-        await referralBoot.refetch();
+        await Promise.all([referralCore.refetch(), referralTables.refetch()]);
       } catch (e: unknown) {
         const msg = safeMessage(e, "Unable to load referral analytics. Please try again.");
         setError(msg);
@@ -273,7 +290,7 @@ export default function ReferralsPage() {
         setRefreshing(false);
       }
     },
-    [overview, referralBoot],
+    [overview, referralCore, referralTables],
   );
 
   React.useEffect(() => {

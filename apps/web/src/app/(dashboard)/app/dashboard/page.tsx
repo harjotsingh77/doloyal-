@@ -143,10 +143,10 @@ export default function DashboardPage() {
     queryFn: () => api.getDashboardOverview({ from: fromDate, to: toDate }),
     scopes: ["dashboard", "customers", "orders", "reviews", "campaigns", "invoices", "loyalty", "appointments"],
     keepPrevious: true,
-    // Live board: paint cache instantly, then keep numbers within ~15s of truth.
-    staleTime: 12_000,
-    refetchOnMount: "always",
-    refetchInterval: 15_000,
+    // Cache-first: paint snapshot immediately; background refresh only when stale.
+    staleTime: 60_000,
+    refetchOnMount: true,
+    refetchInterval: 60_000,
   });
   const data = overviewQuery.data ?? null;
   const loading = overviewQuery.isLoading && !data;

@@ -91,11 +91,21 @@ export default function RewardsPage() {
   const [savingProgram, setSavingProgram] = React.useState(false);
 
   const category = tab !== "HISTORY" && tab !== "ALL" ? tab : undefined;
-  const bootQuery = useResource<RewardsBoot>({
-    queryKey: ["rewards-page", tab, search],
+  const overviewQuery = useResource<RewardsOverview | null>({
+    queryKey: ["rewards-overview"],
+    queryFn: () => api.getRewardsOverview(),
+    scopes: ["rewards", "loyalty", "customers"],
+    keepPrevious: true,
+    staleTime: 45_000,
+  });
+  const listsQuery = useResource<{
+    rewards: Reward[];
+    programs: Awaited<ReturnType<typeof api.listRewardPrograms>>;
+    redemptions: Awaited<ReturnType<typeof api.getRedemptions>>["items"];
+  }>({
+    queryKey: ["rewards-lists", tab, search],
     queryFn: async () => {
-      const [ov, list, progs, reds] = await Promise.all([
-        api.getRewardsOverview(),
+      const [list, progs, reds] = await Promise.all([
         tab === "HISTORY"
           ? Promise.resolve([] as Reward[])
           : api.listRewards({ category, search: search || undefined }),
@@ -103,7 +113,6 @@ export default function RewardsPage() {
         api.getRedemptions({ page: 1, pageSize: 50, search: search || undefined }),
       ]);
       return {
-        overview: ov,
         rewards: list as Reward[],
         programs: progs,
         redemptions: reds.items || [],
@@ -111,20 +120,21 @@ export default function RewardsPage() {
     },
     scopes: ["rewards", "loyalty", "customers"],
     keepPrevious: true,
+    staleTime: 45_000,
   });
 
-  const overview = bootQuery.data?.overview ?? null;
-  const rewards = bootQuery.data?.rewards ?? [];
-  const programs = bootQuery.data?.programs ?? [];
-  const redemptions = bootQuery.data?.redemptions ?? [];
-  const loading = bootQuery.isLoading && !bootQuery.data;
+  const overview = overviewQuery.data ?? null;
+  const rewards = listsQuery.data?.rewards ?? [];
+  const programs = listsQuery.data?.programs ?? [];
+  const redemptions = listsQuery.data?.redemptions ?? [];
+  const loading = overviewQuery.isLoading && !overviewQuery.data;
   const load = React.useCallback(async () => {
     try {
-      await bootQuery.refetch();
+      await Promise.all([overviewQuery.refetch(), listsQuery.refetch()]);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load rewards");
     }
-  }, [bootQuery]);
+  }, [overviewQuery, listsQuery]);
 
   React.useEffect(() => {
     if (!PROGRAM_TABS.has(tab)) return;
