@@ -228,6 +228,9 @@ client secret.
 | `RAZORPAY_KEY_ID` / `_SECRET` | For payments (India) | Checkout unavailable |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | For payments (intl) | Checkout + webhooks unavailable |
 | `META_WEBHOOK_VERIFY_TOKEN` | For WhatsApp | Meta webhook handshake fails |
+| `META_APP_ID` | WhatsApp Embedded Signup | “Continue with Meta” unavailable |
+| `META_APP_SECRET` | WhatsApp Embedded Signup | Token exchange / webhook signatures fail |
+| `META_EMBEDDED_SIGNUP_CONFIG_ID` | WhatsApp Embedded Signup | Meta login dialog cannot launch |
 
 Sources:
 

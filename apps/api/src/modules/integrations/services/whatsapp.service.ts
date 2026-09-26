@@ -103,6 +103,10 @@ export class WhatsAppIntegrationService {
   async getConnectionSummary(tenantId: string): Promise<{
     connected: boolean;
     demoModeAvailable: boolean;
+    embeddedSignupAvailable: boolean;
+    metaAppId?: string | null;
+    embeddedSignupConfigId?: string | null;
+    graphVersion: string;
     displayPhoneNumber?: string | null;
     verifiedName?: string | null;
     phoneNumberId?: string | null;
@@ -116,9 +120,15 @@ export class WhatsAppIntegrationService {
     const connected = integration?.status === 'CONNECTED';
     const meta = ((integration?.metadata as Record<string, any>) || {});
     const creds = connected ? await this.getCredentials(tenantId) : null;
+    const metaAppId = process.env.META_APP_ID?.trim() || null;
+    const embeddedSignupConfigId = process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null;
     return {
       connected: Boolean(connected && creds),
       demoModeAvailable: this.isDemoModeEnabled(),
+      embeddedSignupAvailable: Boolean(metaAppId && embeddedSignupConfigId && process.env.META_APP_SECRET?.trim()),
+      metaAppId,
+      embeddedSignupConfigId,
+      graphVersion: GRAPH_VERSION,
       displayPhoneNumber: creds?.displayPhoneNumber || meta.displayPhoneNumber || null,
       verifiedName: creds?.verifiedName || meta.verifiedName || integration?.label || null,
       phoneNumberId: creds?.phoneNumberId || meta.phoneNumberId || null,
@@ -126,6 +136,86 @@ export class WhatsAppIntegrationService {
       connectedAt: integration?.updatedAt?.toISOString?.() || null,
       label: integration?.label || null,
     };
+  }
+
+  /**
+   * Exchanges an Embedded Signup one-time code for a customer business token.
+   * Per Meta docs: client_id + client_secret + code only (no redirect_uri).
+   * The code expires in ~30s — call this immediately after FB.login.
+   */
+  async exchangeEmbeddedSignupCode(code: string): Promise<{ accessToken: string }> {
+    const appId = process.env.META_APP_ID?.trim();
+    const appSecret = process.env.META_APP_SECRET?.trim();
+    if (!appId || !appSecret) {
+      throw new BadRequestException(
+        'WhatsApp Meta login is not configured. Set META_APP_ID and META_APP_SECRET.',
+      );
+    }
+    const url = new URL(`${GRAPH_BASE}/oauth/access_token`);
+    url.searchParams.set('client_id', appId);
+    url.searchParams.set('client_secret', appSecret);
+    url.searchParams.set('code', code);
+
+    const res = await fetch(url.toString());
+    const body: any = await res.json().catch(() => null);
+    if (!res.ok || !body?.access_token) {
+      this.logger.warn(
+        `Embedded Signup token exchange failed: status=${res.status} code=${body?.error?.code ?? '?'}`,
+      );
+      throw new BadRequestException(
+        body?.error?.message ||
+          'Could not complete Meta login. Please try Connect with Meta again.',
+      );
+    }
+    return { accessToken: String(body.access_token) };
+  }
+
+  /** Subscribes Doloyal's Meta app to the customer's WABA webhook events. */
+  async subscribeWaba(accessToken: string, wabaId: string): Promise<void> {
+    const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      const body: any = await res.json().catch(() => null);
+      this.logger.warn(
+        `WABA subscribe failed (waba=${wabaId}): ${body?.error?.message || res.status}`,
+      );
+      // Non-fatal — messaging can still work; delivery receipts may be delayed.
+    }
+  }
+
+  /**
+   * Registers the business phone for Cloud API. PIN is optional for numbers
+   * that were just verified inside Embedded Signup.
+   */
+  async registerPhoneNumber(
+    accessToken: string,
+    phoneNumberId: string,
+    pin?: string,
+  ): Promise<void> {
+    const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        ...(pin ? { pin } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body: any = await res.json().catch(() => null);
+      // Already registered is fine.
+      const msg = String(body?.error?.message || '');
+      if (/already registered/i.test(msg) || body?.error?.code === 100) {
+        return;
+      }
+      this.logger.warn(
+        `Phone register warning (phone=${phoneNumberId}): ${msg || res.status}`,
+      );
+    }
   }
 
   /** Validates credentials against the live Graph API and returns the phone info. */

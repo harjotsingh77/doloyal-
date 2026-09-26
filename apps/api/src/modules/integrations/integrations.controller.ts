@@ -44,6 +44,14 @@ class WhatsAppSendDto {
   @IsOptional() demo?: boolean;
 }
 
+class WhatsAppEmbeddedSignupDto {
+  @IsString() @IsNotEmpty() code: string;
+  @IsString() @IsNotEmpty() phoneNumberId: string;
+  @IsString() @IsNotEmpty() wabaId: string;
+  @IsString() @IsOptional() businessId?: string;
+  @IsString() @IsOptional() pin?: string;
+}
+
 @Controller('integrations')
 export class IntegrationsController {
   constructor(
@@ -65,6 +73,7 @@ export class IntegrationsController {
       hasApiKey: d.hasApiKey,
       hasApiSecret: d.hasApiSecret,
       hasOAuth: d.hasOAuth,
+      hasEmbeddedSignup: Boolean(d.hasEmbeddedSignup),
       hasWebhook: d.hasWebhook,
       supportsSync: d.supportsSync,
     }));
@@ -108,6 +117,25 @@ export class IntegrationsController {
       );
     }
     return result;
+  }
+
+  @Roles('OWNER', 'MANAGER')
+  @Post('whatsapp/embedded-signup')
+  async completeWhatsAppEmbeddedSignup(
+    @Body() dto: WhatsAppEmbeddedSignupDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.integrationsService.completeWhatsAppEmbeddedSignup(
+      user.activeTenantId,
+      user.id,
+      {
+        code: dto.code,
+        phoneNumberId: dto.phoneNumberId,
+        wabaId: dto.wabaId,
+        businessId: dto.businessId,
+        pin: dto.pin,
+      },
+    );
   }
 
   @Get(':type')

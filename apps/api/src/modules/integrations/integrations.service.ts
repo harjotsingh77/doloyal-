@@ -202,6 +202,63 @@ export class IntegrationsService {
     return this.sanitize(integration);
   }
 
+  /**
+   * Completes Meta WhatsApp Embedded Signup (Facebook Login for Business).
+   * Exchanges the short-lived code, registers the phone, subscribes the WABA,
+   * then stores encrypted credentials on the tenant's WHATSAPP integration.
+   */
+  async completeWhatsAppEmbeddedSignup(
+    tenantId: string,
+    userId: string,
+    input: {
+      code: string;
+      phoneNumberId: string;
+      wabaId: string;
+      businessId?: string;
+      pin?: string;
+    },
+  ) {
+    const code = String(input.code || '').trim();
+    const phoneNumberId = String(input.phoneNumberId || '').trim();
+    const wabaId = String(input.wabaId || '').trim();
+    if (!code) throw new BadRequestException('Meta login code is missing. Try Connect with Meta again.');
+    if (!phoneNumberId) throw new BadRequestException('WhatsApp Phone Number ID was not returned by Meta.');
+    if (!wabaId) throw new BadRequestException('WhatsApp Business Account ID was not returned by Meta.');
+
+    const { accessToken } = await this.whatsapp.exchangeEmbeddedSignupCode(code);
+
+    // Best-effort Cloud API registration + webhook subscription (Meta's required post-steps).
+    await this.whatsapp.registerPhoneNumber(accessToken, phoneNumberId, input.pin);
+    await this.whatsapp.subscribeWaba(accessToken, wabaId);
+
+    const verification = await this.whatsapp.verifyCredentials(accessToken, phoneNumberId);
+    if (!verification.valid) {
+      throw new BadRequestException(
+        `WhatsApp connected but Meta rejected the phone lookup: ${verification.error}`,
+      );
+    }
+
+    // Use platform Meta App Secret for webhook signature verification when set.
+    const webhookSecret = process.env.META_APP_SECRET?.trim() || undefined;
+
+    return this.connect(tenantId, 'WHATSAPP', userId, {
+      accessToken,
+      label: verification.verifiedName || 'WhatsApp Business',
+      webhookSecret,
+      metadata: {
+        phoneNumberId,
+        wabaId,
+        ...(input.businessId ? { businessId: String(input.businessId) } : {}),
+        ...(verification.displayPhoneNumber
+          ? { displayPhoneNumber: verification.displayPhoneNumber }
+          : {}),
+        ...(verification.verifiedName ? { verifiedName: verification.verifiedName } : {}),
+        connectedAt: new Date().toISOString(),
+        connectedVia: 'embedded_signup',
+      },
+    });
+  }
+
   async disconnect(tenantId: string, type: string) {
     const integration = await this.prisma.integration.findUnique({
       where: { tenantId_type: { tenantId, type: type as any } },

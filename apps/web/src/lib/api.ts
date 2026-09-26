@@ -2418,6 +2418,10 @@ export const api = {
     request<{
       connected: boolean;
       demoModeAvailable: boolean;
+      embeddedSignupAvailable: boolean;
+      metaAppId?: string | null;
+      embeddedSignupConfigId?: string | null;
+      graphVersion: string;
       displayPhoneNumber?: string | null;
       verifiedName?: string | null;
       phoneNumberId?: string | null;
@@ -2425,6 +2429,18 @@ export const api = {
       connectedAt?: string | null;
       label?: string | null;
     }>("/integrations/whatsapp/status"),
+
+  completeWhatsAppEmbeddedSignup: (data: {
+    code: string;
+    phoneNumberId: string;
+    wabaId: string;
+    businessId?: string;
+    pin?: string;
+  }) =>
+    request<any>("/integrations/whatsapp/embedded-signup", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   listWhatsAppTemplates: () =>
     request<{ templates: Array<{ name: string; status?: string; category?: string; language?: string }> }>(

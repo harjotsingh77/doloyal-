@@ -65,7 +65,7 @@ const DESCRIPTION_OVERRIDE: Record<string, string> = {
   STRIPE: "Accept payments and manage customer subscriptions.",
   RAZORPAY: "Accept UPI, cards, net banking, and online payments.",
   RESEND: "Send transactional and automated emails.",
-  WHATSAPP: "Connect your WhatsApp Business account to message existing customers for retention.",
+  WHATSAPP: "Login with Meta to connect your WhatsApp Business account and message existing customers.",
 };
 
 const CATEGORY_OPTIONS = ["All", "Payments", "Communication", "Productivity", "Email"];
@@ -135,6 +135,13 @@ export default function IntegrationsPage() {
   const [whatsappPhoneId, setWhatsappPhoneId] = React.useState("");
   const [whatsappWabaId, setWhatsappWabaId] = React.useState("");
   const [whatsappAppSecret, setWhatsappAppSecret] = React.useState("");
+  const [whatsappAdvanced, setWhatsappAdvanced] = React.useState(false);
+  const [whatsappMetaStatus, setWhatsappMetaStatus] = React.useState<{
+    embeddedSignupAvailable: boolean;
+    metaAppId?: string | null;
+    embeddedSignupConfigId?: string | null;
+    graphVersion?: string;
+  } | null>(null);
   const [connecting, setConnecting] = React.useState<string | null>(null);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [syncing, setSyncing] = React.useState<string | null>(null);
@@ -199,6 +206,7 @@ export default function IntegrationsPage() {
     setWhatsappPhoneId("");
     setWhatsappWabaId("");
     setWhatsappAppSecret("");
+    setWhatsappAdvanced(false);
   };
 
   const openConnect = (type: string) => {
@@ -213,6 +221,23 @@ export default function IntegrationsPage() {
       return;
     }
     const def = providerFor(type);
+    // WhatsApp uses Embedded Signup (Meta login) in-dialog — do not route to classic OAuth.
+    if (type.toUpperCase() === "WHATSAPP") {
+      setConnectDialog(type);
+      api.getWhatsAppStatus()
+        .then((s) =>
+          setWhatsappMetaStatus({
+            embeddedSignupAvailable: Boolean(s.embeddedSignupAvailable),
+            metaAppId: s.metaAppId,
+            embeddedSignupConfigId: s.embeddedSignupConfigId,
+            graphVersion: s.graphVersion,
+          }),
+        )
+        .catch(() =>
+          setWhatsappMetaStatus({ embeddedSignupAvailable: false }),
+        );
+      return;
+    }
     // Resend is OAuth-only: there is no API-key connection path for customers.
     // Route to OAuth even if a stale provider definition reports otherwise.
     if (def?.hasOAuth || type.toUpperCase() === "RESEND") {
@@ -322,6 +347,43 @@ export default function IntegrationsPage() {
       }
     } catch (err: any) {
       toast.error(err?.message || `Failed to connect`);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const handleWhatsAppMetaLogin = async () => {
+    const appId = whatsappMetaStatus?.metaAppId;
+    const configId = whatsappMetaStatus?.embeddedSignupConfigId;
+    if (!appId || !configId) {
+      toast.error(
+        "Meta login is not configured yet. Add META_APP_ID, META_APP_SECRET, and META_EMBEDDED_SIGNUP_CONFIG_ID, or use Advanced credentials.",
+      );
+      setWhatsappAdvanced(true);
+      return;
+    }
+    setConnecting("WHATSAPP");
+    try {
+      const { launchWhatsAppEmbeddedSignup } = await import("@/lib/whatsapp-embedded-signup");
+      const { code, session } = await launchWhatsAppEmbeddedSignup({
+        appId,
+        configId,
+        graphVersion: whatsappMetaStatus?.graphVersion || "v21.0",
+      });
+      const result = await api.completeWhatsAppEmbeddedSignup({
+        code,
+        phoneNumberId: session.phoneNumberId,
+        wabaId: session.wabaId,
+        businessId: session.businessId,
+      });
+      setIntegrations((prev) => ({ ...prev, whatsapp: result }));
+      clearConnectForm();
+      toast.success("WhatsApp Business account connected successfully");
+      setConnectDialog(null);
+      setDetailDialog("WHATSAPP");
+    } catch (err: any) {
+      toast.error(err?.message || "Meta login failed. You can still connect with an access token.");
+      setWhatsappAdvanced(true);
     } finally {
       setConnecting(null);
     }
@@ -572,11 +634,13 @@ export default function IntegrationsPage() {
                 <DialogHeader>
                   <DialogTitle>Connect {def.name}</DialogTitle>
                   <DialogDescription>
-                    {def.hasOAuth
-                      ? "Authorize via OAuth to connect your account."
-                      : def.hasApiKey
-                        ? "Enter your API credentials to connect."
-                        : "Configure connection settings."}
+                    {def.type === "WHATSAPP"
+                      ? "Login with Meta to connect your WhatsApp Business account, or use advanced credentials."
+                      : def.hasOAuth
+                        ? "Authorize via OAuth to connect your account."
+                        : def.hasApiKey
+                          ? "Enter your API credentials to connect."
+                          : "Configure connection settings."}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -598,55 +662,91 @@ export default function IntegrationsPage() {
                   {def.type === "WHATSAPP" && (
                     <>
                       <p className="rounded-lg bg-[rgb(var(--color-muted))] px-3 py-2 text-xs text-[rgb(var(--color-muted-foreground))]">
-                        Connect your own WhatsApp Business Cloud API credentials. Tokens and secrets are encrypted
-                        server-side and never shown again after you connect.
+                        Login with Meta to connect <span className="font-medium text-[rgb(var(--color-foreground))]">your own</span> WhatsApp
+                        Business account. After connecting, Doloyal can send retention messages and run automations to your existing customers.
                       </p>
-                      <div className="space-y-2">
-                        <label htmlFor="wa-token" className="text-sm font-medium">Permanent Access Token</label>
-                        <Input
-                          id="wa-token"
-                          type="password"
-                          autoComplete="off"
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="••••••••••••"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label htmlFor="wa-phone-id" className="text-sm font-medium">Phone Number ID</label>
-                        <Input
-                          id="wa-phone-id"
-                          value={whatsappPhoneId}
-                          onChange={(e) => setWhatsappPhoneId(e.target.value)}
-                          placeholder="123456789012345"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label htmlFor="wa-waba-id" className="text-sm font-medium">WhatsApp Business Account ID (optional)</label>
-                        <Input
-                          id="wa-waba-id"
-                          value={whatsappWabaId}
-                          onChange={(e) => setWhatsappWabaId(e.target.value)}
-                          placeholder="For browsing approved templates"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label htmlFor="wa-app-secret" className="text-sm font-medium">Meta App Secret (for delivery receipts)</label>
-                        <Input
-                          id="wa-app-secret"
-                          type="password"
-                          autoComplete="off"
-                          value={whatsappAppSecret}
-                          onChange={(e) => setWhatsappAppSecret(e.target.value)}
-                          placeholder="••••••••••••"
-                        />
+                      <Button
+                        type="button"
+                        className="w-full gap-2"
+                        onClick={handleWhatsAppMetaLogin}
+                        loading={connecting === "WHATSAPP"}
+                        disabled={connecting === "WHATSAPP"}
+                      >
+                        Continue with Meta
+                      </Button>
+                      {!whatsappMetaStatus?.embeddedSignupAvailable ? (
+                        <p className="text-xs text-[rgb(var(--color-warning))]">
+                          Meta login needs platform setup (App ID + Embedded Signup config). Use Advanced credentials until that is configured on the server.
+                        </p>
+                      ) : (
                         <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                          Webhook URL for your Meta app:{" "}
+                          Opens Meta&apos;s secure WhatsApp Business signup. No access token is typed on this screen.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className="text-left text-xs font-medium text-[rgb(var(--color-primary))] hover:underline"
+                        onClick={() => setWhatsappAdvanced((v) => !v)}
+                      >
+                        {whatsappAdvanced ? "Hide advanced credentials" : "Advanced: connect with access token"}
+                      </button>
+                      {whatsappAdvanced ? (
+                        <>
+                          <div className="space-y-2">
+                            <label htmlFor="wa-token" className="text-sm font-medium">Permanent Access Token</label>
+                            <Input
+                              id="wa-token"
+                              type="password"
+                              autoComplete="off"
+                              value={apiKey}
+                              onChange={(e) => setApiKey(e.target.value)}
+                              placeholder="••••••••••••"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label htmlFor="wa-phone-id" className="text-sm font-medium">Phone Number ID</label>
+                            <Input
+                              id="wa-phone-id"
+                              value={whatsappPhoneId}
+                              onChange={(e) => setWhatsappPhoneId(e.target.value)}
+                              placeholder="123456789012345"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label htmlFor="wa-waba-id" className="text-sm font-medium">WhatsApp Business Account ID (optional)</label>
+                            <Input
+                              id="wa-waba-id"
+                              value={whatsappWabaId}
+                              onChange={(e) => setWhatsappWabaId(e.target.value)}
+                              placeholder="For browsing approved templates"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label htmlFor="wa-app-secret" className="text-sm font-medium">Meta App Secret (for delivery receipts)</label>
+                            <Input
+                              id="wa-app-secret"
+                              type="password"
+                              autoComplete="off"
+                              value={whatsappAppSecret}
+                              onChange={(e) => setWhatsappAppSecret(e.target.value)}
+                              placeholder="••••••••••••"
+                            />
+                            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                              Webhook URL for your Meta app:{" "}
+                              <code className="rounded bg-[rgb(var(--color-surface-2))] px-1 py-0.5">
+                                {getApiBaseUrl()}/integrations/webhook/whatsapp
+                              </code>
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                          Webhook:{" "}
                           <code className="rounded bg-[rgb(var(--color-surface-2))] px-1 py-0.5">
                             {getApiBaseUrl()}/integrations/webhook/whatsapp
                           </code>
                         </p>
-                      </div>
+                      )}
                     </>
                   )}
                   {def.hasApiKey && def.type !== "WHATSAPP" && (
@@ -672,11 +772,22 @@ export default function IntegrationsPage() {
                       />
                     </div>
                   )}
-                  {!def.hasOAuth && (
+                  {!def.hasOAuth && def.type !== "WHATSAPP" && (
                     <div className="space-y-2">
                       <label htmlFor="integ-label" className="text-sm font-medium">Label (optional)</label>
                       <Input
                         id="integ-label"
+                        value={label}
+                        onChange={(e) => setLabel(e.target.value)}
+                        placeholder="e.g. Production"
+                      />
+                    </div>
+                  )}
+                  {def.type === "WHATSAPP" && whatsappAdvanced && (
+                    <div className="space-y-2">
+                      <label htmlFor="integ-label-wa" className="text-sm font-medium">Label (optional)</label>
+                      <Input
+                        id="integ-label-wa"
                         value={label}
                         onChange={(e) => setLabel(e.target.value)}
                         placeholder="e.g. Production"
@@ -688,17 +799,19 @@ export default function IntegrationsPage() {
                   <Button variant="ghost" onClick={() => setConnectDialog(null)} disabled={connecting === connectDialog}>
                     Cancel
                   </Button>
-                  <Button
-                    onClick={() => handleConnect(def.type)}
-                    loading={connecting === connectDialog}
-                    disabled={connecting === connectDialog}
-                  >
-                    {connecting === connectDialog
-                      ? "Connecting..."
-                      : def.hasOAuth && !apiKey
-                        ? "Authorize"
-                        : "Connect"}
-                  </Button>
+                  {def.type === "WHATSAPP" && !whatsappAdvanced ? null : (
+                    <Button
+                      onClick={() => handleConnect(def.type)}
+                      loading={connecting === connectDialog}
+                      disabled={connecting === connectDialog}
+                    >
+                      {connecting === connectDialog
+                        ? "Connecting..."
+                        : def.hasOAuth && !apiKey
+                          ? "Authorize"
+                          : "Connect"}
+                    </Button>
+                  )}
                 </DialogFooter>
               </>
             );

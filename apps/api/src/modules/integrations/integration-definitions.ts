@@ -8,6 +8,8 @@ export interface IntegrationDefinition {
   hasApiKey: boolean;
   hasApiSecret: boolean;
   hasOAuth: boolean;
+  /** Meta WhatsApp Embedded Signup (Facebook Login for Business) — not classic OAuth redirect. */
+  hasEmbeddedSignup?: boolean;
   hasWebhook: boolean;
   supportsSync: boolean;
   supportsTest: boolean;
@@ -24,7 +26,7 @@ export const INTEGRATION_DEFINITIONS: IntegrationDefinition[] = [
   { type: 'STRIPE', name: 'Stripe', description: 'Payment processing and subscription management.', category: 'Payments', icon: 'CreditCard', hasApiKey: true, hasApiSecret: false, hasOAuth: false, hasWebhook: true, supportsSync: true, supportsTest: true, envKeys: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] },
   { type: 'RAZORPAY', name: 'Razorpay', description: 'Indian payment gateway for UPI, cards, net banking.', category: 'Payments', icon: 'CreditCard', hasApiKey: true, hasApiSecret: true, hasOAuth: false, hasWebhook: true, supportsSync: true, supportsTest: true, envKeys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] },
   { type: 'RESEND', name: 'Resend', description: 'Modern email API for developers.', category: 'Email', icon: 'Mail', hasApiKey: false, hasApiSecret: false, hasOAuth: true, hasWebhook: true, supportsSync: false, supportsTest: true, envKeys: ['RESEND_OAUTH_CLIENT_ID'], scopes: ['emails:send'], configureInstructions: 'Connect a Resend account to send automated emails. Doloyal registers a public OAuth client (PKCE) — no API key is stored. Sending is limited to the scopes you approve.' },
-  { type: 'WHATSAPP', name: 'WhatsApp Business', description: 'Connect your WhatsApp Business account to send retention messages to your existing customers via the Meta Cloud API, with delivery receipts.', category: 'Messaging', icon: 'MessageCircle', hasApiKey: true, hasApiSecret: true, hasOAuth: false, hasWebhook: true, supportsSync: false, supportsTest: true, envKeys: ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID'], configureInstructions: 'Paste a permanent access token from your Meta app, plus the Phone Number ID and (optionally) the WABA ID. For delivery receipts, point your Meta webhook to this integration and store your App Secret — messages send for real once connected.' },
+  { type: 'WHATSAPP', name: 'WhatsApp Business', description: 'Connect your WhatsApp Business account with Meta login to send retention messages and run automations for your existing customers.', category: 'Messaging', icon: 'MessageCircle', hasApiKey: true, hasApiSecret: true, hasOAuth: false, hasEmbeddedSignup: true, hasWebhook: true, supportsSync: false, supportsTest: true, envKeys: ['META_APP_ID', 'META_APP_SECRET', 'META_EMBEDDED_SIGNUP_CONFIG_ID'], docsUrl: 'https://developers.facebook.com/docs/whatsapp/embedded-signup', configureInstructions: 'Prefer Connect with Meta (Embedded Signup). Advanced users can still paste a permanent Cloud API token and Phone Number ID. Point Meta webhooks to /integrations/webhook/whatsapp.' },
 ];
 
 export function getIntegrationDef(type: string): IntegrationDefinition | undefined {
