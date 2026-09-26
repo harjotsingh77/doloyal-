@@ -7,7 +7,7 @@ import {
   logActivity,
   orderCountsAsRevenue,
 } from '../../common/customer-commerce';
-import { ensureClientNumber, nextClientNumber } from '../../common/client-number';
+import { ensureClientNumber, ensureClientNumberColumn, nextClientNumber } from '../../common/client-number';
 import { BookingLinksService } from './booking-links.service';
 import { BookingNotificationsService } from './booking-notifications.service';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
@@ -355,6 +355,7 @@ export class BookingOrchestratorService {
       }
       isNewCustomer = true;
       const tags = dto.referralSource ? [`referral:${dto.referralSource}`] : [];
+      await ensureClientNumberColumn(this.prisma);
       const clientNumber = await nextClientNumber(this.prisma, tenant.id);
       customer = await this.prisma.customer.create({
         data: {
@@ -754,6 +755,7 @@ export class BookingOrchestratorService {
       });
     }
     if (!customer) {
+      await ensureClientNumberColumn(this.prisma);
       const clientNumber = await nextClientNumber(this.prisma, tenant.id);
       customer = await this.prisma.customer.create({
         data: {

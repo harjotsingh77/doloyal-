@@ -9,7 +9,14 @@ import {
   prismaCustomerToShared,
   prismaPointsLedgerToShared,
 } from '../../common/helpers';
-import { ensureClientNumber, nextClientNumber } from '../../common/client-number';
+import {
+  CUSTOMER_LIST_SELECT,
+  CUSTOMER_LIST_SELECT_NO_CLIENT_NUMBER,
+  ensureClientNumber,
+  ensureClientNumberColumn,
+  isMissingClientNumberColumn,
+  nextClientNumber,
+} from '../../common/client-number';
 import {
   buildCustomerExportWorkbook,
   isExcelFilename,
@@ -99,21 +106,45 @@ export class CustomersService {
     }
     if (and.length) where.AND = and;
 
-    const [total, customers] = await Promise.all([
-      // Skip expensive count(*) on cursor pages — FE already uses hasMore.
-      query.cursor
-        ? Promise.resolve(-1)
-        : this.prisma.customer.count({ where: where as any }),
-      this.prisma.customer.findMany({
-        where: where as any,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-        ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      }),
-    ]);
+    // Production can lag migrate deploy behind releases that expect clientNumber.
+    await ensureClientNumberColumn(this.prisma);
+
+    const listArgs = {
+      where: where as any,
+      orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    };
+
+    const loadPage = async (includeClientNumber: boolean) => {
+      const [total, customers] = await Promise.all([
+        // Skip expensive count(*) on cursor pages — FE already uses hasMore.
+        query.cursor
+          ? Promise.resolve(-1)
+          : this.prisma.customer.count({ where: where as any }),
+        this.prisma.customer.findMany({
+          ...listArgs,
+          select: includeClientNumber
+            ? CUSTOMER_LIST_SELECT
+            : CUSTOMER_LIST_SELECT_NO_CLIENT_NUMBER,
+        }),
+      ]);
+      return { total, customers };
+    };
+
+    let total: number;
+    let customers: Awaited<ReturnType<typeof loadPage>>['customers'];
+    try {
+      ({ total, customers } = await loadPage(true));
+    } catch (err) {
+      if (!isMissingClientNumberColumn(err)) throw err;
+      ({ total, customers } = await loadPage(false));
+    }
 
     const hasMore = customers.length > limit;
-    const page = customers.slice(0, limit).map(prismaCustomerToShared);
+    const page = customers.slice(0, limit).map((row) =>
+      prismaCustomerToShared(row as any),
+    );
 
     return {
       items: page,
@@ -124,6 +155,7 @@ export class CustomersService {
   }
 
   async getById(tenantId: string, id: string) {
+    await ensureClientNumberColumn(this.prisma);
     const load = () =>
       this.prisma.customer.findFirst({
         where: { id, tenantId },
@@ -294,6 +326,7 @@ export class CustomersService {
     notes?: string;
     tags?: string[];
   }) {
+    await ensureClientNumberColumn(this.prisma);
     const nameParts = data.name.trim().split(/\s+/);
     const firstName = nameParts.shift() || data.name.trim();
     const lastName = nameParts.join(' ') || '-';
