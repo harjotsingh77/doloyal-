@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Phone,
@@ -18,9 +17,9 @@ import {
   Plus,
   MessageSquare,
   FileText,
+  MessageCircle,
 } from "lucide-react";
 import {
-  PageHeader,
   Badge,
   Avatar,
   AvatarFallback,
@@ -53,6 +52,39 @@ import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 import { OrderFormDialog } from "../orders/order-form-dialog";
 import { useCommerceLive } from "@/lib/data-sync";
+import { SendWhatsAppDialog } from "@/components/customers/send-whatsapp-dialog";
+
+function daysSince(iso?: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+
+function retentionLabel(customer: CustomerProfile): {
+  status: string;
+  days: number | null;
+  recommendWhatsApp: boolean;
+} {
+  const days = daysSince(customer.lastVisitAt);
+  const status =
+    customer.status ||
+    (customer.churnRisk === "CRITICAL" || customer.churnRisk === "HIGH"
+      ? "INACTIVE"
+      : days != null && days >= 45
+        ? "INACTIVE"
+        : days != null && days >= 21
+          ? "AT_RISK"
+          : "ACTIVE");
+  const recommendWhatsApp =
+    status === "INACTIVE" ||
+    status === "AT_RISK" ||
+    status === "CHURNED" ||
+    customer.churnRisk === "HIGH" ||
+    customer.churnRisk === "CRITICAL" ||
+    (days != null && days >= 21);
+  return { status, days, recommendWhatsApp };
+}
 
 export default function CustomerProfilePage() {
   const { format: fmt } = useCurrency();
@@ -65,6 +97,12 @@ export default function CustomerProfilePage() {
   const [addingNote, setAddingNote] = React.useState(false);
   const [orders, setOrders] = React.useState<ClientOrder[]>([]);
   const [orderFormOpen, setOrderFormOpen] = React.useState(false);
+  const [whatsAppOpen, setWhatsAppOpen] = React.useState(false);
+  const [waStatus, setWaStatus] = React.useState<{
+    connected: boolean;
+    demoModeAvailable: boolean;
+    displayPhoneNumber?: string | null;
+  }>({ connected: false, demoModeAvailable: false });
 
   const [reloadTick, setReloadTick] = React.useState(0);
 
@@ -75,10 +113,25 @@ export default function CustomerProfilePage() {
       try {
         setLoading(true);
         setError(null);
-        const data = await api.getCustomer(params.id as string);
+        const [data, wa] = await Promise.all([
+          api.getCustomer(params.id as string),
+          api.getWhatsAppStatus().catch((): {
+            connected: boolean;
+            demoModeAvailable: boolean;
+            displayPhoneNumber?: string | null;
+          } => ({
+            connected: false,
+            demoModeAvailable: false,
+          })),
+        ]);
         if (!cancelled) {
           setCustomer(data);
           setOrders(data.relatedOrders ?? []);
+          setWaStatus({
+            connected: Boolean(wa.connected),
+            demoModeAvailable: Boolean(wa.demoModeAvailable),
+            displayPhoneNumber: wa.displayPhoneNumber ?? null,
+          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -154,6 +207,8 @@ export default function CustomerProfilePage() {
 
   if (!customer) return null;
 
+  const retention = retentionLabel(customer);
+
   return (
     <div className="space-y-6">
       <button
@@ -177,7 +232,7 @@ export default function CustomerProfilePage() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-semibold">{customer.name}</h2>
                   <Badge
                     variant={
@@ -215,6 +270,9 @@ export default function CustomerProfilePage() {
                   {customer.phone && (
                     <span className="flex items-center gap-1">
                       <Phone className="h-3.5 w-3.5" />
+                      <span className="font-medium text-[rgb(var(--color-foreground))]">
+                        WhatsApp / Phone:
+                      </span>{" "}
                       {customer.phone}
                     </span>
                   )}
@@ -240,9 +298,59 @@ export default function CustomerProfilePage() {
                 </div>
               </div>
             </div>
+            {customer.phone ? (
+              <Button
+                onClick={() => setWhatsAppOpen(true)}
+                className="shrink-0 gap-2"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Send WhatsApp Message
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>
+
+      {retention.recommendWhatsApp ? (
+        <Card className="border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.04)]">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1.5">
+              <p className="text-sm font-semibold">Customer retention</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-[rgb(var(--color-muted-foreground))]">
+                <span>
+                  Customer Status:{" "}
+                  <span className="font-medium text-[rgb(var(--color-foreground))]">
+                    {retention.status === "AT_RISK"
+                      ? "At risk"
+                      : retention.status.charAt(0) + retention.status.slice(1).toLowerCase()}
+                  </span>
+                </span>
+                <span>
+                  Last Visit:{" "}
+                  <span className="font-medium text-[rgb(var(--color-foreground))]">
+                    {retention.days == null
+                      ? "No visits recorded"
+                      : `${retention.days} day${retention.days === 1 ? "" : "s"} ago`}
+                  </span>
+                </span>
+              </div>
+              <p className="text-sm">
+                Recommended Action:{" "}
+                <span className="font-medium">Send WhatsApp win-back message</span>
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => setWhatsAppOpen(true)}
+              disabled={!customer.phone}
+              className="shrink-0 gap-2"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Send WhatsApp Message
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
@@ -290,19 +398,45 @@ export default function CustomerProfilePage() {
           <Card>
             <CardContent className="p-0">
               <div className="space-y-0">
-                {customer.timeline.map((entry, i) => (
+                {customer.timeline.map((entry) => (
                   <div
                     key={entry.id}
                     className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-5 py-3.5 last:border-0"
                   >
                     <TimelineIcon kind={entry.kind} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{entry.title}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{entry.title}</p>
+                        {entry.kind === "WHATSAPP" && entry.deliveryStatus ? (
+                          <Badge
+                            variant={
+                              entry.deliveryStatus === "FAILED"
+                                ? "danger"
+                                : entry.deliveryStatus === "DEMO"
+                                  ? "outline"
+                                  : entry.deliveryStatus === "READ" || entry.deliveryStatus === "DELIVERED"
+                                    ? "success"
+                                    : "primary"
+                            }
+                            className="text-[0.6rem]"
+                          >
+                            {entry.deliveryStatus === "DEMO"
+                              ? "Demo"
+                              : entry.deliveryStatus.charAt(0) +
+                                entry.deliveryStatus.slice(1).toLowerCase()}
+                          </Badge>
+                        ) : null}
+                      </div>
                       {entry.description && (
                         <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                           {entry.description}
                         </p>
                       )}
+                      {entry.kind === "WHATSAPP" && entry.body ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-[rgb(var(--color-muted-foreground))]">
+                          {entry.body}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="shrink-0 text-right">
                       {entry.amount != null && (
@@ -595,6 +729,20 @@ export default function CustomerProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      <SendWhatsAppDialog
+        open={whatsAppOpen}
+        onOpenChange={setWhatsAppOpen}
+        customer={{
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+        }}
+        whatsappConnected={waStatus.connected}
+        demoModeAvailable={waStatus.demoModeAvailable}
+        businessNumber={waStatus.displayPhoneNumber}
+        onSent={() => setReloadTick((n) => n + 1)}
+      />
     </div>
   );
 }
@@ -609,6 +757,7 @@ function TimelineIcon({ kind }: { kind: string }) {
     REWARD: <Gift className="h-4 w-4 text-[rgb(var(--color-accent))]" />,
     MEMBERSHIP: <Award className="h-4 w-4 text-[rgb(var(--color-violet, #8B5CF6))]" />,
     NOTE: <MessageSquare className="h-4 w-4 text-[rgb(var(--color-muted-foreground))]" />,
+    WHATSAPP: <MessageCircle className="h-4 w-4 text-[rgb(37,211,102)]" />,
   };
   return (
     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--color-muted))]">

@@ -2397,8 +2397,10 @@ export const api = {
   getIntegration: (type: string) =>
     withFallback(() => request<any>(`/integrations/${type}`), "getIntegration", type),
 
-  connectIntegration: (data: { type: string; apiKey?: string; apiSecret?: string; accessToken?: string; refreshToken?: string; label?: string; metadata?: Record<string, unknown> }) =>
-    withFallback(() => request<any>("/integrations/connect", { method: "POST", body: JSON.stringify(data) }), "connectIntegration", data),
+  connectIntegration: (data: { type: string; apiKey?: string; apiSecret?: string; accessToken?: string; refreshToken?: string; label?: string; metadata?: Record<string, unknown>; webhookSecret?: string }) =>
+    // No mock fallback — connection status must reflect a real backend verify
+    // (required for Meta App Review honesty on WhatsApp).
+    request<any>("/integrations/connect", { method: "POST", body: JSON.stringify(data) }),
 
   disconnectIntegration: (type: string) =>
     withFallback(() => request<any>(`/integrations/${type}/disconnect`, { method: "POST" }), "disconnectIntegration", type),
@@ -2411,6 +2413,43 @@ export const api = {
 
   syncIntegration: (type: string) =>
     request<any>(`/integrations/${type}/sync`, { method: "POST" }),
+
+  getWhatsAppStatus: () =>
+    request<{
+      connected: boolean;
+      demoModeAvailable: boolean;
+      displayPhoneNumber?: string | null;
+      verifiedName?: string | null;
+      phoneNumberId?: string | null;
+      wabaId?: string | null;
+      connectedAt?: string | null;
+      label?: string | null;
+    }>("/integrations/whatsapp/status"),
+
+  listWhatsAppTemplates: () =>
+    request<{ templates: Array<{ name: string; status?: string; category?: string; language?: string }> }>(
+      "/integrations/whatsapp/templates",
+    ),
+
+  sendWhatsAppMessage: (data: {
+    customerId: string;
+    messageType?: "text" | "template";
+    body?: string;
+    templateName?: string;
+    templateLanguage?: string;
+    templateParams?: string[];
+    demo?: boolean;
+  }) =>
+    request<{
+      ok: boolean;
+      demo?: boolean;
+      notificationId?: string;
+      activityId?: string;
+      providerMessageId?: string;
+      deliveryStatus: string;
+      message?: string;
+      error?: string;
+    }>("/integrations/whatsapp/send", { method: "POST", body: JSON.stringify(data) }),
 
   getIntegrationConfig: (type: string) =>
     request<any>(`/integrations/${type}/config`),

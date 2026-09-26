@@ -195,13 +195,14 @@ interface AnalyticsWidgetProps {
   title: string;
   value: string;
   badge: string;
-  accentColor: string;
+  /** Kept for call-site compatibility; overview cards stay neutral. */
+  accentColor?: string;
   trend?: number[];
   subtitle?: string;
 }
 
-function AnalyticsWidget({ title, value, badge, accentColor, trend, subtitle }: AnalyticsWidgetProps) {
-  // Mini sparkline bars
+function AnalyticsWidget({ title, value, badge, trend, subtitle }: AnalyticsWidgetProps) {
+  // Mini sparkline bars — monochrome to match the rest of the dashboard.
   const bars = trend || [40, 65, 45, 80, 55, 70, 90];
   const maxBar = Math.max(...bars);
 
@@ -213,9 +214,6 @@ function AnalyticsWidget({ title, value, badge, accentColor, trend, subtitle }: 
         boxShadow: "0 1px 3px rgba(17, 24, 39, 0.04), 0 10px 24px -16px rgba(17, 24, 39, 0.08)",
       }}
     >
-      {/* Accent top border */}
-      <div className="h-[3px] w-full" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}88)` }} />
-
       <div className="flex flex-1 flex-col p-5">
         {/* Header row */}
         <div className="flex items-center justify-between">
@@ -224,7 +222,7 @@ function AnalyticsWidget({ title, value, badge, accentColor, trend, subtitle }: 
           </span>
           <span
             className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold"
-            style={{ backgroundColor: `${accentColor}0D`, color: accentColor }}
+            style={{ backgroundColor: "#F3F4F6", color: PALETTE.muted }}
           >
             <TrendingUp className="h-3 w-3" />
             {badge}
@@ -252,7 +250,7 @@ function AnalyticsWidget({ title, value, badge, accentColor, trend, subtitle }: 
                 className="w-[4px] rounded-sm transition-all duration-300"
                 style={{
                   height: `${Math.max((h / maxBar) * 28, 3)}px`,
-                  backgroundColor: i === bars.length - 1 ? accentColor : `${accentColor}30`,
+                  backgroundColor: i === bars.length - 1 ? "#9CA3AF" : "#E5E7EB",
                 }}
               />
             ))}

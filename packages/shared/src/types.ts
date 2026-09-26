@@ -1180,12 +1180,15 @@ export interface DashboardMetricDetail {
 
 export interface CustomerTimelineEntry {
   id: string;
-  kind: "VISIT" | "INVOICE" | "ORDER" | "REVIEW" | "POINTS" | "REWARD" | "MEMBERSHIP" | "NOTE";
+  kind: "VISIT" | "INVOICE" | "ORDER" | "REVIEW" | "POINTS" | "REWARD" | "MEMBERSHIP" | "NOTE" | "WHATSAPP";
   title: string;
   description?: string;
   amount?: number;
   points?: number;
   date: string;
+  /** Present for WhatsApp timeline rows (Queued / Sent / Delivered / Read / Failed / Demo). */
+  deliveryStatus?: string;
+  body?: string;
 }
 
 export interface CustomerProfile extends Customer {

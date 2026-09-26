@@ -175,6 +175,7 @@ enum ActivityType {
   CAMPAIGN_SENT
   NOTE_ADDED
   WHATSAPP_RECEIVED
+  WHATSAPP_SENT
 }
 
 enum SupportStatus {
@@ -2104,6 +2105,8 @@ model IntegrationToken {
   apiKey        String? // encrypted (for API-key-based integrations)
   apiSecret     String? // encrypted (for API-key-based integrations)
   webhookSecret String? // encrypted
+  /// Non-secret provider config (e.g. WhatsApp phoneNumberId, wabaId, display number).
+  metadata      Json?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

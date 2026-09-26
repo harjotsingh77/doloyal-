@@ -34,12 +34,23 @@ class ResendCreateDomainDto {
   @IsString() @IsOptional() region?: string;
 }
 
+class WhatsAppSendDto {
+  @IsString() @IsNotEmpty() customerId: string;
+  @IsString() @IsOptional() messageType?: 'text' | 'template';
+  @IsString() @IsOptional() body?: string;
+  @IsString() @IsOptional() templateName?: string;
+  @IsString() @IsOptional() templateLanguage?: string;
+  @IsOptional() templateParams?: string[];
+  @IsOptional() demo?: boolean;
+}
+
 @Controller('integrations')
 export class IntegrationsController {
   constructor(
     private readonly integrationsService: IntegrationsService,
     private readonly emailService: EmailService,
     private readonly resendService: ResendIntegrationService,
+    private readonly whatsappService: WhatsAppIntegrationService,
   ) {}
 
   @Get('providers')
@@ -62,6 +73,41 @@ export class IntegrationsController {
   @Get()
   list(@CurrentUser() user: any) {
     return this.integrationsService.list(user.activeTenantId);
+  }
+
+  @Get('whatsapp/status')
+  async whatsappStatus(@CurrentUser() user: any) {
+    return this.whatsappService.getConnectionSummary(user.activeTenantId);
+  }
+
+  @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  @Get('whatsapp/templates')
+  async whatsappTemplates(@CurrentUser() user: any) {
+    const result = await this.whatsappService.fetchTemplates(user.activeTenantId);
+    if (!result.ok) {
+      throw new BadRequestException(result.error || 'Could not load WhatsApp templates.');
+    }
+    return { templates: result.templates || [] };
+  }
+
+  @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  @Post('whatsapp/send')
+  async sendWhatsAppMessage(@Body() dto: WhatsAppSendDto, @CurrentUser() user: any) {
+    const result = await this.whatsappService.sendToCustomer(user.activeTenantId, dto.customerId, {
+      messageType: dto.messageType === 'template' ? 'template' : 'text',
+      body: dto.body,
+      templateName: dto.templateName,
+      templateLanguage: dto.templateLanguage,
+      templateParams: Array.isArray(dto.templateParams) ? dto.templateParams : undefined,
+      demo: dto.demo,
+    });
+    if (!result.ok) {
+      throw new BadRequestException(
+        result.error ||
+          'WhatsApp message could not be sent. Please check your WhatsApp Business connection and permissions.',
+      );
+    }
+    return result;
   }
 
   @Get(':type')

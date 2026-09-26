@@ -127,6 +127,7 @@ export class IntegrationsService {
     if (type === 'WHATSAPP') {
       const accessToken = credentials.accessToken || credentials.apiKey;
       const phoneNumberId = String((credentials.metadata as any)?.phoneNumberId || '').trim();
+      const wabaId = String((credentials.metadata as any)?.wabaId || '').trim() || undefined;
       if (!accessToken) {
         throw new BadRequestException('A WhatsApp Business access token is required.');
       }
@@ -140,6 +141,18 @@ export class IntegrationsService {
         );
       }
       whatsappVerifiedName = verification.verifiedName;
+      // Persist non-secret phone identity on both Integration + token metadata.
+      // Never store the access token or app secret in metadata / labels.
+      credentials.metadata = {
+        ...(credentials.metadata || {}),
+        phoneNumberId,
+        ...(wabaId ? { wabaId } : {}),
+        ...(verification.displayPhoneNumber
+          ? { displayPhoneNumber: verification.displayPhoneNumber }
+          : {}),
+        ...(verification.verifiedName ? { verifiedName: verification.verifiedName } : {}),
+        connectedAt: new Date().toISOString(),
+      };
     }
 
     const existing = await this.prisma.integration.findUnique({
@@ -245,7 +258,10 @@ export class IntegrationsService {
     if (!token) throw new BadRequestException('No credentials found');
 
     try {
-      const result = await this.validateWithProvider(type as any, token);
+      const result = await this.validateWithProvider(type as any, {
+        ...token,
+        integrationMetadata: integration.metadata,
+      });
       await this.prisma.integration.update({
         where: { id: integration.id },
         data: { errorLog: null },
@@ -1139,7 +1155,10 @@ export class IntegrationsService {
         await this.assertStripeSecretKey(apiKey);
         return { message: 'Stripe account verified' };
       case 'WHATSAPP': {
-        const metadata = (token.metadata || {}) as Record<string, any>;
+        const metadata = {
+          ...(((token as any).integrationMetadata as Record<string, any>) || {}),
+          ...((token.metadata || {}) as Record<string, any>),
+        };
         if (!apiKey) throw new Error('Missing WhatsApp access token');
         if (!metadata.phoneNumberId) throw new Error('Missing Phone Number ID');
         const verification = await this.whatsapp.verifyCredentials(apiKey, String(metadata.phoneNumberId));

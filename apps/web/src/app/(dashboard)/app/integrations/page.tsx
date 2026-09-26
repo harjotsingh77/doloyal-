@@ -65,7 +65,7 @@ const DESCRIPTION_OVERRIDE: Record<string, string> = {
   STRIPE: "Accept payments and manage customer subscriptions.",
   RAZORPAY: "Accept UPI, cards, net banking, and online payments.",
   RESEND: "Send transactional and automated emails.",
-  WHATSAPP: "Send automated WhatsApp messages to customers.",
+  WHATSAPP: "Connect your WhatsApp Business account to message existing customers for retention.",
 };
 
 const CATEGORY_OPTIONS = ["All", "Payments", "Communication", "Productivity", "Email"];
@@ -192,12 +192,22 @@ export default function IntegrationsPage() {
 
   const providerFor = (type: string) => providers.find((p) => p.type === type);
 
+  const clearConnectForm = () => {
+    setApiKey("");
+    setApiSecret("");
+    setLabel("");
+    setWhatsappPhoneId("");
+    setWhatsappWabaId("");
+    setWhatsappAppSecret("");
+  };
+
   const openConnect = (type: string) => {
     const integ = integrations[type.toLowerCase()];
     if (integ?.status === "CONNECTED") {
       openDetail(type);
       return;
     }
+    clearConnectForm();
     if (integ?.status === "EXPIRED" || integ?.status === "REAUTH_REQUIRED") {
       handleOAuth(type);
       return;
@@ -209,9 +219,6 @@ export default function IntegrationsPage() {
       handleOAuth(type);
       return;
     }
-    setApiKey("");
-    setApiSecret("");
-    setLabel("");
     setConnectDialog(type);
   };
 
@@ -301,8 +308,17 @@ export default function IntegrationsPage() {
       const result = await api.connectIntegration(body);
       if (result) {
         setIntegrations((prev) => ({ ...prev, [type.toLowerCase()]: result }));
-        toast.success(`${def?.name || type} connected successfully`);
+        // Never keep secrets in component state after a successful connect.
+        clearConnectForm();
+        toast.success(
+          type === "WHATSAPP"
+            ? "WhatsApp Business account connected successfully"
+            : `${def?.name || type} connected successfully`,
+        );
         setConnectDialog(null);
+        if (type === "WHATSAPP") {
+          setDetailDialog("WHATSAPP");
+        }
       }
     } catch (err: any) {
       toast.error(err?.message || `Failed to connect`);
@@ -581,14 +597,19 @@ export default function IntegrationsPage() {
                   )}
                   {def.type === "WHATSAPP" && (
                     <>
+                      <p className="rounded-lg bg-[rgb(var(--color-muted))] px-3 py-2 text-xs text-[rgb(var(--color-muted-foreground))]">
+                        Connect your own WhatsApp Business Cloud API credentials. Tokens and secrets are encrypted
+                        server-side and never shown again after you connect.
+                      </p>
                       <div className="space-y-2">
                         <label htmlFor="wa-token" className="text-sm font-medium">Permanent Access Token</label>
                         <Input
                           id="wa-token"
                           type="password"
+                          autoComplete="off"
                           value={apiKey}
                           onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="EAAG... (System User token with whatsapp_business_messaging)"
+                          placeholder="••••••••••••"
                         />
                       </div>
                       <div className="space-y-2">
@@ -614,9 +635,10 @@ export default function IntegrationsPage() {
                         <Input
                           id="wa-app-secret"
                           type="password"
+                          autoComplete="off"
                           value={whatsappAppSecret}
                           onChange={(e) => setWhatsappAppSecret(e.target.value)}
-                          placeholder="Verifies webhook signatures from Meta"
+                          placeholder="••••••••••••"
                         />
                         <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                           Webhook URL for your Meta app:{" "}
@@ -787,6 +809,58 @@ export default function IntegrationsPage() {
                       <div className="font-medium">{integ.metadata.email}</div>
                     </div>
                   )}
+                  {detailDialog.toUpperCase() === "WHATSAPP" && integ.status === "CONNECTED" && (
+                    <div className="space-y-3 rounded-xl border border-[rgb(var(--color-success)/0.35)] bg-[rgb(var(--color-success)/0.06)] p-4">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-[rgb(var(--color-success))]" />
+                        <div>
+                          <p className="text-sm font-semibold">WhatsApp Connected</p>
+                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                            WhatsApp Business account connected successfully
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid gap-2 text-sm sm:grid-cols-2">
+                        {(integ.label || integ.metadata?.verifiedName) && (
+                          <div>
+                            <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Business name</span>
+                            <p className="font-medium">{integ.label || integ.metadata?.verifiedName}</p>
+                          </div>
+                        )}
+                        {integ.metadata?.displayPhoneNumber && (
+                          <div>
+                            <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Connected number</span>
+                            <p className="font-medium">{integ.metadata.displayPhoneNumber}</p>
+                          </div>
+                        )}
+                        {integ.metadata?.phoneNumberId && (
+                          <div>
+                            <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Phone Number ID</span>
+                            <p className="font-medium tabular-nums">{integ.metadata.phoneNumberId}</p>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Connected</span>
+                          <p className="font-medium">
+                            {integ.metadata?.connectedAt
+                              ? new Date(integ.metadata.connectedAt).toLocaleString()
+                              : integ.updatedAt
+                                ? new Date(integ.updatedAt).toLocaleString()
+                                : "Just now"}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                        Access token and app secret are stored encrypted and never displayed here.
+                      </p>
+                      <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                        Webhook:{" "}
+                        <code className="rounded bg-[rgb(var(--color-surface-2))] px-1 py-0.5">
+                          {getApiBaseUrl()}/integrations/webhook/whatsapp
+                        </code>
+                      </p>
+                    </div>
+                  )}
                   {integ.errorLog && (
                     <div className="rounded-lg border border-[rgb(var(--color-danger)/0.3)] bg-[rgb(var(--color-danger)/0.05)] p-3">
                       <div className="flex items-center gap-1.5 text-sm font-medium text-[rgb(var(--color-danger))]">
@@ -900,6 +974,18 @@ export default function IntegrationsPage() {
                     {integ.status === "EXPIRED" || integ.status === "REAUTH_REQUIRED" ? (
                       <Button variant="primary" size="sm" onClick={() => handleOAuth(detailDialog)} loading={connecting === detailDialog}>
                         <RefreshCw className="h-4 w-4" /> Reconnect
+                      </Button>
+                    ) : detailDialog.toUpperCase() === "WHATSAPP" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setDetailDialog(null);
+                          clearConnectForm();
+                          setConnectDialog("WHATSAPP");
+                        }}
+                      >
+                        <RotateCcw className="h-4 w-4" /> Reconnect
                       </Button>
                     ) : (
                       <Button variant="primary" size="sm" onClick={() => handleSync(detailDialog)} loading={syncing === detailDialog} disabled={!def.supportsSync}>

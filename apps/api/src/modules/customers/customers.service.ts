@@ -221,6 +221,33 @@ export class CustomersService {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
+    const [activities, whatsappNotifications] = await Promise.all([
+      this.prisma.activity.findMany({
+        where: {
+          tenantId,
+          customerId: customer.id,
+          type: { in: ['WHATSAPP_SENT', 'WHATSAPP_RECEIVED'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+      }),
+      this.prisma.notification.findMany({
+        where: {
+          tenantId,
+          customerId: customer.id,
+          channel: 'WHATSAPP',
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+      }),
+    ]);
+
+    const activityIdsFromNotifications = new Set(
+      activities
+        .map((a) => ((a.metadata as any)?.notificationId as string | undefined) || null)
+        .filter(Boolean),
+    );
+
     const timeline: any[] = [
       ...customer.invoices.map((inv) => ({
         id: inv.id,
@@ -267,6 +294,42 @@ export class CustomersService {
         points: undefined,
         date: a.startTime.toISOString(),
       })),
+      ...activities.map((a) => {
+        const meta = (a.metadata as Record<string, any>) || {};
+        const deliveryStatus = String(meta.deliveryStatus || (a.type === 'WHATSAPP_RECEIVED' ? 'RECEIVED' : 'SENT'));
+        const isDemo = Boolean(meta.demo);
+        return {
+          id: a.id,
+          kind: 'WHATSAPP' as const,
+          title: a.type === 'WHATSAPP_RECEIVED' ? 'WhatsApp Reply' : 'WhatsApp Message',
+          description: isDemo
+            ? `Demo · ${deliveryStatus}`
+            : deliveryStatus,
+          amount: undefined,
+          points: undefined,
+          date: a.createdAt.toISOString(),
+          deliveryStatus,
+          body: a.message,
+        };
+      }),
+      // Notifications without a matching activity (e.g. campaign sends).
+      ...whatsappNotifications
+        .filter((n) => !activityIdsFromNotifications.has(n.id))
+        .map((n) => {
+          const meta = (n.metadata as Record<string, any>) || {};
+          const deliveryStatus = String(meta.deliveryStatus || n.status || 'SENT');
+          return {
+            id: n.id,
+            kind: 'WHATSAPP' as const,
+            title: 'WhatsApp Message',
+            description: Boolean(meta.demo) ? `Demo · ${deliveryStatus}` : deliveryStatus,
+            amount: undefined,
+            points: undefined,
+            date: (n.sentAt || n.createdAt).toISOString(),
+            deliveryStatus,
+            body: n.body || undefined,
+          };
+        }),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const membership = customer.memberships[0]
