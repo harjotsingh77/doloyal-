@@ -33,7 +33,7 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
-import { APP_NAV_GROUPS } from "@doloyal/shared";
+import { APP_NAV, APP_NAV_GROUPS } from "@doloyal/shared";
 import { cn } from "@doloyal/ui";
 import { Badge } from "@doloyal/ui";
 import { useBranch } from "@/lib/branch-context";
@@ -148,7 +148,16 @@ export const Sidebar = React.memo(function Sidebar({
         return true;
       return false;
     }
-    return pathname.startsWith(resolved);
+    // Exact or nested match — but prefer the most specific nav href so
+    // /app/appointments/booking-links does not also light up Appointments.
+    if (pathname !== resolved && !pathname.startsWith(`${resolved}/`)) return false;
+    const siblingWins = APP_NAV.some((item) => {
+      if (item.href === href) return false;
+      const other = resolveHref(item.href);
+      if (other.length <= resolved.length) return false;
+      return pathname === other || pathname.startsWith(`${other}/`);
+    });
+    return !siblingWins;
   };
 
   const isAncestorActive = (item: { href: string; children?: { href: string }[] }) => {

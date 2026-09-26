@@ -164,7 +164,7 @@ export default function ClientPage() {
   if (stage === "welcome") return <Welcome business={currentTenant} onStart={start} onManual={() => setStage("sections")} />;
   if (stage === "collecting" || stage === "building") return <Preparation building={stage === "building"} />;
   if (stage === "sections") return <SectionSetup config={config} onToggle={toggle} onReorder={reorder} onDrag={setDragged} onAdd={() => setLibraryOpen(true)} onBack={() => setStage("welcome")} onCreate={create} />;
-  if (stage === "ready") return <Ready business={currentTenant} link={link} onCustomize={() => setStage("builder")} onPreview={() => window.open(`/book/${link?.slug}`, "_blank")} />;
+  if (stage === "ready") return <Ready business={currentTenant} link={link} onCustomize={() => setStage("builder")} onPreview={() => window.open(link?.slug ? `/book/${link.slug}?view=site` : "#", "_blank")} />;
   if (stage === "builder") return (
     <ClientPageBuilder tenant={currentTenant} link={link} initialConfig={config} onSave={async (next, publish) => { await save(next as ClientConfig, publish); }} />
   );

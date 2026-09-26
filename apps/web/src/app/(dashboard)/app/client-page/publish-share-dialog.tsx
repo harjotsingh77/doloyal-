@@ -6,9 +6,10 @@ import { Check, Copy, Download, ExternalLink, Share2 } from "lucide-react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from "@doloyal/ui";
 import { toast } from "sonner";
 
+/** Public client/website page (not the booking wizard). */
 export function customerPageUrl(slug: string) {
-  if (typeof window === "undefined") return `/book/${slug}`;
-  return `${window.location.origin}/book/${slug}`;
+  if (typeof window === "undefined") return `/book/${slug}?view=site`;
+  return `${window.location.origin}/book/${slug}?view=site`;
 }
 
 function initials(name: string) {

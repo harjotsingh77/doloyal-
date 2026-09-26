@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -41,6 +41,7 @@ import { getApiBaseUrl, assertApiBaseUrlConfigured } from "@/lib/api-base";
 import { useClientAuth } from "@/lib/client-auth";
 import { api } from "@/lib/api";
 import { useCommerceLive } from "@/lib/data-sync";
+import { hexToRgbTriplet } from "@/lib/branding";
 import { BuyChoiceDialog, isBookableProduct, isBuyableProduct } from "./buy-choice";
 
 declare global {
@@ -435,10 +436,15 @@ const slideVariants = {
 export default function BookingPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const slug = params.slug;
   const { user, logout, portal } = useClientAuth();
   const [guestAllowed, setGuestAllowed] = React.useState(false);
   const [accessReady, setAccessReady] = React.useState(false);
+  // Client Page / website landing only when explicitly requested.
+  // Booking Links open the branded booking wizard directly.
+  const showSiteLanding =
+    searchParams.get("view") === "site" || searchParams.get("page") === "client";
 
   React.useEffect(() => {
     if (user) {
@@ -475,7 +481,9 @@ export default function BookingPage() {
 
   const [step, setStep] = React.useState(1);
   const [direction, setDirection] = React.useState(0);
-  const [phase, setPhase] = React.useState<"landing" | "flow" | "purchase">("landing");
+  const [phase, setPhase] = React.useState<"landing" | "flow" | "purchase">(
+    showSiteLanding ? "landing" : "flow",
+  );
   const [choiceService, setChoiceService] = React.useState<PublicService | null>(null);
   const [choiceOpen, setChoiceOpen] = React.useState(false);
   const [purchaseConfirmation, setPurchaseConfirmation] = React.useState<PublicPurchaseConfirmation | null>(null);
@@ -740,7 +748,7 @@ export default function BookingPage() {
   }
 
   function resetFlow() {
-    setPhase("landing");
+    setPhase(showSiteLanding ? "landing" : "flow");
     setStep(1);
     setDirection(0);
     setSelectedService(null);
@@ -972,6 +980,37 @@ export default function BookingPage() {
     return <NoBusinessFound message={businessErrorMessage || undefined} />;
   }
 
+  const brandCfg = business.bookingLink?.branding;
+  const brandPrimary =
+    brandCfg?.primaryColor || brandCfg?.themeColor || business.brandColor || "#2563EB";
+  const brandLogo = brandCfg?.logoUrl || business.logoUrl || null;
+  const brandBg = brandCfg?.backgroundColor || business.backgroundColor || undefined;
+  const brandSecondary = brandCfg?.secondaryColor || business.secondaryColor || undefined;
+  const brandFont = brandCfg?.fontFamily || business.fontFamily || undefined;
+  const brandStyle: React.CSSProperties = {
+    ...(hexToRgbTriplet(brandPrimary)
+      ? { ["--color-primary" as string]: hexToRgbTriplet(brandPrimary)! }
+      : {}),
+    ...(brandSecondary && hexToRgbTriplet(brandSecondary)
+      ? { ["--color-accent" as string]: hexToRgbTriplet(brandSecondary)! }
+      : {}),
+    ...(brandBg && hexToRgbTriplet(brandBg)
+      ? { ["--color-background" as string]: hexToRgbTriplet(brandBg)! }
+      : {}),
+    ...(brandFont ? { fontFamily: brandFont } : {}),
+    ...(brandBg ? { backgroundColor: brandBg } : {}),
+  };
+
+  const goHome = () => {
+    if (showSiteLanding) {
+      setPhase("landing");
+      setStep(1);
+    } else {
+      setPhase("flow");
+      setStep(1);
+    }
+  };
+
   const startBooking = (service?: PublicService) => {
     if (service) setSelectedService(service);
     setPaymentMethod("RAZORPAY");
@@ -1110,7 +1149,7 @@ export default function BookingPage() {
 
   if (phase === "purchase") {
     return (
-      <div className="min-h-screen bg-[rgb(var(--color-background))]">
+      <div className="min-h-screen bg-[rgb(var(--color-background))]" style={brandStyle}>
         <header className="sticky top-0 z-50 border-b border-black/[0.08] bg-white/95 backdrop-blur-xl">
           <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
@@ -1118,25 +1157,26 @@ export default function BookingPage() {
                 type="button"
                 className="mr-1 rounded-md p-1 hover:bg-[rgb(var(--color-muted))]"
                 onClick={() => {
-                  setPhase("landing");
+                  goHome();
                   setPurchaseConfirmation(null);
                 }}
                 aria-label="Back"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              {business.logoUrl ? (
-                <img src={business.logoUrl} alt={business.name} className="h-8 w-8 rounded-[var(--radius-sm)] object-cover" />
+              {brandLogo ? (
+                <img src={brandLogo} alt={business.name} className="h-8 w-8 rounded-[var(--radius-sm)] object-cover" />
               ) : (
                 <div
                   className="h-8 w-8 rounded-[var(--radius-sm)] flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: business.brandColor || "rgb(var(--color-primary))" }}
+                  style={{ backgroundColor: brandPrimary }}
                 >
                   {getInitials(business.name)}
                 </div>
               )}
               <div>
                 <h1 className="text-sm font-bold leading-tight">{business.name}</h1>
+
                 <p className="text-[0.65rem] text-[rgb(var(--color-muted-foreground))]">Buy now</p>
               </div>
             </div>
@@ -1159,7 +1199,6 @@ export default function BookingPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setPhase("landing");
                   setPurchaseConfirmation(null);
                   resetFlow();
                 }}
@@ -1190,7 +1229,7 @@ export default function BookingPage() {
               onChangeNotes={setNotes}
               onChangePaymentMethod={setPaymentMethod}
               onChangeHoneypot={setHoneypot}
-              onBack={() => setPhase("landing")}
+              onBack={goHome}
               onSubmit={handlePurchase}
             />
           )}
@@ -1200,7 +1239,7 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[rgb(var(--color-background))]">
+    <div className="min-h-screen bg-[rgb(var(--color-background))]" style={brandStyle}>
       <header className="sticky top-0 z-50 border-b border-black/[0.08] bg-white/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
@@ -1210,8 +1249,7 @@ export default function BookingPage() {
                 className="mr-1 rounded-md p-1 hover:bg-[rgb(var(--color-muted))]"
                 onClick={() => {
                   if (step === 2) {
-                    setPhase("landing");
-                    setStep(1);
+                    goHome();
                   } else {
                     goToStep(step - 1);
                   }
@@ -1221,16 +1259,16 @@ export default function BookingPage() {
                 <ChevronLeft className="h-5 w-5" />
               </button>
             )}
-            {business.logoUrl ? (
+            {brandLogo ? (
               <img
-                src={business.logoUrl}
+                src={brandLogo}
                 alt={business.name}
                 className="h-8 w-8 rounded-[var(--radius-sm)] object-cover"
               />
             ) : (
               <div
                 className="h-8 w-8 rounded-[var(--radius-sm)] flex items-center justify-center text-white text-xs font-bold"
-                style={{ backgroundColor: business.brandColor || "rgb(var(--color-primary))" }}
+                style={{ backgroundColor: brandPrimary }}
               >
                 {getInitials(business.name)}
               </div>
@@ -1277,10 +1315,7 @@ export default function BookingPage() {
                 onContinue={() => {
                   if (selectedService) goToStep(3);
                 }}
-                onBack={() => {
-                  setPhase("landing");
-                  setStep(1);
-                }}
+                onBack={goHome}
               />
             )}
             {step === 3 && (
@@ -1388,6 +1423,12 @@ function StepWelcome({
     string,
     { open: string; close: string } | null
   > | null;
+  const logo = business.bookingLink?.branding?.logoUrl || business.logoUrl;
+  const primary =
+    business.bookingLink?.branding?.primaryColor ||
+    business.bookingLink?.branding?.themeColor ||
+    business.brandColor ||
+    "rgb(var(--color-primary))";
 
   const dayOrder = [
     "monday", "tuesday", "wednesday", "thursday", "friday",
@@ -1406,23 +1447,21 @@ function StepWelcome({
   return (
     <div className="space-y-6">
       <div className="text-center py-6">
-        {business.logoUrl ? (
+        {logo ? (
           <img
-            src={business.logoUrl}
+            src={logo}
             alt={business.name}
             className="h-20 w-20 mx-auto rounded-xl object-cover mb-4 shadow-soft"
           />
         ) : (
           <div
             className="h-20 w-20 mx-auto rounded-xl flex items-center justify-center text-white text-2xl font-bold mb-4 shadow-soft"
-            style={{
-              backgroundColor: business.brandColor || "rgb(var(--color-primary))",
-            }}
+            style={{ backgroundColor: primary }}
           >
             {getInitials(business.name)}
           </div>
         )}
-        <h2 className="text-2xl font-bold mb-1">{business.name}</h2>
+        <h2 className="text-2xl font-bold mb-1">{business.brandName || business.name}</h2>
         <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
           Book your appointment in a few simple steps
         </p>
