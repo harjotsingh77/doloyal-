@@ -5,6 +5,7 @@ import { EncryptionService } from '../../common/encryption.service';
 import { getPublicAppUrl } from '../../common/helpers';
 import { WhatsAppIntegrationService } from './services/whatsapp.service';
 import { getIntegrationDef } from './integration-definitions';
+import { ensureWhatsAppSchema } from '../../common/whatsapp-schema';
 import * as crypto from 'crypto';
 
 const p = (prisma: PrismaService) => prisma as any;
@@ -56,6 +57,7 @@ export class IntegrationsService {
   }
 
   async list(tenantId: string) {
+    await ensureWhatsAppSchema(this.prisma);
     const integrations = await this.prisma.integration.findMany({
       where: { tenantId },
       include: { tokens: true },
@@ -65,6 +67,7 @@ export class IntegrationsService {
   }
 
   async get(tenantId: string, type: string) {
+    await ensureWhatsAppSchema(this.prisma);
     const integration = await this.prisma.integration.findUnique({
       where: { tenantId_type: { tenantId, type: type as any } },
       include: { tokens: true },
@@ -95,6 +98,7 @@ export class IntegrationsService {
   }) {
     const def = getIntegrationDef(type);
     if (!def) throw new BadRequestException(`Unknown integration type: ${type}`);
+    await ensureWhatsAppSchema(this.prisma);
 
     // Resend is OAuth-only for customers. Never accept API-key credentials —
     // connections must come from the completed OAuth code exchange.
@@ -260,6 +264,7 @@ export class IntegrationsService {
   }
 
   async disconnect(tenantId: string, type: string) {
+    await ensureWhatsAppSchema(this.prisma);
     const integration = await this.prisma.integration.findUnique({
       where: { tenantId_type: { tenantId, type: type as any } },
     });
@@ -291,6 +296,7 @@ export class IntegrationsService {
   }
 
   async testConnection(tenantId: string, type: string) {
+    await ensureWhatsAppSchema(this.prisma);
     const integration = await this.prisma.integration.findUnique({
       where: { tenantId_type: { tenantId, type: type as any } },
       include: { tokens: true },
@@ -475,6 +481,7 @@ export class IntegrationsService {
    *    never double-process.
    */
   async handleWebhook(type: string, headers: any, rawBody: Buffer | string, parsedBody?: any) {
+    await ensureWhatsAppSchema(this.prisma);
     const body = parsedBody ?? (() => {
       try { return JSON.parse(String(rawBody)); } catch { return {}; }
     })();
@@ -728,6 +735,7 @@ export class IntegrationsService {
 
   /** Decrypted webhook secrets for all connected integrations of a type (webhook handshake). */
   async getWebhookSecretsForType(type: string): Promise<string[]> {
+    await ensureWhatsAppSchema(this.prisma);
     const rows = await this.prisma.integration.findMany({
       where: { type: type as any, status: 'CONNECTED' },
       include: { tokens: true },

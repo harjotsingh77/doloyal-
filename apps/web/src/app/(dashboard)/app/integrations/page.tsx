@@ -235,6 +235,30 @@ export default function IntegrationsPage() {
     return reason || "Please verify your credentials and try again.";
   };
 
+  const waEmbedded = Boolean(whatsappMetaStatus?.embeddedSignupAvailable);
+  const waShowForm = whatsappAdvanced || !waEmbedded;
+
+  React.useEffect(() => {
+    setWhatsappConnectError(null);
+  }, [apiKey, whatsappPhoneId, whatsappWabaId]);
+
+  const whatsappFormProblem = (): string | null => {
+    const token = apiKey.trim();
+    const phoneId = whatsappPhoneId.trim();
+    if (!token && !phoneId) {
+      return "Enter your WhatsApp access token and Phone Number ID from Meta App Dashboard → WhatsApp → API Setup.";
+    }
+    if (!token) return "Enter your WhatsApp access token.";
+    if (!phoneId) return "Enter your Phone Number ID.";
+    if (!/^\d{10,20}$/.test(phoneId)) {
+      return "Phone Number ID is the numeric ID shown under Meta App Dashboard → WhatsApp → API Setup (not the phone number itself).";
+    }
+    if (whatsappWabaId.trim() && !/^\d{10,20}$/.test(whatsappWabaId.trim())) {
+      return "WhatsApp Business Account ID should be the numeric ID from API Setup.";
+    }
+    return null;
+  };
+
   const openConnect = (type: string) => {
     const integ = integrations[type.toLowerCase()];
     if (integ?.status === "CONNECTED") {
@@ -341,8 +365,15 @@ export default function IntegrationsPage() {
       handleOAuth(type);
       return;
     }
+    if (type === "WHATSAPP") {
+      const invalid = whatsappFormProblem();
+      if (invalid) {
+        setWhatsappConnectError(invalid);
+        return;
+      }
+      setWhatsappConnectError(null);
+    }
     setConnecting(type);
-    if (type === "WHATSAPP") setWhatsappConnectError(null);
     try {
       const body: any = { type };
       if (apiKey) body.apiKey = apiKey;
@@ -350,12 +381,13 @@ export default function IntegrationsPage() {
       if (label) body.label = label;
       if (type === "WHATSAPP") {
         // WhatsApp Cloud API: the "API key" input holds the permanent access token.
-        body.accessToken = apiKey;
+        body.accessToken = apiKey.trim();
+        delete body.apiKey;
         body.metadata = {
-          ...(whatsappPhoneId ? { phoneNumberId: whatsappPhoneId.trim() } : {}),
-          ...(whatsappWabaId ? { wabaId: whatsappWabaId.trim() } : {}),
+          phoneNumberId: whatsappPhoneId.trim(),
+          ...(whatsappWabaId.trim() ? { wabaId: whatsappWabaId.trim() } : {}),
         };
-        if (whatsappAppSecret) body.webhookSecret = whatsappAppSecret;
+        if (whatsappAppSecret.trim()) body.webhookSecret = whatsappAppSecret.trim();
       }
       const result = await api.connectIntegration(body);
       if (result) {
@@ -374,8 +406,9 @@ export default function IntegrationsPage() {
       }
     } catch (err: any) {
       if (type === "WHATSAPP") {
-        setWhatsappConnectError(whatsappFailureText(err));
-        toast.error("WhatsApp connection failed. Please verify your credentials and try again.");
+        const reason = whatsappFailureText(err);
+        setWhatsappConnectError(reason);
+        toast.error("WhatsApp connection failed.", { description: reason });
       } else {
         toast.error(err?.message || `Failed to connect`);
       }
@@ -415,8 +448,9 @@ export default function IntegrationsPage() {
       setConnectDialog(null);
       setDetailDialog("WHATSAPP");
     } catch (err: any) {
-      setWhatsappConnectError(whatsappFailureText(err));
-      toast.error("WhatsApp connection failed. You can retry or connect with an access token.");
+      const reason = whatsappFailureText(err);
+      setWhatsappConnectError(reason);
+      toast.error("WhatsApp connection failed.", { description: reason });
       setWhatsappAdvanced(true);
     } finally {
       setConnecting(null);
@@ -669,7 +703,9 @@ export default function IntegrationsPage() {
                   <DialogTitle>Connect {def.name}</DialogTitle>
                   <DialogDescription>
                     {def.type === "WHATSAPP"
-                      ? "Login with Meta to connect your WhatsApp Business account, or use advanced credentials."
+                      ? waEmbedded
+                        ? "Login with Meta to connect your WhatsApp Business account, or use advanced credentials."
+                        : "Enter your WhatsApp Business Cloud API credentials to connect."
                       : def.hasOAuth
                         ? "Authorize via OAuth to connect your account."
                         : def.hasApiKey
@@ -695,51 +731,42 @@ export default function IntegrationsPage() {
                   )}
                   {def.type === "WHATSAPP" && (
                     <>
-                      {whatsappConnectError ? (
-                        <div
-                          role="alert"
-                          className="flex items-start gap-2 rounded-lg border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.06)] px-3 py-2 text-sm"
-                        >
-                          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-danger))]" />
-                          <div>
-                            <p className="font-medium">WhatsApp connection failed.</p>
-                            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{whatsappConnectError}</p>
-                          </div>
-                        </div>
-                      ) : null}
                       <p className="rounded-lg bg-[rgb(var(--color-muted))] px-3 py-2 text-xs text-[rgb(var(--color-muted-foreground))]">
-                        Login with Meta to connect <span className="font-medium text-[rgb(var(--color-foreground))]">your own</span> WhatsApp
-                        Business account. After connecting, Doloyal can send retention messages and run automations to your existing customers.
+                        Connect <span className="font-medium text-[rgb(var(--color-foreground))]">your own</span> WhatsApp
+                        Business account. After connecting, Doloyal can send retention messages to your existing customers.
+                        Credentials are encrypted server-side and never shown again.
                       </p>
-                      <Button
-                        type="button"
-                        className="w-full gap-2"
-                        onClick={handleWhatsAppMetaLogin}
-                        loading={connecting === "WHATSAPP"}
-                        disabled={connecting === "WHATSAPP"}
-                      >
-                        Continue with Meta
-                      </Button>
-                      {!whatsappMetaStatus?.embeddedSignupAvailable ? (
-                        <p className="text-xs text-[rgb(var(--color-warning))]">
-                          Meta login needs platform setup (App ID + Embedded Signup config). Use Advanced credentials until that is configured on the server.
-                        </p>
+                      {waEmbedded ? (
+                        <>
+                          <Button
+                            type="button"
+                            className="w-full gap-2"
+                            onClick={handleWhatsAppMetaLogin}
+                            loading={connecting === "WHATSAPP"}
+                            disabled={connecting === "WHATSAPP"}
+                          >
+                            Continue with Meta
+                          </Button>
+                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                            Opens Meta&apos;s secure WhatsApp Business signup. No access token is typed on this screen.
+                          </p>
+                          <button
+                            type="button"
+                            className="text-left text-xs font-medium text-[rgb(var(--color-primary))] hover:underline"
+                            onClick={() => setWhatsappAdvanced((v) => !v)}
+                          >
+                            {whatsappAdvanced ? "Hide advanced credentials" : "Advanced: connect with access token"}
+                          </button>
+                        </>
                       ) : (
                         <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                          Opens Meta&apos;s secure WhatsApp Business signup. No access token is typed on this screen.
+                          Find these in Meta App Dashboard → WhatsApp → API Setup.
                         </p>
                       )}
-                      <button
-                        type="button"
-                        className="text-left text-xs font-medium text-[rgb(var(--color-primary))] hover:underline"
-                        onClick={() => setWhatsappAdvanced((v) => !v)}
-                      >
-                        {whatsappAdvanced ? "Hide advanced credentials" : "Advanced: connect with access token"}
-                      </button>
-                      {whatsappAdvanced ? (
+                      {waShowForm ? (
                         <>
                           <div className="space-y-2">
-                            <label htmlFor="wa-token" className="text-sm font-medium">Permanent Access Token</label>
+                            <label htmlFor="wa-token" className="text-sm font-medium">Access Token</label>
                             <Input
                               id="wa-token"
                               type="password"
@@ -753,9 +780,11 @@ export default function IntegrationsPage() {
                             <label htmlFor="wa-phone-id" className="text-sm font-medium">Phone Number ID</label>
                             <Input
                               id="wa-phone-id"
+                              inputMode="numeric"
+                              autoComplete="off"
                               value={whatsappPhoneId}
                               onChange={(e) => setWhatsappPhoneId(e.target.value)}
-                              placeholder="123456789012345"
+                              placeholder="e.g. 106540352242922"
                             />
                           </div>
                           <div className="space-y-2">
@@ -768,7 +797,7 @@ export default function IntegrationsPage() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <label htmlFor="wa-app-secret" className="text-sm font-medium">Meta App Secret (for delivery receipts)</label>
+                            <label htmlFor="wa-app-secret" className="text-sm font-medium">Meta App Secret (optional, for delivery receipts)</label>
                             <Input
                               id="wa-app-secret"
                               type="password"
@@ -829,23 +858,24 @@ export default function IntegrationsPage() {
                       />
                     </div>
                   )}
-                  {def.type === "WHATSAPP" && whatsappAdvanced && (
-                    <div className="space-y-2">
-                      <label htmlFor="integ-label-wa" className="text-sm font-medium">Label (optional)</label>
-                      <Input
-                        id="integ-label-wa"
-                        value={label}
-                        onChange={(e) => setLabel(e.target.value)}
-                        placeholder="e.g. Production"
-                      />
+                  {def.type === "WHATSAPP" && whatsappConnectError ? (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-2 rounded-lg border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.06)] px-3 py-2 text-sm"
+                    >
+                      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-danger))]" />
+                      <div>
+                        <p className="font-medium">WhatsApp connection failed.</p>
+                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{whatsappConnectError}</p>
+                      </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
                 <DialogFooter>
                   <Button variant="ghost" onClick={() => setConnectDialog(null)} disabled={connecting === connectDialog}>
                     Cancel
                   </Button>
-                  {def.type === "WHATSAPP" && !whatsappAdvanced ? null : (
+                  {def.type === "WHATSAPP" && !waShowForm ? null : (
                     <Button
                       onClick={() => handleConnect(def.type)}
                       loading={connecting === connectDialog}

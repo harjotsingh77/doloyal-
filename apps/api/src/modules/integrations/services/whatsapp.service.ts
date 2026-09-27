@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { PrismaService } from '../../../common/prisma.service';
 import { EncryptionService } from '../../../common/encryption.service';
 import { toWhatsAppNumber, formatWhatsAppNumber } from '../../../common/phone';
+import { ensureWhatsAppSchema } from '../../../common/whatsapp-schema';
 import * as crypto from 'crypto';
 
 const GRAPH_VERSION = 'v21.0';
@@ -200,6 +201,7 @@ export class WhatsAppIntegrationService {
   }
 
   async getCredentials(tenantId: string): Promise<WhatsAppCredentials | null> {
+    await ensureWhatsAppSchema(this.prisma);
     const integration = await this.prisma.integration.findFirst({
       where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' },
       include: { tokens: true },
@@ -251,6 +253,7 @@ export class WhatsAppIntegrationService {
     connectedAt?: string | null;
     label?: string | null;
   }> {
+    await ensureWhatsAppSchema(this.prisma);
     const integration = await this.prisma.integration.findFirst({
       where: { tenantId, type: 'WHATSAPP' },
       include: { tokens: { select: { webhookSecret: true } } },

@@ -26,6 +26,7 @@ import {
 import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
 import { formatWhatsAppNumber, toWhatsAppNumber } from '../../common/phone';
+import { ensureWhatsAppSchema } from '../../common/whatsapp-schema';
 
 const DAY_MS = 86_400_000;
 
@@ -172,7 +173,7 @@ export class CustomersService {
   }
 
   async getById(tenantId: string, id: string) {
-    await ensureClientNumberColumn(this.prisma);
+    await Promise.all([ensureClientNumberColumn(this.prisma), ensureWhatsAppSchema(this.prisma)]);
     const load = () =>
       this.prisma.customer.findFirst({
         where: { id, tenantId },
