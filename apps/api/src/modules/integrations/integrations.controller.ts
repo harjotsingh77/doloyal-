@@ -7,7 +7,8 @@ import { ResendIntegrationService } from './services/resend.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../../common/roles.decorator';
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { RateLimit } from '../../common/rate-limit.guard';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsBoolean, IsIn, MaxLength, ArrayMaxSize } from 'class-validator';
 import { INTEGRATION_DEFINITIONS } from './integration-definitions';
 
 class ConnectIntegrationDto {
@@ -36,12 +37,13 @@ class ResendCreateDomainDto {
 
 class WhatsAppSendDto {
   @IsString() @IsNotEmpty() customerId: string;
-  @IsString() @IsOptional() messageType?: 'text' | 'template';
-  @IsString() @IsOptional() body?: string;
-  @IsString() @IsOptional() templateName?: string;
-  @IsString() @IsOptional() templateLanguage?: string;
-  @IsOptional() templateParams?: string[];
-  @IsOptional() demo?: boolean;
+  @IsIn(['text', 'template']) @IsOptional() messageType?: 'text' | 'template';
+  @IsString() @MaxLength(4096) @IsOptional() body?: string;
+  @IsString() @MaxLength(512) @IsOptional() templateName?: string;
+  @IsString() @MaxLength(20) @IsOptional() templateLanguage?: string;
+  @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(1024, { each: true }) @IsOptional()
+  templateParams?: string[];
+  @IsBoolean() @IsOptional() demo?: boolean;
 }
 
 class WhatsAppEmbeddedSignupDto {
@@ -100,6 +102,7 @@ export class IntegrationsController {
   }
 
   @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  @RateLimit(20, 60)
   @Post('whatsapp/send')
   async sendWhatsAppMessage(@Body() dto: WhatsAppSendDto, @CurrentUser() user: any) {
     const result = await this.whatsappService.sendToCustomer(user.activeTenantId, dto.customerId, {
@@ -109,6 +112,7 @@ export class IntegrationsController {
       templateLanguage: dto.templateLanguage,
       templateParams: Array.isArray(dto.templateParams) ? dto.templateParams : undefined,
       demo: dto.demo,
+      sentByUserId: user.id,
     });
     if (!result.ok) {
       throw new BadRequestException(
@@ -117,6 +121,12 @@ export class IntegrationsController {
       );
     }
     return result;
+  }
+
+  @Roles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  @Get('whatsapp/messages/:notificationId')
+  async whatsappMessageStatus(@Param('notificationId') notificationId: string, @CurrentUser() user: any) {
+    return this.whatsappService.getMessageStatus(user.activeTenantId, notificationId);
   }
 
   @Roles('OWNER', 'MANAGER')

@@ -21,6 +21,7 @@ const CHANNEL = "doloyal-sync";
 
 const PATH_SCOPES: Array<{ test: RegExp; scopes: AppDataScope[] }> = [
   { test: /^\/customers/, scopes: ["customers", "dashboard", "campaigns"] },
+  { test: /^\/integrations\/whatsapp\/send/, scopes: ["customers", "dashboard"] },
   { test: /^\/orders/, scopes: ["orders", "customers", "dashboard", "products", "loyalty"] },
   { test: /^\/products/, scopes: ["products", "orders", "dashboard"] },
   { test: /^\/reviews/, scopes: ["reviews", "dashboard", "customers"] },

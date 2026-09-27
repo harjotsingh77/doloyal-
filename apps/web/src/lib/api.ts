@@ -52,6 +52,14 @@ export class ApiError extends Error {
   }
 }
 
+export interface WhatsAppTemplateSummary {
+  name: string;
+  language: string;
+  status?: string;
+  category?: string;
+  components?: Array<{ type: string; format?: string; text?: string }>;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   assertApiBaseUrlConfigured();
   const staffToken = getStaffAuthToken();
@@ -2419,6 +2427,7 @@ export const api = {
       connected: boolean;
       demoModeAvailable: boolean;
       embeddedSignupAvailable: boolean;
+      webhookConfigured?: boolean;
       metaAppId?: string | null;
       embeddedSignupConfigId?: string | null;
       graphVersion: string;
@@ -2428,7 +2437,7 @@ export const api = {
       wabaId?: string | null;
       connectedAt?: string | null;
       label?: string | null;
-    }>("/integrations/whatsapp/status"),
+    }>("/integrations/whatsapp/status", { cache: "reload" }),
 
   completeWhatsAppEmbeddedSignup: (data: {
     code: string;
@@ -2443,9 +2452,7 @@ export const api = {
     }),
 
   listWhatsAppTemplates: () =>
-    request<{ templates: Array<{ name: string; status?: string; category?: string; language?: string }> }>(
-      "/integrations/whatsapp/templates",
-    ),
+    request<{ templates: WhatsAppTemplateSummary[] }>("/integrations/whatsapp/templates", { cache: "reload" }),
 
   sendWhatsAppMessage: (data: {
     customerId: string;
@@ -2463,9 +2470,23 @@ export const api = {
       activityId?: string;
       providerMessageId?: string;
       deliveryStatus: string;
+      recipient?: string;
       message?: string;
       error?: string;
     }>("/integrations/whatsapp/send", { method: "POST", body: JSON.stringify(data) }),
+
+  getWhatsAppMessageStatus: (notificationId: string) =>
+    request<{
+      notificationId: string;
+      customerId?: string | null;
+      deliveryStatus: string;
+      providerMessageId?: string | null;
+      statusTimestamps: Record<string, string>;
+      error?: string | null;
+      errorCode?: number | string | null;
+      lastWebhookAt?: string | null;
+      createdAt: string;
+    }>(`/integrations/whatsapp/messages/${encodeURIComponent(notificationId)}`, { cache: "reload" }),
 
   getIntegrationConfig: (type: string) =>
     request<any>(`/integrations/${type}/config`),

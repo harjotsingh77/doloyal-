@@ -25,8 +25,25 @@ import {
 } from './customer-excel';
 import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
+import { formatWhatsAppNumber, toWhatsAppNumber } from '../../common/phone';
 
 const DAY_MS = 86_400_000;
+
+function whatsappTimelineDescription(meta: Record<string, any>, received: boolean): string {
+  if (received) return 'Received from customer';
+  const status = String(meta.deliveryStatus || '').toUpperCase();
+  if (meta.demo || status === 'DEMO') return 'Demo only · not sent through WhatsApp';
+  if (status === 'FAILED') return meta.error ? `Failed · ${meta.error}` : 'Failed';
+  const label =
+    status === 'READ'
+      ? 'Read by customer'
+      : status === 'DELIVERED'
+        ? 'Delivered to customer'
+        : status === 'SENT'
+          ? 'Sent by WhatsApp'
+          : 'Accepted by WhatsApp · awaiting delivery confirmation';
+  return meta.templateName ? `${label} · Template ${meta.templateName}` : label;
+}
 
 /** floor((now - t) / day) <= days  <=>  t > now - (days + 1) days */
 function visitedSince(days: number) {
@@ -221,7 +238,7 @@ export class CustomersService {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    const [activities, whatsappNotifications] = await Promise.all([
+    const [activities, whatsappNotifications, tenant] = await Promise.all([
       this.prisma.activity.findMany({
         where: {
           tenantId,
@@ -240,7 +257,9 @@ export class CustomersService {
         orderBy: { createdAt: 'desc' },
         take: 40,
       }),
+      this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { country: true } }),
     ]);
+    const whatsappDigits = toWhatsAppNumber(customer.phone, tenant?.country);
 
     const activityIdsFromNotifications = new Set(
       activities
@@ -296,38 +315,42 @@ export class CustomersService {
       })),
       ...activities.map((a) => {
         const meta = (a.metadata as Record<string, any>) || {};
-        const deliveryStatus = String(meta.deliveryStatus || (a.type === 'WHATSAPP_RECEIVED' ? 'RECEIVED' : 'SENT'));
-        const isDemo = Boolean(meta.demo);
+        const received = a.type === 'WHATSAPP_RECEIVED';
+        const deliveryStatus = String(meta.deliveryStatus || (received ? 'RECEIVED' : 'SENT'));
         return {
           id: a.id,
           kind: 'WHATSAPP' as const,
-          title: a.type === 'WHATSAPP_RECEIVED' ? 'WhatsApp Reply' : 'WhatsApp Message',
-          description: isDemo
-            ? `Demo · ${deliveryStatus}`
-            : deliveryStatus,
+          title: received ? 'WhatsApp Reply' : 'WhatsApp Message',
+          description: whatsappTimelineDescription(meta, received),
           amount: undefined,
           points: undefined,
           date: a.createdAt.toISOString(),
           deliveryStatus,
-          body: a.message,
+          body: typeof meta.body === 'string' ? meta.body : a.message,
+          messageId: meta.providerMessageId || undefined,
+          notificationId: meta.notificationId || undefined,
         };
       }),
-      // Notifications without a matching activity (e.g. campaign sends).
+      // Notifications without a matching activity (failed sends, campaign sends).
       ...whatsappNotifications
         .filter((n) => !activityIdsFromNotifications.has(n.id))
         .map((n) => {
           const meta = (n.metadata as Record<string, any>) || {};
-          const deliveryStatus = String(meta.deliveryStatus || n.status || 'SENT');
+          const deliveryStatus = String(
+            meta.deliveryStatus || (n.status === 'FAILED' ? 'FAILED' : n.status === 'PENDING' ? 'QUEUED' : 'SENT'),
+          );
           return {
             id: n.id,
             kind: 'WHATSAPP' as const,
             title: 'WhatsApp Message',
-            description: Boolean(meta.demo) ? `Demo · ${deliveryStatus}` : deliveryStatus,
+            description: whatsappTimelineDescription({ ...meta, deliveryStatus }, false),
             amount: undefined,
             points: undefined,
-            date: (n.sentAt || n.createdAt).toISOString(),
+            date: n.createdAt.toISOString(),
             deliveryStatus,
             body: n.body || undefined,
+            messageId: meta.providerMessageId || undefined,
+            notificationId: n.id,
           };
         }),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -346,6 +369,7 @@ export class CustomersService {
 
     const profile: any = {
       ...shared,
+      whatsappNumber: formatWhatsAppNumber(whatsappDigits),
       preferredServices,
       membership,
       timeline,

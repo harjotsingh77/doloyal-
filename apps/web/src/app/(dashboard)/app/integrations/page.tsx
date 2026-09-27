@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
+  ArrowRight,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -79,6 +81,7 @@ function displayDescription(type: string, backendDescription: string): string {
 }
 
 export default function IntegrationsPage() {
+  const router = useRouter();
   const bootQuery = useResource<{
     providers: any[];
     integrations: Record<string, any>;
@@ -142,6 +145,8 @@ export default function IntegrationsPage() {
     embeddedSignupConfigId?: string | null;
     graphVersion?: string;
   } | null>(null);
+  const [whatsappConnectError, setWhatsappConnectError] = React.useState<string | null>(null);
+  const [whatsappWebhookConfigured, setWhatsappWebhookConfigured] = React.useState<boolean | null>(null);
   const [connecting, setConnecting] = React.useState<string | null>(null);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [syncing, setSyncing] = React.useState<string | null>(null);
@@ -207,6 +212,27 @@ export default function IntegrationsPage() {
     setWhatsappWabaId("");
     setWhatsappAppSecret("");
     setWhatsappAdvanced(false);
+    setWhatsappConnectError(null);
+  };
+
+  React.useEffect(() => {
+    if (detailDialog?.toUpperCase() !== "WHATSAPP") return;
+    let cancelled = false;
+    setWhatsappWebhookConfigured(null);
+    api
+      .getWhatsAppStatus()
+      .then((s) => {
+        if (!cancelled) setWhatsappWebhookConfigured(Boolean(s.webhookConfigured));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [detailDialog]);
+
+  const whatsappFailureText = (err: any) => {
+    const reason = String(err?.message || "").replace(/^WhatsApp connection failed\.\s*/i, "").trim();
+    return reason || "Please verify your credentials and try again.";
   };
 
   const openConnect = (type: string) => {
@@ -316,6 +342,7 @@ export default function IntegrationsPage() {
       return;
     }
     setConnecting(type);
+    if (type === "WHATSAPP") setWhatsappConnectError(null);
     try {
       const body: any = { type };
       if (apiKey) body.apiKey = apiKey;
@@ -346,7 +373,12 @@ export default function IntegrationsPage() {
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || `Failed to connect`);
+      if (type === "WHATSAPP") {
+        setWhatsappConnectError(whatsappFailureText(err));
+        toast.error("WhatsApp connection failed. Please verify your credentials and try again.");
+      } else {
+        toast.error(err?.message || `Failed to connect`);
+      }
     } finally {
       setConnecting(null);
     }
@@ -363,6 +395,7 @@ export default function IntegrationsPage() {
       return;
     }
     setConnecting("WHATSAPP");
+    setWhatsappConnectError(null);
     try {
       const { launchWhatsAppEmbeddedSignup } = await import("@/lib/whatsapp-embedded-signup");
       const { code, session } = await launchWhatsAppEmbeddedSignup({
@@ -382,7 +415,8 @@ export default function IntegrationsPage() {
       setConnectDialog(null);
       setDetailDialog("WHATSAPP");
     } catch (err: any) {
-      toast.error(err?.message || "Meta login failed. You can still connect with an access token.");
+      setWhatsappConnectError(whatsappFailureText(err));
+      toast.error("WhatsApp connection failed. You can retry or connect with an access token.");
       setWhatsappAdvanced(true);
     } finally {
       setConnecting(null);
@@ -661,6 +695,18 @@ export default function IntegrationsPage() {
                   )}
                   {def.type === "WHATSAPP" && (
                     <>
+                      {whatsappConnectError ? (
+                        <div
+                          role="alert"
+                          className="flex items-start gap-2 rounded-lg border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.06)] px-3 py-2 text-sm"
+                        >
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-danger))]" />
+                          <div>
+                            <p className="font-medium">WhatsApp connection failed.</p>
+                            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{whatsappConnectError}</p>
+                          </div>
+                        </div>
+                      ) : null}
                       <p className="rounded-lg bg-[rgb(var(--color-muted))] px-3 py-2 text-xs text-[rgb(var(--color-muted-foreground))]">
                         Login with Meta to connect <span className="font-medium text-[rgb(var(--color-foreground))]">your own</span> WhatsApp
                         Business account. After connecting, Doloyal can send retention messages and run automations to your existing customers.
@@ -927,13 +973,29 @@ export default function IntegrationsPage() {
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-5 w-5 text-[rgb(var(--color-success))]" />
                         <div>
-                          <p className="text-sm font-semibold">WhatsApp Connected</p>
+                          <p className="text-sm font-semibold">WhatsApp Business Connected</p>
                           <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                            WhatsApp Business account connected successfully
+                            Connected successfully
                           </p>
                         </div>
                       </div>
                       <div className="grid gap-2 text-sm sm:grid-cols-2">
+                        <div>
+                          <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Status</span>
+                          <p className="flex items-center gap-1.5 font-medium">
+                            <span className="h-2 w-2 rounded-full bg-[rgb(var(--color-success))]" /> Connected
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Delivery receipts</span>
+                          <p className="font-medium">
+                            {whatsappWebhookConfigured == null
+                              ? "Checking…"
+                              : whatsappWebhookConfigured
+                                ? "Enabled"
+                                : "Not configured"}
+                          </p>
+                        </div>
                         {(integ.label || integ.metadata?.verifiedName) && (
                           <div>
                             <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Business name</span>
@@ -942,7 +1004,7 @@ export default function IntegrationsPage() {
                         )}
                         {integ.metadata?.displayPhoneNumber && (
                           <div>
-                            <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Connected number</span>
+                            <span className="text-xs text-[rgb(var(--color-muted-foreground))]">Business phone</span>
                             <p className="font-medium">{integ.metadata.displayPhoneNumber}</p>
                           </div>
                         )}
@@ -966,6 +1028,16 @@ export default function IntegrationsPage() {
                       <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                         Access token and app secret are stored encrypted and never displayed here.
                       </p>
+                      <Button
+                        size="sm"
+                        className="w-full gap-2 sm:w-auto"
+                        onClick={() => {
+                          setDetailDialog(null);
+                          router.push("/app/customers");
+                        }}
+                      >
+                        Message a customer <ArrowRight className="h-4 w-4" />
+                      </Button>
                       <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                         Webhook:{" "}
                         <code className="rounded bg-[rgb(var(--color-surface-2))] px-1 py-0.5">

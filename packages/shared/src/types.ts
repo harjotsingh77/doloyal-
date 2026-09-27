@@ -1189,9 +1189,14 @@ export interface CustomerTimelineEntry {
   /** Present for WhatsApp timeline rows (Queued / Sent / Delivered / Read / Failed / Demo). */
   deliveryStatus?: string;
   body?: string;
+  /** WhatsApp Cloud API message id (wamid) once Meta accepted the message. */
+  messageId?: string;
+  notificationId?: string;
 }
 
 export interface CustomerProfile extends Customer {
+  /** Customer phone in international WhatsApp format (e.g. "+91 98765 43210"), null when not a valid number. */
+  whatsappNumber?: string | null;
   preferredServices: { name: string; count: number; lastAt: string }[];
   membership?: CustomerMembership | null;
   timeline: CustomerTimelineEntry[];

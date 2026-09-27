@@ -137,7 +137,7 @@ export class IntegrationsService {
       const verification = await this.whatsapp.verifyCredentials(accessToken, phoneNumberId);
       if (!verification.valid) {
         throw new BadRequestException(
-          `WhatsApp credentials rejected by Meta: ${verification.error}. Check the token and Phone Number ID.`,
+          `WhatsApp connection failed. ${verification.error || 'Please verify your credentials and try again.'}`,
         );
       }
       whatsappVerifiedName = verification.verifiedName;
@@ -234,7 +234,7 @@ export class IntegrationsService {
     const verification = await this.whatsapp.verifyCredentials(accessToken, phoneNumberId);
     if (!verification.valid) {
       throw new BadRequestException(
-        `WhatsApp connected but Meta rejected the phone lookup: ${verification.error}`,
+        `WhatsApp connection failed. ${verification.error || 'Please try Connect with Meta again.'}`,
       );
     }
 
@@ -495,6 +495,10 @@ export class IntegrationsService {
       return this.handleStripeSignedWebhook(stripeSignature, rawPayload, candidates);
     }
 
+    if (type === 'WHATSAPP') {
+      return this.handleWhatsAppWebhook(headers, rawPayload, body, candidates);
+    }
+
     const match = candidates.find((integration) => {
       const token = integration.tokens?.[0] as any;
       if (!token?.webhookSecret) return false;
@@ -562,14 +566,125 @@ export class IntegrationsService {
     try {
       if (type === 'STRIPE') {
         await this.processStripeEvent(match.tenantId, body);
-      } else if (type === 'WHATSAPP') {
-        await this.whatsapp.processWebhookPayload(match.tenantId, body);
       }
     } catch (err: any) {
       this.logger.warn(`Webhook ${eventType} processing failed for tenant ${match.tenantId}: ${err?.message}`);
     }
 
     return { received: true };
+  }
+
+  /**
+   * Meta WhatsApp webhooks. One Meta app (Embedded Signup) serves every
+   * workspace, so its App Secret alone cannot identify the tenant. After the
+   * `x-hub-signature-256` check, each change is routed to the integration that
+   * owns `value.metadata.phone_number_id`. A per-integration secret (manual
+   * connect with the business's own Meta app) only authorizes changes for
+   * that integration's phone number.
+   */
+  private async handleWhatsAppWebhook(
+    headers: any,
+    rawPayload: string,
+    body: any,
+    candidates: Array<{ id: string; tenantId: string; metadata: any; tokens: any[] }>,
+  ) {
+    const signature = headers?.['x-hub-signature-256'];
+    const platformSecret = process.env.META_APP_SECRET?.trim();
+    const platformValid = platformSecret
+      ? WhatsAppIntegrationService.verifySignature(rawPayload, signature, platformSecret)
+      : false;
+
+    const ownSecretValid = new Set<string>();
+    for (const integration of candidates) {
+      const token = integration.tokens?.[0];
+      if (!token?.webhookSecret) continue;
+      let secret: string;
+      try {
+        secret = this.encryption.decrypt(token.webhookSecret);
+      } catch {
+        continue;
+      }
+      if (WhatsAppIntegrationService.verifySignature(rawPayload, signature, secret)) {
+        ownSecretValid.add(integration.id);
+      }
+    }
+    if (!platformValid && ownSecretValid.size === 0) {
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
+
+    const byPhoneNumberId = new Map<string, typeof candidates>();
+    for (const integration of candidates) {
+      const phoneNumberId = String(
+        (integration.metadata as any)?.phoneNumberId || (integration.tokens?.[0]?.metadata as any)?.phoneNumberId || '',
+      ).trim();
+      if (!phoneNumberId) continue;
+      byPhoneNumberId.set(phoneNumberId, [...(byPhoneNumberId.get(phoneNumberId) || []), integration]);
+    }
+
+    let processed = 0;
+    let duplicates = 0;
+    let ignored = 0;
+    const entries = Array.isArray(body?.entry) ? body.entry : [];
+    for (const entry of entries) {
+      for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+        const value = change?.value;
+        const phoneNumberId = String(value?.metadata?.phone_number_id || '').trim();
+        const owners = (byPhoneNumberId.get(phoneNumberId) || []).filter(
+          (integration) => platformValid || ownSecretValid.has(integration.id),
+        );
+        if (!value || owners.length === 0) {
+          ignored += 1;
+          continue;
+        }
+
+        const externalEventId = crypto
+          .createHash('sha256')
+          .update(`WHATSAPP:${entry?.id || ''}:${JSON.stringify(change)}`)
+          .digest('hex');
+
+        for (const integration of owners) {
+          let eventId: string;
+          try {
+            const event = await p(this.prisma).webhookEvent.create({
+              data: {
+                integrationId: integration.id,
+                externalEventId,
+                eventType: String(change?.field || 'messages'),
+                payload: change,
+                status: 'PENDING',
+              },
+            });
+            eventId = event.id;
+          } catch (err: any) {
+            if (String(err?.code) === 'P2002') {
+              duplicates += 1;
+              continue;
+            }
+            throw err;
+          }
+
+          try {
+            await this.whatsapp.processWebhookChange(integration.tenantId, value);
+            await p(this.prisma).webhookEvent.update({
+              where: { id: eventId },
+              data: { status: 'PROCESSED', processedAt: new Date() },
+            });
+            processed += 1;
+          } catch (err: any) {
+            // Never 500 a verified Meta delivery — Meta would retry the whole batch.
+            this.logger.warn(`WhatsApp webhook processing failed for tenant ${integration.tenantId}: ${err?.message}`);
+            await p(this.prisma).webhookEvent
+              .update({
+                where: { id: eventId },
+                data: { status: 'FAILED', errorMessage: String(err?.message || 'Processing failed').slice(0, 500) },
+              })
+              .catch(() => undefined);
+          }
+        }
+      }
+    }
+
+    return { received: true, processed, duplicates, ignored };
   }
 
   /** Server-side fulfillment of verified Stripe booking payments. */

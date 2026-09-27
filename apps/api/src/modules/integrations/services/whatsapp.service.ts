@@ -1,6 +1,7 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma.service';
 import { EncryptionService } from '../../../common/encryption.service';
+import { toWhatsAppNumber, formatWhatsAppNumber } from '../../../common/phone';
 import * as crypto from 'crypto';
 
 const GRAPH_VERSION = 'v21.0';
@@ -14,6 +15,15 @@ export type WhatsAppDeliveryStatus =
   | 'FAILED'
   | 'DEMO';
 
+const STATUS_RANK: Record<string, number> = { QUEUED: 0, SENT: 1, DELIVERED: 2, READ: 3 };
+
+export const WHATSAPP_NOT_CONNECTED_MESSAGE =
+  'WhatsApp connection is incomplete. Please reconnect your account in Integrations.';
+export const WHATSAPP_INVALID_RECIPIENT_MESSAGE =
+  'Message could not be sent. Please verify the customer’s WhatsApp number.';
+const WHATSAPP_GENERIC_ERROR = 'WhatsApp API returned an error. Please try again.';
+const WHATSAPP_NETWORK_ERROR = 'Could not reach WhatsApp. Check your internet connection and try again.';
+
 export interface WhatsAppCredentials {
   accessToken: string;
   phoneNumberId: string;
@@ -25,7 +35,10 @@ export interface WhatsAppCredentials {
 export interface WhatsAppSendResult {
   ok: boolean;
   providerMessageId?: string;
+  /** Meta `message_status` from the send response (accepted / held_for_quality_assessment / paused). */
+  messageStatus?: string;
   error?: string;
+  errorCode?: number | string;
   demo?: boolean;
 }
 
@@ -36,8 +49,131 @@ export interface WhatsAppCustomerSendResult {
   activityId?: string;
   providerMessageId?: string;
   deliveryStatus: WhatsAppDeliveryStatus;
+  recipient?: string;
   error?: string;
+  errorCode?: number | string;
   message?: string;
+}
+
+export interface WhatsAppTemplate {
+  name: string;
+  language: string;
+  status?: string;
+  category?: string;
+  components?: any[];
+}
+
+interface MetaError {
+  code?: number | string;
+  error_subcode?: number | string;
+  message?: string;
+  title?: string;
+  error_user_msg?: string;
+  error_data?: { details?: string } | string;
+}
+
+/**
+ * Maps a Meta Graph / WhatsApp Cloud API error (send response or webhook
+ * status error) to a user-facing message. Never echoes tokens or raw payloads.
+ */
+export function describeWhatsAppError(err: MetaError | null | undefined, httpStatus?: number): string {
+  const code = Number(err?.code);
+  const subcode = Number(err?.error_subcode);
+  const details = String(
+    (typeof err?.error_data === 'object' ? err?.error_data?.details : err?.error_data) || err?.message || '',
+  ).toLowerCase();
+  const suffix = Number.isFinite(code) && code > 0 ? ` (WhatsApp error ${code})` : '';
+
+  if (httpStatus === 429 || [4, 80007, 130429, 131048, 131056].includes(code)) {
+    return `WhatsApp rate limit reached. Please wait a moment and try again.${suffix}`;
+  }
+  if ([190, 102, 463, 467].includes(code) || httpStatus === 401) {
+    return `Your WhatsApp access token is invalid or has expired. Please reconnect WhatsApp in Integrations.${suffix}`;
+  }
+  if (code === 3 || code === 10 || code === 131005 || (code >= 200 && code <= 299)) {
+    return `WhatsApp permission is missing. Make sure whatsapp_business_messaging is granted for this account, then reconnect.${suffix}`;
+  }
+  if (code === 131030) {
+    return `This number isn’t in your Meta test recipient list. Add it under WhatsApp → API Setup in your Meta app, or use a production business number.${suffix}`;
+  }
+  if (code === 131047) {
+    return `More than 24 hours have passed since this customer last messaged you. Send an approved template instead of free-form text.${suffix}`;
+  }
+  if (code === 131026 || code === 131021) {
+    return `${WHATSAPP_INVALID_RECIPIENT_MESSAGE}${suffix}`;
+  }
+  if (code === 132000) {
+    return `The template parameters don’t match the approved template. Fill every placeholder and try again.${suffix}`;
+  }
+  if (code === 132001) {
+    return `This template doesn’t exist in the selected language or isn’t approved yet.${suffix}`;
+  }
+  if ([132005, 132007, 132012].includes(code)) {
+    return `WhatsApp rejected the template content. Check the template parameters and try again.${suffix}`;
+  }
+  if (code === 132015 || code === 132016) {
+    return `This template is paused or disabled in Meta Business Manager.${suffix}`;
+  }
+  if (code === 133010) {
+    return `Your business phone number isn’t registered with WhatsApp Cloud API. Please reconnect your account.${suffix}`;
+  }
+  if (code === 131031 || code === 368) {
+    return `Your WhatsApp Business account is restricted by Meta. Check Meta Business Manager for details.${suffix}`;
+  }
+  if (code === 131042) {
+    return `There is a billing issue on your WhatsApp Business account. Check the payment method in Meta Business Manager.${suffix}`;
+  }
+  if (code === 100 || code === 131009 || code === 131008) {
+    if (subcode === 33 || /phone number id|does not exist|unsupported get request|unsupported post request/.test(details)) {
+      return `The WhatsApp Phone Number ID is invalid or not accessible with this token. Please reconnect your account.${suffix}`;
+    }
+    if (/\bto\b|recipient|phone number|whatsapp id/.test(details)) {
+      return `${WHATSAPP_INVALID_RECIPIENT_MESSAGE}${suffix}`;
+    }
+    return `WhatsApp rejected the request. Please check the message and try again.${suffix}`;
+  }
+  return `${WHATSAPP_GENERIC_ERROR}${suffix}`;
+}
+
+/** Delivery states only move forward (Queued → Sent → Delivered → Read); Failed is terminal. */
+export function nextDeliveryStatus(
+  current: string | null | undefined,
+  incoming: WhatsAppDeliveryStatus,
+): WhatsAppDeliveryStatus {
+  const cur = String(current || '').toUpperCase();
+  if (cur === 'DEMO') return 'DEMO';
+  if (incoming === 'FAILED' || cur === 'FAILED') return 'FAILED';
+  const curRank = STATUS_RANK[cur] ?? -1;
+  const inRank = STATUS_RANK[incoming] ?? -1;
+  return inRank > curRank ? incoming : (cur as WhatsAppDeliveryStatus);
+}
+
+/** Maps a Meta webhook `statuses[].status` value. Unknown values return null (never guessed). */
+export function mapWebhookStatus(raw: unknown): WhatsAppDeliveryStatus | null {
+  const state = String(raw || '').toLowerCase();
+  if (state === 'failed') return 'FAILED';
+  if (state === 'read') return 'READ';
+  if (state === 'delivered') return 'DELIVERED';
+  if (state === 'sent') return 'SENT';
+  if (state === 'accepted' || state === 'pending' || state === 'queued' || state === 'held_for_quality_assessment') {
+    return 'QUEUED';
+  }
+  return null;
+}
+
+/** Highest `{{n}}` placeholder index in a template text component. */
+function placeholderCount(text: string | undefined): number {
+  let max = 0;
+  for (const m of String(text || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    max = Math.max(max, Number(m[1]));
+  }
+  return max;
+}
+
+export function renderTemplateBody(template: WhatsAppTemplate, params: string[] = []): string | null {
+  const body = (template.components || []).find((c: any) => String(c?.type).toUpperCase() === 'BODY');
+  if (!body?.text) return null;
+  return String(body.text).replace(/\{\{\s*(\d+)\s*\}\}/g, (_m, n) => params[Number(n) - 1] ?? `{{${n}}}`);
 }
 
 /**
@@ -104,6 +240,7 @@ export class WhatsAppIntegrationService {
     connected: boolean;
     demoModeAvailable: boolean;
     embeddedSignupAvailable: boolean;
+    webhookConfigured: boolean;
     metaAppId?: string | null;
     embeddedSignupConfigId?: string | null;
     graphVersion: string;
@@ -116,16 +253,21 @@ export class WhatsAppIntegrationService {
   }> {
     const integration = await this.prisma.integration.findFirst({
       where: { tenantId, type: 'WHATSAPP' },
+      include: { tokens: { select: { webhookSecret: true } } },
     });
     const connected = integration?.status === 'CONNECTED';
     const meta = ((integration?.metadata as Record<string, any>) || {});
     const creds = connected ? await this.getCredentials(tenantId) : null;
     const metaAppId = process.env.META_APP_ID?.trim() || null;
     const embeddedSignupConfigId = process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null;
+    const platformAppSecret = Boolean(process.env.META_APP_SECRET?.trim());
     return {
       connected: Boolean(connected && creds),
       demoModeAvailable: this.isDemoModeEnabled(),
-      embeddedSignupAvailable: Boolean(metaAppId && embeddedSignupConfigId && process.env.META_APP_SECRET?.trim()),
+      embeddedSignupAvailable: Boolean(metaAppId && embeddedSignupConfigId && platformAppSecret),
+      webhookConfigured: Boolean(
+        connected && (platformAppSecret || integration?.tokens?.some((t) => Boolean(t.webhookSecret))),
+      ),
       metaAppId,
       embeddedSignupConfigId,
       graphVersion: GRAPH_VERSION,
@@ -133,7 +275,7 @@ export class WhatsAppIntegrationService {
       verifiedName: creds?.verifiedName || meta.verifiedName || integration?.label || null,
       phoneNumberId: creds?.phoneNumberId || meta.phoneNumberId || null,
       wabaId: creds?.wabaId || meta.wabaId || null,
-      connectedAt: integration?.updatedAt?.toISOString?.() || null,
+      connectedAt: meta.connectedAt || integration?.updatedAt?.toISOString?.() || null,
       label: integration?.label || null,
     };
   }
@@ -156,15 +298,19 @@ export class WhatsAppIntegrationService {
     url.searchParams.set('client_secret', appSecret);
     url.searchParams.set('code', code);
 
-    const res = await fetch(url.toString());
+    let res: Response;
+    try {
+      res = await fetch(url.toString());
+    } catch {
+      throw new BadRequestException(WHATSAPP_NETWORK_ERROR);
+    }
     const body: any = await res.json().catch(() => null);
     if (!res.ok || !body?.access_token) {
       this.logger.warn(
         `Embedded Signup token exchange failed: status=${res.status} code=${body?.error?.code ?? '?'}`,
       );
       throw new BadRequestException(
-        body?.error?.message ||
-          'Could not complete Meta login. Please try Connect with Meta again.',
+        'Could not complete Meta login. Please try Connect with Meta again.',
       );
     }
     return { accessToken: String(body.access_token) };
@@ -172,16 +318,18 @@ export class WhatsAppIntegrationService {
 
   /** Subscribes Doloyal's Meta app to the customer's WABA webhook events. */
   async subscribeWaba(accessToken: string, wabaId: string): Promise<void> {
-    const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) {
-      const body: any = await res.json().catch(() => null);
-      this.logger.warn(
-        `WABA subscribe failed (waba=${wabaId}): ${body?.error?.message || res.status}`,
-      );
+    try {
+      const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const body: any = await res.json().catch(() => null);
+        this.logger.warn(`WABA subscribe failed (waba=${wabaId}): code=${body?.error?.code ?? res.status}`);
+      }
+    } catch (err: any) {
       // Non-fatal — messaging can still work; delivery receipts may be delayed.
+      this.logger.warn(`WABA subscribe error (waba=${wabaId}): ${err?.name || 'network'}`);
     }
   }
 
@@ -194,27 +342,27 @@ export class WhatsAppIntegrationService {
     phoneNumberId: string,
     pin?: string,
   ): Promise<void> {
-    const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        ...(pin ? { pin } : {}),
-      }),
-    });
-    if (!res.ok) {
-      const body: any = await res.json().catch(() => null);
-      // Already registered is fine.
-      const msg = String(body?.error?.message || '');
-      if (/already registered/i.test(msg) || body?.error?.code === 100) {
-        return;
+    try {
+      const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          ...(pin ? { pin } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const body: any = await res.json().catch(() => null);
+        // Already registered is fine.
+        const msg = String(body?.error?.message || '');
+        if (/already registered/i.test(msg) || body?.error?.code === 100) return;
+        this.logger.warn(`Phone register warning (phone=${phoneNumberId}): code=${body?.error?.code ?? res.status}`);
       }
-      this.logger.warn(
-        `Phone register warning (phone=${phoneNumberId}): ${msg || res.status}`,
-      );
+    } catch (err: any) {
+      this.logger.warn(`Phone register error (phone=${phoneNumberId}): ${err?.name || 'network'}`);
     }
   }
 
@@ -229,54 +377,31 @@ export class WhatsAppIntegrationService {
       });
       const body: any = await res.json().catch(() => null);
       if (!res.ok) {
-        const msg = body?.error?.message || `Meta API returned ${res.status}`;
-        return { valid: false, error: msg };
+        this.logger.warn(
+          `WhatsApp credential check failed: status=${res.status} code=${body?.error?.code ?? '?'} subcode=${body?.error?.error_subcode ?? '?'}`,
+        );
+        return { valid: false, error: describeWhatsAppError(body?.error, res.status) };
       }
       return {
         valid: true,
         displayPhoneNumber: body?.display_phone_number || undefined,
         verifiedName: body?.verified_name || undefined,
       };
-    } catch (err: any) {
-      return { valid: false, error: err?.message || 'Failed to reach Meta Graph API' };
+    } catch {
+      return { valid: false, error: WHATSAPP_NETWORK_ERROR };
     }
   }
 
-  private normalizePhone(to: string): string {
-    const digits = String(to).replace(/[^\d]/g, '');
-    if (!digits || digits.length < 8) {
-      throw new BadRequestException(`Invalid recipient phone number: ${to}`);
-    }
-    return digits;
+  private async tenantCountry(tenantId: string): Promise<string | null> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { country: true } });
+    return tenant?.country || null;
   }
 
-  private mapMetaError(err: any, statusCode: number): string {
-    const code = err?.code;
-    const subcode = err?.error_subcode;
-    const userMsg = err?.error_user_msg || err?.message;
-    if (statusCode === 429 || code === 4 || code === 80007) {
-      return 'WhatsApp rate limit reached. Please wait a moment and try again.';
-    }
-    if (code === 190 || code === 102 || statusCode === 401) {
-      return 'WhatsApp credentials are invalid or expired. Reconnect WhatsApp in Integrations.';
-    }
-    if (code === 100 || code === 33) {
-      return 'Invalid Phone Number ID or WhatsApp Business setup. Check your connection settings.';
-    }
-    if (code === 10 || code === 200 || subcode === 2018142) {
-      return 'WhatsApp permission missing. Ensure whatsapp_business_messaging is granted on your Meta app.';
-    }
-    return (
-      userMsg ||
-      `WhatsApp message could not be sent. Please check your WhatsApp Business connection and permissions.`
-    );
-  }
-
-  private async post(tenantId: string, payload: Record<string, any>): Promise<WhatsAppSendResult> {
-    const creds = await this.getCredentials(tenantId);
-    if (!creds) {
-      return { ok: false, error: 'WhatsApp is not connected. Connect it in Integrations first.' };
-    }
+  private async post(
+    tenantId: string,
+    creds: WhatsAppCredentials,
+    payload: Record<string, any>,
+  ): Promise<WhatsAppSendResult> {
     try {
       const res = await fetch(`${GRAPH_BASE}/${creds.phoneNumberId}/messages`, {
         method: 'POST',
@@ -289,23 +414,29 @@ export class WhatsAppIntegrationService {
       const body: any = await res.json().catch(() => null);
       if (!res.ok) {
         const err = body?.error;
-        const message = this.mapMetaError(err, res.status);
-        // Never log tokens — only safe Meta error identifiers.
+        // Never log tokens or payloads — only safe Meta error identifiers.
         this.logger.warn(
           `WhatsApp send failed (tenant=${tenantId}): code=${err?.code ?? '?'} subcode=${err?.error_subcode ?? '?'} status=${res.status}`,
         );
-        return { ok: false, error: message };
+        return { ok: false, error: describeWhatsAppError(err, res.status), errorCode: err?.code };
       }
       const messageId: string | undefined = body?.messages?.[0]?.id;
-      return { ok: true, providerMessageId: messageId };
-    } catch (err: any) {
-      this.logger.warn(`WhatsApp send error (tenant=${tenantId}): ${err?.message}`);
+      if (!messageId) {
+        return { ok: false, error: WHATSAPP_GENERIC_ERROR };
+      }
       return {
-        ok: false,
-        error:
-          'WhatsApp message could not be sent. Please check your WhatsApp Business connection and permissions.',
+        ok: true,
+        providerMessageId: messageId,
+        messageStatus: body?.messages?.[0]?.message_status || 'accepted',
       };
+    } catch (err: any) {
+      this.logger.warn(`WhatsApp send network error (tenant=${tenantId}): ${err?.name || 'error'}`);
+      return { ok: false, error: WHATSAPP_NETWORK_ERROR };
     }
+  }
+
+  private async resolveRecipient(tenantId: string, to: string): Promise<string | null> {
+    return toWhatsAppNumber(to, await this.tenantCountry(tenantId));
   }
 
   /**
@@ -318,7 +449,20 @@ export class WhatsAppIntegrationService {
     templateName: string,
     options?: { languageCode?: string; bodyParams?: string[] },
   ): Promise<WhatsAppSendResult> {
-    const normalizedTo = this.normalizePhone(to);
+    const creds = await this.getCredentials(tenantId);
+    if (!creds) return { ok: false, error: WHATSAPP_NOT_CONNECTED_MESSAGE };
+    const recipient = await this.resolveRecipient(tenantId, to);
+    if (!recipient) return { ok: false, error: WHATSAPP_INVALID_RECIPIENT_MESSAGE };
+    return this.postTemplate(tenantId, creds, recipient, templateName, options);
+  }
+
+  private postTemplate(
+    tenantId: string,
+    creds: WhatsAppCredentials,
+    recipient: string,
+    templateName: string,
+    options?: { languageCode?: string; bodyParams?: string[] },
+  ): Promise<WhatsAppSendResult> {
     const components =
       options?.bodyParams && options.bodyParams.length > 0
         ? [
@@ -329,10 +473,10 @@ export class WhatsAppIntegrationService {
           ]
         : undefined;
 
-    return this.post(tenantId, {
+    return this.post(tenantId, creds, {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to: normalizedTo,
+      to: recipient,
       type: 'template',
       template: {
         name: templateName,
@@ -342,21 +486,42 @@ export class WhatsAppIntegrationService {
     });
   }
 
-  /** Sends a free-form session text (only inside a 24h user-service window). */
+  /** Sends a free-form session text (only delivered inside a 24h customer-service window). */
   async sendSessionText(tenantId: string, to: string, text: string): Promise<WhatsAppSendResult> {
-    const normalizedTo = this.normalizePhone(to);
-    return this.post(tenantId, {
+    const creds = await this.getCredentials(tenantId);
+    if (!creds) return { ok: false, error: WHATSAPP_NOT_CONNECTED_MESSAGE };
+    const recipient = await this.resolveRecipient(tenantId, to);
+    if (!recipient) return { ok: false, error: WHATSAPP_INVALID_RECIPIENT_MESSAGE };
+    return this.postText(tenantId, creds, recipient, text);
+  }
+
+  private postText(
+    tenantId: string,
+    creds: WhatsAppCredentials,
+    recipient: string,
+    text: string,
+  ): Promise<WhatsAppSendResult> {
+    return this.post(tenantId, creds, {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to: normalizedTo,
+      to: recipient,
       type: 'text',
       text: { preview_url: false, body: text },
     });
   }
 
+  /** International WhatsApp number for a customer phone, using the business country for national numbers. */
+  async customerWhatsAppNumber(tenantId: string, phone: string | null | undefined) {
+    const digits = toWhatsAppNumber(phone, await this.tenantCountry(tenantId));
+    return { digits, display: formatWhatsAppNumber(digits) };
+  }
+
   /**
    * Sends a 1:1 retention message to an existing customer and records
    * Notification + Activity for the customer timeline.
+   *
+   * The initial status is QUEUED ("accepted by WhatsApp"). SENT / DELIVERED /
+   * READ / FAILED only come from Meta webhooks.
    */
   async sendToCustomer(
     tenantId: string,
@@ -369,6 +534,7 @@ export class WhatsAppIntegrationService {
       templateParams?: string[];
       /** Only honored when WHATSAPP_DEMO_MODE=true. */
       demo?: boolean;
+      sentByUserId?: string;
     },
   ): Promise<WhatsAppCustomerSendResult> {
     const customer = await this.prisma.customer.findFirst({
@@ -376,22 +542,31 @@ export class WhatsAppIntegrationService {
       select: { id: true, firstName: true, lastName: true, phone: true },
     });
     if (!customer) {
-      throw new BadRequestException('Customer not found in this workspace.');
+      throw new NotFoundException('Customer not found in this workspace.');
     }
     if (!customer.phone?.trim()) {
       throw new BadRequestException('This customer does not have a phone / WhatsApp number.');
     }
+    const recipient = await this.resolveRecipient(tenantId, customer.phone);
+    if (!recipient) {
+      throw new BadRequestException(WHATSAPP_INVALID_RECIPIENT_MESSAGE);
+    }
 
     const messageType = input.messageType === 'template' ? 'template' : 'text';
-    const bodyText =
-      messageType === 'text'
-        ? String(input.body || '').trim()
-        : `[Template: ${String(input.templateName || '').trim()}]`;
+    const templateName = String(input.templateName || '').trim();
+    const templateLanguage = String(input.templateLanguage || '').trim() || 'en_US';
+    const templateParams = (Array.isArray(input.templateParams) ? input.templateParams : [])
+      .map((p) => String(p ?? '').trim())
+      .slice(0, 20);
+    const textBody = String(input.body || '').trim();
 
-    if (messageType === 'text' && !bodyText) {
+    if (messageType === 'text' && !textBody) {
       throw new BadRequestException('Message text is required.');
     }
-    if (messageType === 'template' && !String(input.templateName || '').trim()) {
+    if (messageType === 'text' && textBody.length > 4096) {
+      throw new BadRequestException('WhatsApp messages can be at most 4096 characters.');
+    }
+    if (messageType === 'template' && !templateName) {
       throw new BadRequestException('An approved template name is required.');
     }
 
@@ -399,36 +574,35 @@ export class WhatsAppIntegrationService {
     const creds = await this.getCredentials(tenantId);
 
     if (!creds && !useDemo) {
-      return {
-        ok: false,
-        deliveryStatus: 'FAILED',
-        error:
-          'WhatsApp is not connected. Connect your WhatsApp Business account in Integrations first.',
-      };
+      return { ok: false, deliveryStatus: 'FAILED', error: WHATSAPP_NOT_CONNECTED_MESSAGE };
+    }
+
+    let bodyText = textBody;
+    if (messageType === 'template') {
+      const template = creds ? await this.findTemplate(creds, templateName, templateLanguage) : null;
+      if (template) {
+        this.assertTemplateSendable(template, templateParams);
+        bodyText = renderTemplateBody(template, templateParams) || `Template: ${templateName}`;
+      } else {
+        bodyText = `Template: ${templateName}`;
+      }
     }
 
     let result: WhatsAppSendResult;
     if (useDemo || !creds) {
-      // Explicit demo path — never claims a real Meta delivery.
-      result = {
-        ok: true,
-        demo: true,
-        providerMessageId: `demo_${Date.now()}`,
-      };
+      // Explicit demo path — never contacts Meta and never invents a provider message id.
+      result = { ok: true, demo: true };
     } else if (messageType === 'template') {
-      result = await this.sendTemplate(tenantId, customer.phone, String(input.templateName).trim(), {
-        languageCode: input.templateLanguage || 'en',
-        bodyParams: input.templateParams,
+      result = await this.postTemplate(tenantId, creds, recipient, templateName, {
+        languageCode: templateLanguage,
+        bodyParams: templateParams.length ? templateParams : undefined,
       });
     } else {
-      result = await this.sendSessionText(tenantId, customer.phone, bodyText);
+      result = await this.postText(tenantId, creds, recipient, bodyText);
     }
 
-    const deliveryStatus: WhatsAppDeliveryStatus = result.demo
-      ? 'DEMO'
-      : result.ok
-        ? 'SENT'
-        : 'FAILED';
+    const deliveryStatus: WhatsAppDeliveryStatus = result.demo ? 'DEMO' : result.ok ? 'QUEUED' : 'FAILED';
+    const now = new Date();
 
     const notification = await this.prisma.notification.create({
       data: {
@@ -436,23 +610,28 @@ export class WhatsAppIntegrationService {
         customerId: customer.id,
         type: 'RETENTION_WHATSAPP',
         channel: 'WHATSAPP',
-        recipient: customer.phone,
+        recipient: `+${recipient}`,
         subject: result.demo
           ? 'WhatsApp Message (Demo)'
           : messageType === 'template'
-            ? `Template: ${input.templateName}`
+            ? `Template: ${templateName}`
             : 'WhatsApp Message',
-        body: messageType === 'text' ? bodyText : bodyText,
-        status: result.ok ? (result.demo ? 'SENT' : 'SENT') : 'FAILED',
-        sentAt: result.ok ? new Date() : null,
+        body: bodyText,
+        status: result.ok ? 'SENT' : 'FAILED',
+        sentAt: result.ok && !result.demo ? now : null,
         metadata: {
           providerMessageId: result.providerMessageId || null,
           deliveryStatus,
+          metaMessageStatus: result.messageStatus || null,
+          statusTimestamps: { [deliveryStatus]: now.toISOString() },
           messageType,
-          templateName: messageType === 'template' ? input.templateName : null,
+          templateName: messageType === 'template' ? templateName : null,
+          templateLanguage: messageType === 'template' ? templateLanguage : null,
           demo: Boolean(result.demo),
           purpose: 'customer_retention',
+          sentByUserId: input.sentByUserId || null,
           error: result.error || null,
+          errorCode: result.errorCode ?? null,
         },
       },
     });
@@ -466,13 +645,17 @@ export class WhatsAppIntegrationService {
           type: 'WHATSAPP_SENT',
           message: result.demo
             ? `Demo WhatsApp message (not sent to Meta): ${bodyText.slice(0, 160)}`
-            : `WhatsApp message sent: ${bodyText.slice(0, 160)}`,
+            : `WhatsApp message: ${bodyText.slice(0, 160)}`,
           metadata: {
             notificationId: notification.id,
             providerMessageId: result.providerMessageId || null,
             deliveryStatus,
+            statusTimestamps: { [deliveryStatus]: now.toISOString() },
             demo: Boolean(result.demo),
             messageType,
+            templateName: messageType === 'template' ? templateName : null,
+            body: bodyText.slice(0, 1000),
+            sentByUserId: input.sentByUserId || null,
           },
         },
       });
@@ -484,9 +667,9 @@ export class WhatsAppIntegrationService {
         ok: false,
         notificationId: notification.id,
         deliveryStatus: 'FAILED',
-        error:
-          result.error ||
-          'WhatsApp message could not be sent. Please check your WhatsApp Business connection and permissions.',
+        recipient: formatWhatsAppNumber(recipient) || undefined,
+        error: result.error || WHATSAPP_GENERIC_ERROR,
+        errorCode: result.errorCode,
       };
     }
 
@@ -497,18 +680,51 @@ export class WhatsAppIntegrationService {
       activityId,
       providerMessageId: result.providerMessageId,
       deliveryStatus,
+      recipient: formatWhatsAppNumber(recipient) || undefined,
       message: result.demo
         ? 'Demo message recorded. No message was sent through WhatsApp Business Messaging.'
-        : 'WhatsApp message sent to your customer.',
+        : 'Accepted by WhatsApp. Waiting for delivery confirmation.',
     };
   }
 
-  /** Lists approved templates from the tenant's WABA. */
-  async fetchTemplates(
-    tenantId: string,
-  ): Promise<{ ok: boolean; templates?: any[]; error?: string }> {
-    const creds = await this.getCredentials(tenantId);
-    if (!creds) return { ok: false, error: 'WhatsApp is not connected.' };
+  private assertTemplateSendable(template: WhatsAppTemplate, params: string[]) {
+    const components = template.components || [];
+    const header = components.find((c: any) => String(c?.type).toUpperCase() === 'HEADER');
+    if (header) {
+      const format = String(header.format || 'TEXT').toUpperCase();
+      if (format !== 'TEXT' || placeholderCount(header.text) > 0) {
+        throw new BadRequestException(
+          'Templates with media or header variables can’t be sent from here yet. Choose a text-only template.',
+        );
+      }
+    }
+    const body = components.find((c: any) => String(c?.type).toUpperCase() === 'BODY');
+    const needed = placeholderCount(body?.text);
+    const provided = params.slice(0, needed).filter(Boolean).length;
+    if (provided < needed) {
+      throw new BadRequestException(
+        `This template needs ${needed} value${needed === 1 ? '' : 's'}. Fill in every placeholder before sending.`,
+      );
+    }
+  }
+
+  private async findTemplate(
+    creds: WhatsAppCredentials,
+    name: string,
+    language: string,
+  ): Promise<WhatsAppTemplate | null> {
+    if (!creds.wabaId) return null;
+    const result = await this.listTemplates(creds);
+    if (!result.ok) return null;
+    return (
+      result.templates?.find((t) => t.name === name && t.language === language) ||
+      null
+    );
+  }
+
+  private async listTemplates(
+    creds: WhatsAppCredentials,
+  ): Promise<{ ok: boolean; templates?: WhatsAppTemplate[]; error?: string }> {
     if (!creds.wabaId) {
       return {
         ok: false,
@@ -516,20 +732,58 @@ export class WhatsAppIntegrationService {
       };
     }
     try {
-      const res = await fetch(`${GRAPH_BASE}/${creds.wabaId}/message_templates?fields=name,status,category,components&limit=100`, {
-        headers: { Authorization: `Bearer ${creds.accessToken}` },
-      });
+      const res = await fetch(
+        `${GRAPH_BASE}/${creds.wabaId}/message_templates?fields=name,status,category,language,components&limit=200`,
+        { headers: { Authorization: `Bearer ${creds.accessToken}` } },
+      );
       const body: any = await res.json().catch(() => null);
       if (!res.ok) {
-        return { ok: false, error: body?.error?.message || `Meta API returned ${res.status}` };
+        this.logger.warn(`WhatsApp template list failed: status=${res.status} code=${body?.error?.code ?? '?'}`);
+        return { ok: false, error: describeWhatsAppError(body?.error, res.status) };
       }
-      const templates = (body?.data || []).filter(
-        (t: any) => String(t.status || '').toUpperCase() === 'APPROVED',
-      );
+      const templates: WhatsAppTemplate[] = (body?.data || [])
+        .filter((t: any) => String(t.status || '').toUpperCase() === 'APPROVED')
+        .map((t: any) => ({
+          name: String(t.name),
+          language: String(t.language || 'en_US'),
+          status: t.status,
+          category: t.category,
+          components: Array.isArray(t.components) ? t.components : [],
+        }));
       return { ok: true, templates };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to reach Meta Graph API' };
+    } catch {
+      return { ok: false, error: WHATSAPP_NETWORK_ERROR };
     }
+  }
+
+  /** Lists approved templates from the tenant's WABA. */
+  async fetchTemplates(
+    tenantId: string,
+  ): Promise<{ ok: boolean; templates?: WhatsAppTemplate[]; error?: string }> {
+    const creds = await this.getCredentials(tenantId);
+    if (!creds) return { ok: false, error: WHATSAPP_NOT_CONNECTED_MESSAGE };
+    return this.listTemplates(creds);
+  }
+
+  /** Current delivery state of one outbound WhatsApp message in this workspace. */
+  async getMessageStatus(tenantId: string, notificationId: string) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id: notificationId, tenantId, channel: 'WHATSAPP' },
+      select: { id: true, customerId: true, status: true, metadata: true, createdAt: true },
+    });
+    if (!notification) throw new NotFoundException('Message not found.');
+    const meta = (notification.metadata as Record<string, any>) || {};
+    return {
+      notificationId: notification.id,
+      customerId: notification.customerId,
+      deliveryStatus: String(meta.deliveryStatus || (notification.status === 'FAILED' ? 'FAILED' : 'QUEUED')),
+      providerMessageId: meta.providerMessageId || null,
+      statusTimestamps: (meta.statusTimestamps as Record<string, string>) || {},
+      error: meta.error || null,
+      errorCode: meta.errorCode ?? null,
+      lastWebhookAt: meta.lastWebhookAt || null,
+      createdAt: notification.createdAt.toISOString(),
+    };
   }
 
   /**
@@ -549,7 +803,7 @@ export class WhatsAppIntegrationService {
    * Verifies `x-hub-signature-256` against the app secret.
    */
   static verifySignature(rawBody: string, signatureHeader: string | undefined, appSecret: string): boolean {
-    if (!signatureHeader) return false;
+    if (!signatureHeader || !appSecret) return false;
     const expected = crypto
       .createHmac('sha256', appSecret)
       .update(rawBody)
@@ -559,134 +813,127 @@ export class WhatsAppIntegrationService {
     return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
   }
 
-  private mapWebhookStatus(raw: string): WhatsAppDeliveryStatus {
-    const state = String(raw || '').toLowerCase();
-    if (state === 'failed') return 'FAILED';
-    if (state === 'read') return 'READ';
-    if (state === 'delivered') return 'DELIVERED';
-    if (state === 'sent') return 'SENT';
-    if (state === 'accepted' || state === 'pending' || state === 'queued') return 'QUEUED';
-    return 'SENT';
-  }
-
   /**
-   * Processes a verified webhook payload: updates Notification rows with
-   * delivery statuses and records inbound messages. Returns processed ids so
-   * callers can dedupe redeliveries by (integration + event ids).
+   * Applies one verified webhook `change.value` (already routed to the tenant
+   * owning `value.metadata.phone_number_id`): delivery statuses update the
+   * matching Notification + timeline Activity; inbound messages become
+   * WHATSAPP_RECEIVED activities.
    */
-  async processWebhookPayload(tenantId: string, payload: any): Promise<{ statuses: number; messages: number }> {
+  async processWebhookChange(tenantId: string, value: any): Promise<{ statuses: number; messages: number }> {
     let statuses = 0;
     let messages = 0;
+    if (!value) return { statuses, messages };
 
-    const entries = Array.isArray(payload?.entry) ? payload.entry : [];
-    for (const entry of entries) {
-      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-      for (const change of changes) {
-        const value = change?.value;
-        if (!value) continue;
+    for (const status of Array.isArray(value.statuses) ? value.statuses : []) {
+      if (await this.applyStatusUpdate(tenantId, status)) statuses += 1;
+    }
 
-        for (const status of Array.isArray(value.statuses) ? value.statuses : []) {
-          const messageId = status?.id;
-          if (!messageId) continue;
-          const deliveryStatus = this.mapWebhookStatus(status?.status);
-          const failed = deliveryStatus === 'FAILED';
-          const errorMessage = failed
-            ? status?.errors?.[0]?.error_user_msg || status?.errors?.[0]?.title || 'Delivery failed'
-            : null;
-
-          const existing = await this.prisma.notification.findFirst({
-            where: {
-              tenantId,
-              channel: 'WHATSAPP',
-              metadata: { path: ['providerMessageId'], equals: messageId },
-            },
-            select: { id: true, metadata: true, customerId: true },
-          });
-          if (!existing) continue;
-
-          const prevMeta = ((existing.metadata as Record<string, any>) || {});
-          const updated = await this.prisma.notification.update({
-            where: { id: existing.id },
-            data: {
-              status: failed ? 'FAILED' : 'SENT',
-              ...(deliveryStatus === 'SENT' || deliveryStatus === 'DELIVERED' || deliveryStatus === 'READ'
-                ? { sentAt: new Date(status?.timestamp ? Number(status.timestamp) * 1000 : Date.now()) }
-                : {}),
-              ...(errorMessage ? { subject: errorMessage } : {}),
-              metadata: {
-                ...prevMeta,
-                providerMessageId: messageId,
-                deliveryStatus,
-                webhookStatus: status?.status || null,
-                lastWebhookAt: new Date().toISOString(),
-                ...(errorMessage ? { error: errorMessage } : {}),
-              },
-            },
-          }).catch(() => null);
-
-          if (updated) {
-            statuses += 1;
-            // Keep the matching activity description in sync when possible.
-            if (existing.customerId) {
-              await this.prisma.activity.updateMany({
-                where: {
-                  tenantId,
-                  customerId: existing.customerId,
-                  type: 'WHATSAPP_SENT',
-                  metadata: { path: ['notificationId'], equals: existing.id },
-                },
-                data: {
-                  message:
-                    deliveryStatus === 'FAILED'
-                      ? `WhatsApp message failed${errorMessage ? `: ${errorMessage}` : ''}`
-                      : `WhatsApp message ${deliveryStatus.toLowerCase()}`,
-                  metadata: {
-                    notificationId: existing.id,
-                    providerMessageId: messageId,
-                    deliveryStatus,
-                  },
-                },
-              }).catch(() => undefined);
-            }
-          }
-        }
-
-        for (const message of Array.isArray(value.messages) ? value.messages : []) {
-          messages += 1;
-          // Inbound customer replies are recorded as activities when we can
-          // match the sender to a customer by phone.
-          const fromDigits = String(message?.from || '').replace(/[^\d]/g, '');
-          if (!fromDigits) continue;
-          const customer = await this.prisma.customer.findFirst({
-            where: {
-              tenantId,
-              OR: [
-                { phone: { contains: fromDigits.slice(-10) } },
-                { phone: `+${fromDigits}` },
-                { phone: fromDigits },
-              ],
-            },
-            select: { id: true },
-          });
-          if (!customer) continue;
-          const text =
-            message?.text?.body ||
-            message?.button?.text ||
-            message?.interactive?.button_reply?.title ||
-            `[${message?.type || 'media'}]`;
-          await this.prisma.activity.create({
-            data: {
-              tenantId,
-              customerId: customer.id,
-              type: 'WHATSAPP_RECEIVED',
-              message: `Customer replied on WhatsApp: ${String(text).slice(0, 200)}`,
-              metadata: { providerMessageId: message?.id, type: message?.type },
-            },
-          }).catch(() => undefined);
-        }
-      }
+    for (const message of Array.isArray(value.messages) ? value.messages : []) {
+      if (await this.recordInboundMessage(tenantId, message)) messages += 1;
     }
 
     return { statuses, messages };
+  }
+
+  private async applyStatusUpdate(tenantId: string, status: any): Promise<boolean> {
+    const messageId = status?.id ? String(status.id) : '';
+    const incoming = mapWebhookStatus(status?.status);
+    if (!messageId || !incoming) return false;
+
+    const existing = await this.prisma.notification.findFirst({
+      where: {
+        tenantId,
+        channel: 'WHATSAPP',
+        metadata: { path: ['providerMessageId'], equals: messageId },
+      },
+      select: { id: true, metadata: true, customerId: true, sentAt: true },
+    });
+    if (!existing) return false;
+
+    const prevMeta = ((existing.metadata as Record<string, any>) || {});
+    const next = nextDeliveryStatus(prevMeta.deliveryStatus, incoming);
+    const at = new Date(status?.timestamp ? Number(status.timestamp) * 1000 : Date.now());
+    const atIso = Number.isNaN(at.getTime()) ? new Date().toISOString() : at.toISOString();
+    const statusTimestamps = {
+      ...((prevMeta.statusTimestamps as Record<string, string>) || {}),
+    };
+    if (!statusTimestamps[incoming]) statusTimestamps[incoming] = atIso;
+
+    const metaError = incoming === 'FAILED' ? status?.errors?.[0] : null;
+    const errorMessage = metaError ? describeWhatsAppError(metaError) : null;
+    const statusFields = {
+      deliveryStatus: next,
+      statusTimestamps,
+      webhookStatus: status?.status || null,
+      lastWebhookAt: new Date().toISOString(),
+      ...(errorMessage ? { error: errorMessage, errorCode: metaError?.code ?? null } : {}),
+    };
+
+    await this.prisma.notification.update({
+      where: { id: existing.id },
+      data: {
+        status: next === 'FAILED' ? 'FAILED' : 'SENT',
+        ...(!existing.sentAt && incoming === 'SENT' ? { sentAt: new Date(atIso) } : {}),
+        metadata: { ...prevMeta, ...statusFields },
+      },
+    });
+
+    if (existing.customerId) {
+      const activity = await this.prisma.activity.findFirst({
+        where: {
+          tenantId,
+          customerId: existing.customerId,
+          type: 'WHATSAPP_SENT',
+          metadata: { path: ['notificationId'], equals: existing.id },
+        },
+        select: { id: true, metadata: true },
+      });
+      if (activity) {
+        await this.prisma.activity.update({
+          where: { id: activity.id },
+          data: {
+            metadata: { ...((activity.metadata as Record<string, any>) || {}), ...statusFields },
+          },
+        });
+      }
+    }
+    return true;
+  }
+
+  private async recordInboundMessage(tenantId: string, message: any): Promise<boolean> {
+    // Inbound customer replies are recorded when the sender matches a customer by phone.
+    const fromDigits = String(message?.from || '').replace(/[^\d]/g, '');
+    if (!fromDigits) return false;
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        tenantId,
+        OR: [
+          { phone: { contains: fromDigits.slice(-10) } },
+          { phone: `+${fromDigits}` },
+          { phone: fromDigits },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!customer) return false;
+    const text =
+      message?.text?.body ||
+      message?.button?.text ||
+      message?.interactive?.button_reply?.title ||
+      `[${message?.type || 'media'}]`;
+    await this.prisma.activity.create({
+      data: {
+        tenantId,
+        customerId: customer.id,
+        type: 'WHATSAPP_RECEIVED',
+        message: `Customer replied on WhatsApp: ${String(text).slice(0, 200)}`,
+        metadata: {
+          providerMessageId: message?.id,
+          type: message?.type,
+          body: String(text).slice(0, 1000),
+        },
+      },
+    });
+    return true;
   }
 }

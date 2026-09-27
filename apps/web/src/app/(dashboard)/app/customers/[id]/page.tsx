@@ -52,6 +52,7 @@ import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
 import { OrderFormDialog } from "../orders/order-form-dialog";
 import { useCommerceLive } from "@/lib/data-sync";
+import { invalidateGetCache } from "@/lib/api-cache";
 import { SendWhatsAppDialog } from "@/components/customers/send-whatsapp-dialog";
 
 function daysSince(iso?: string | null): number | null {
@@ -101,44 +102,45 @@ export default function CustomerProfilePage() {
   const [waStatus, setWaStatus] = React.useState<{
     connected: boolean;
     demoModeAvailable: boolean;
+    webhookConfigured: boolean;
     displayPhoneNumber?: string | null;
-  }>({ connected: false, demoModeAvailable: false });
+  }>({ connected: false, demoModeAvailable: false, webhookConfigured: false });
 
   const [reloadTick, setReloadTick] = React.useState(0);
+  const loadedIdRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     if (!params.id) return;
     let cancelled = false;
+    const initial = loadedIdRef.current !== params.id;
     async function load() {
       try {
-        setLoading(true);
-        setError(null);
+        // Background refreshes keep the page (and any open dialog) mounted.
+        if (initial) {
+          setLoading(true);
+          setError(null);
+        }
         const [data, wa] = await Promise.all([
           api.getCustomer(params.id as string),
-          api.getWhatsAppStatus().catch((): {
-            connected: boolean;
-            demoModeAvailable: boolean;
-            displayPhoneNumber?: string | null;
-          } => ({
-            connected: false,
-            demoModeAvailable: false,
-          })),
+          api.getWhatsAppStatus().catch(() => null),
         ]);
         if (!cancelled) {
+          loadedIdRef.current = params.id as string;
           setCustomer(data);
           setOrders(data.relatedOrders ?? []);
           setWaStatus({
-            connected: Boolean(wa.connected),
-            demoModeAvailable: Boolean(wa.demoModeAvailable),
-            displayPhoneNumber: wa.displayPhoneNumber ?? null,
+            connected: Boolean(wa?.connected),
+            demoModeAvailable: Boolean(wa?.demoModeAvailable),
+            webhookConfigured: Boolean(wa?.webhookConfigured),
+            displayPhoneNumber: wa?.displayPhoneNumber ?? null,
           });
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && initial) {
           setError(err instanceof Error ? err.message : "Failed to load customer");
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && initial) setLoading(false);
       }
     }
     load();
@@ -148,6 +150,30 @@ export default function CustomerProfilePage() {
   }, [params.id, reloadTick]);
 
   useCommerceLive(["customers", "orders", "reviews", "loyalty", "invoices"], () => setReloadTick((n) => n + 1));
+
+  const refreshProfile = React.useCallback(() => {
+    invalidateGetCache(["customers"]);
+    setReloadTick((n) => n + 1);
+  }, []);
+
+  // Keep WhatsApp delivery badges live while a recent message awaits webhook confirmation.
+  const awaitingDelivery = React.useMemo(
+    () =>
+      (customer?.timeline ?? []).some(
+        (entry) =>
+          entry.kind === "WHATSAPP" &&
+          (entry.deliveryStatus === "QUEUED" || entry.deliveryStatus === "SENT" || entry.deliveryStatus === "DELIVERED") &&
+          Date.now() - new Date(entry.date).getTime() < 10 * 60 * 1000,
+      ),
+    [customer?.timeline],
+  );
+  React.useEffect(() => {
+    if (!awaitingDelivery || whatsAppOpen) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refreshProfile();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [awaitingDelivery, whatsAppOpen, refreshProfile]);
 
   const handleAddNote = async () => {
     if (!newNote.trim() || !customer) return;
@@ -208,6 +234,9 @@ export default function CustomerProfilePage() {
   if (!customer) return null;
 
   const retention = retentionLabel(customer);
+  // Older API responses lack whatsappNumber; fall back to the raw phone.
+  const whatsappNumber =
+    customer.whatsappNumber !== undefined ? customer.whatsappNumber : customer.phone || null;
 
   return (
     <div className="space-y-6">
@@ -270,10 +299,15 @@ export default function CustomerProfilePage() {
                   {customer.phone && (
                     <span className="flex items-center gap-1">
                       <Phone className="h-3.5 w-3.5" />
-                      <span className="font-medium text-[rgb(var(--color-foreground))]">
-                        WhatsApp / Phone:
-                      </span>{" "}
-                      {customer.phone}
+                      <span className="font-medium text-[rgb(var(--color-foreground))]">Phone:</span>{" "}
+                      <span className="tabular-nums">{customer.phone}</span>
+                    </span>
+                  )}
+                  {whatsappNumber && (
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3.5 w-3.5 text-[rgb(37,211,102)]" />
+                      <span className="font-medium text-[rgb(var(--color-foreground))]">WhatsApp:</span>{" "}
+                      <span className="tabular-nums">{whatsappNumber}</span>
                     </span>
                   )}
                   {customer.email && (
@@ -298,7 +332,7 @@ export default function CustomerProfilePage() {
                 </div>
               </div>
             </div>
-            {customer.phone ? (
+            {whatsappNumber ? (
               <Button
                 onClick={() => setWhatsAppOpen(true)}
                 className="shrink-0 gap-2"
@@ -311,46 +345,67 @@ export default function CustomerProfilePage() {
         </CardContent>
       </Card>
 
-      {retention.recommendWhatsApp ? (
-        <Card className="border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.04)]">
-          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1.5">
-              <p className="text-sm font-semibold">Customer retention</p>
-              <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-[rgb(var(--color-muted-foreground))]">
-                <span>
-                  Customer Status:{" "}
-                  <span className="font-medium text-[rgb(var(--color-foreground))]">
-                    {retention.status === "AT_RISK"
-                      ? "At risk"
-                      : retention.status.charAt(0) + retention.status.slice(1).toLowerCase()}
-                  </span>
+      <Card
+        className={
+          retention.recommendWhatsApp
+            ? "border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.04)]"
+            : undefined
+        }
+      >
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold">Customer retention</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-[rgb(var(--color-muted-foreground))]">
+              <span>
+                Status:{" "}
+                <span className="font-medium text-[rgb(var(--color-foreground))]">
+                  {retention.status === "AT_RISK"
+                    ? "At risk"
+                    : retention.status.charAt(0) + retention.status.slice(1).toLowerCase()}
                 </span>
-                <span>
-                  Last Visit:{" "}
-                  <span className="font-medium text-[rgb(var(--color-foreground))]">
-                    {retention.days == null
-                      ? "No visits recorded"
-                      : `${retention.days} day${retention.days === 1 ? "" : "s"} ago`}
-                  </span>
+              </span>
+              <span>
+                Last visit:{" "}
+                <span className="font-medium text-[rgb(var(--color-foreground))]">
+                  {retention.days == null
+                    ? "No visits recorded"
+                    : `${retention.days} day${retention.days === 1 ? "" : "s"} ago`}
                 </span>
-              </div>
+              </span>
+              <span>
+                Visits:{" "}
+                <span className="font-medium text-[rgb(var(--color-foreground))]">{customer.visitCount}</span>
+              </span>
+              <span>
+                Churn risk:{" "}
+                <span className="font-medium text-[rgb(var(--color-foreground))]">
+                  {customer.churnRisk.charAt(0) + customer.churnRisk.slice(1).toLowerCase()}
+                </span>
+              </span>
+            </div>
+            {!whatsappNumber ? (
+              <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+                Add a valid phone number (with country code) to message this customer on WhatsApp.
+              </p>
+            ) : retention.recommendWhatsApp ? (
               <p className="text-sm">
-                Recommended Action:{" "}
+                Recommended action:{" "}
                 <span className="font-medium">Send WhatsApp win-back message</span>
               </p>
-            </div>
+            ) : null}
+          </div>
+          {whatsappNumber && retention.recommendWhatsApp ? (
             <Button
               variant="secondary"
               onClick={() => setWhatsAppOpen(true)}
-              disabled={!customer.phone}
               className="shrink-0 gap-2"
             >
               <MessageCircle className="h-4 w-4" />
               Send WhatsApp Message
             </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
@@ -412,7 +467,7 @@ export default function CustomerProfilePage() {
                             variant={
                               entry.deliveryStatus === "FAILED"
                                 ? "danger"
-                                : entry.deliveryStatus === "DEMO"
+                                : entry.deliveryStatus === "DEMO" || entry.deliveryStatus === "RECEIVED"
                                   ? "outline"
                                   : entry.deliveryStatus === "READ" || entry.deliveryStatus === "DELIVERED"
                                     ? "success"
@@ -420,21 +475,36 @@ export default function CustomerProfilePage() {
                             }
                             className="text-[0.6rem]"
                           >
-                            {entry.deliveryStatus === "DEMO"
-                              ? "Demo"
-                              : entry.deliveryStatus.charAt(0) +
-                                entry.deliveryStatus.slice(1).toLowerCase()}
+                            {whatsappStatusLabel(entry.deliveryStatus)}
                           </Badge>
                         ) : null}
                       </div>
+                      {entry.kind === "WHATSAPP" && entry.body ? (
+                        <p className="mt-1 whitespace-pre-line text-sm line-clamp-3">{entry.body}</p>
+                      ) : null}
                       {entry.description && (
-                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                        <p
+                          className={`text-xs ${
+                            entry.kind === "WHATSAPP" && entry.deliveryStatus === "FAILED"
+                              ? "text-[rgb(var(--color-danger))]"
+                              : "text-[rgb(var(--color-muted-foreground))]"
+                          }`}
+                        >
                           {entry.description}
                         </p>
                       )}
-                      {entry.kind === "WHATSAPP" && entry.body ? (
-                        <p className="mt-1 line-clamp-2 text-xs text-[rgb(var(--color-muted-foreground))]">
-                          {entry.body}
+                      {entry.kind === "WHATSAPP" ? (
+                        <p className="mt-0.5 text-[0.7rem] text-[rgb(var(--color-muted-foreground))]">
+                          {new Date(entry.date).toLocaleString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                          {entry.messageId ? (
+                            <span className="ml-2 break-all">· Message ID: {entry.messageId}</span>
+                          ) : null}
                         </p>
                       ) : null}
                     </div>
@@ -737,14 +807,29 @@ export default function CustomerProfilePage() {
           id: customer.id,
           name: customer.name,
           phone: customer.phone,
+          whatsappNumber,
         }}
         whatsappConnected={waStatus.connected}
         demoModeAvailable={waStatus.demoModeAvailable}
+        webhookConfigured={waStatus.webhookConfigured}
         businessNumber={waStatus.displayPhoneNumber}
-        onSent={() => setReloadTick((n) => n + 1)}
+        onActivity={refreshProfile}
       />
     </div>
   );
+}
+
+function whatsappStatusLabel(status: string) {
+  switch (status) {
+    case "QUEUED":
+      return "Accepted";
+    case "DEMO":
+      return "Demo";
+    case "RECEIVED":
+      return "Received";
+    default:
+      return status.charAt(0) + status.slice(1).toLowerCase();
+  }
 }
 
 function TimelineIcon({ kind }: { kind: string }) {
