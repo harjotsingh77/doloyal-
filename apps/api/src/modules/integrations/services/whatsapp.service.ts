@@ -3,6 +3,7 @@ import { PrismaService } from '../../../common/prisma.service';
 import { EncryptionService } from '../../../common/encryption.service';
 import { toWhatsAppNumber, formatWhatsAppNumber } from '../../../common/phone';
 import { ensureWhatsAppSchema } from '../../../common/whatsapp-schema';
+import { describeConfigProblem, readEmbeddedSignupConfig } from './meta-embedded-signup';
 import * as crypto from 'crypto';
 
 const GRAPH_VERSION = 'v21.0';
@@ -237,11 +238,101 @@ export class WhatsAppIntegrationService {
     };
   }
 
+  private metaAppCheck: { key: string; at: number; result: { ok: boolean; error?: string } } | null = null;
+
+  /** App access token (`{app-id}|{app-secret}`) for server-to-Meta calls. Never logged or returned. */
+  private appAccessToken(): string | null {
+    const config = readEmbeddedSignupConfig();
+    const secret = process.env.META_APP_SECRET?.trim();
+    if (!config.appId || !secret) return null;
+    return `${config.appId}|${secret}`;
+  }
+
+  /**
+   * Confirms META_APP_ID + META_APP_SECRET are a matching pair by reading the
+   * app with its app access token. Cached for 10 minutes per instance.
+   */
+  async verifyMetaApp(): Promise<{ ok: boolean; error?: string }> {
+    const config = readEmbeddedSignupConfig();
+    const token = this.appAccessToken();
+    if (!config.appId || !token) return { ok: false, error: describeConfigProblem(config) || undefined };
+    const key = crypto.createHash('sha256').update(token).digest('hex');
+    if (this.metaAppCheck && this.metaAppCheck.key === key && Date.now() - this.metaAppCheck.at < 10 * 60 * 1000) {
+      return this.metaAppCheck.result;
+    }
+    let result: { ok: boolean; error?: string };
+    try {
+      const url = new URL(`${GRAPH_BASE}/${config.appId}`);
+      url.searchParams.set('fields', 'id,name');
+      url.searchParams.set('access_token', token);
+      const res = await fetch(url.toString());
+      const body: any = await res.json().catch(() => null);
+      if (res.ok && String(body?.id) === config.appId) {
+        result = { ok: true };
+      } else {
+        this.logger.warn(`Meta app check failed: status=${res.status} code=${body?.error?.code ?? '?'}`);
+        result = {
+          ok: false,
+          error: 'META_APP_ID and META_APP_SECRET do not match a Meta app. Copy both from Meta App Dashboard → App settings → Basic.',
+        };
+      }
+    } catch {
+      // Network trouble is not a configuration error — don't cache it.
+      return { ok: true };
+    }
+    this.metaAppCheck = { key, at: Date.now(), result };
+    return result;
+  }
+
+  /** Meta `debug_token` for a user/business token, using the app access token. */
+  async debugToken(inputToken: string): Promise<any | null> {
+    const appToken = this.appAccessToken();
+    if (!appToken) return null;
+    try {
+      const url = new URL(`${GRAPH_BASE}/debug_token`);
+      url.searchParams.set('input_token', inputToken);
+      url.searchParams.set('access_token', appToken);
+      const res = await fetch(url.toString());
+      const body: any = await res.json().catch(() => null);
+      if (!res.ok) {
+        this.logger.warn(`debug_token failed: status=${res.status} code=${body?.error?.code ?? '?'}`);
+        return null;
+      }
+      return body?.data ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Phone numbers on a WABA, as seen by the given token. */
+  async listWabaPhoneNumbers(
+    accessToken: string,
+    wabaId: string,
+  ): Promise<{ ok: boolean; phones?: Array<Record<string, any>>; error?: string }> {
+    try {
+      const res = await fetch(
+        `${GRAPH_BASE}/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,platform_type,code_verification_status`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const body: any = await res.json().catch(() => null);
+      if (!res.ok) {
+        this.logger.warn(`WABA phone list failed: status=${res.status} code=${body?.error?.code ?? '?'}`);
+        return { ok: false, error: describeWhatsAppError(body?.error, res.status) };
+      }
+      return { ok: true, phones: Array.isArray(body?.data) ? body.data : [] };
+    } catch {
+      return { ok: false, error: WHATSAPP_NETWORK_ERROR };
+    }
+  }
+
   /** Public connection summary — never includes tokens or secrets. */
   async getConnectionSummary(tenantId: string): Promise<{
     connected: boolean;
     demoModeAvailable: boolean;
     embeddedSignupAvailable: boolean;
+    /** Why Meta login can't be used right now (server configuration), or null. */
+    embeddedSignupProblem: string | null;
+    phoneRegistered: boolean | null;
     webhookConfigured: boolean;
     metaAppId?: string | null;
     embeddedSignupConfigId?: string | null;
@@ -261,18 +352,26 @@ export class WhatsAppIntegrationService {
     const connected = integration?.status === 'CONNECTED';
     const meta = ((integration?.metadata as Record<string, any>) || {});
     const creds = connected ? await this.getCredentials(tenantId) : null;
-    const metaAppId = process.env.META_APP_ID?.trim() || null;
-    const embeddedSignupConfigId = process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null;
-    const platformAppSecret = Boolean(process.env.META_APP_SECRET?.trim());
+    const config = readEmbeddedSignupConfig();
+    let embeddedSignupProblem = describeConfigProblem(config);
+    if (!embeddedSignupProblem) {
+      const appCheck = await this.verifyMetaApp();
+      if (!appCheck.ok) embeddedSignupProblem = appCheck.error || 'Meta login is misconfigured on the server.';
+    }
+    const metaAppId = config.appId;
+    const embeddedSignupConfigId = config.configId;
+    const platformAppSecret = config.hasAppSecret;
     return {
       connected: Boolean(connected && creds),
       demoModeAvailable: this.isDemoModeEnabled(),
-      embeddedSignupAvailable: Boolean(metaAppId && embeddedSignupConfigId && platformAppSecret),
+      embeddedSignupAvailable: !embeddedSignupProblem,
+      embeddedSignupProblem,
+      phoneRegistered: typeof meta.phoneRegistered === 'boolean' ? meta.phoneRegistered : null,
       webhookConfigured: Boolean(
         connected && (platformAppSecret || integration?.tokens?.some((t) => Boolean(t.webhookSecret))),
       ),
-      metaAppId,
-      embeddedSignupConfigId,
+      metaAppId: embeddedSignupProblem ? null : metaAppId,
+      embeddedSignupConfigId: embeddedSignupProblem ? null : embeddedSignupConfigId,
       graphVersion: GRAPH_VERSION,
       displayPhoneNumber: creds?.displayPhoneNumber || meta.displayPhoneNumber || null,
       verifiedName: creds?.verifiedName || meta.verifiedName || integration?.label || null,
@@ -289,12 +388,12 @@ export class WhatsAppIntegrationService {
    * The code expires in ~30s — call this immediately after FB.login.
    */
   async exchangeEmbeddedSignupCode(code: string): Promise<{ accessToken: string }> {
-    const appId = process.env.META_APP_ID?.trim();
+    const config = readEmbeddedSignupConfig();
+    const problem = describeConfigProblem(config);
+    const appId = config.appId;
     const appSecret = process.env.META_APP_SECRET?.trim();
-    if (!appId || !appSecret) {
-      throw new BadRequestException(
-        'WhatsApp Meta login is not configured. Set META_APP_ID and META_APP_SECRET.',
-      );
+    if (problem || !appId || !appSecret) {
+      throw new BadRequestException(problem || 'Meta login is not configured on the server.');
     }
     const url = new URL(`${GRAPH_BASE}/oauth/access_token`);
     url.searchParams.set('client_id', appId);
@@ -312,15 +411,18 @@ export class WhatsAppIntegrationService {
       this.logger.warn(
         `Embedded Signup token exchange failed: status=${res.status} code=${body?.error?.code ?? '?'}`,
       );
+      const expired = body?.error?.code === 100 && /expired|already been used/i.test(String(body?.error?.message || ''));
       throw new BadRequestException(
-        'Could not complete Meta login. Please try Connect with Meta again.',
+        expired
+          ? 'The Meta login session expired before it could be completed. Please click Continue with Meta again.'
+          : 'Could not complete Meta login. Please try Continue with Meta again.',
       );
     }
     return { accessToken: String(body.access_token) };
   }
 
-  /** Subscribes Doloyal's Meta app to the customer's WABA webhook events. */
-  async subscribeWaba(accessToken: string, wabaId: string): Promise<void> {
+  /** Subscribes Doloyal's Meta app to the customer's WABA webhook events. Returns whether it succeeded. */
+  async subscribeWaba(accessToken: string, wabaId: string): Promise<boolean> {
     try {
       const res = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
         method: 'POST',
@@ -329,22 +431,24 @@ export class WhatsAppIntegrationService {
       if (!res.ok) {
         const body: any = await res.json().catch(() => null);
         this.logger.warn(`WABA subscribe failed (waba=${wabaId}): code=${body?.error?.code ?? res.status}`);
+        return false;
       }
+      return true;
     } catch (err: any) {
-      // Non-fatal — messaging can still work; delivery receipts may be delayed.
       this.logger.warn(`WABA subscribe error (waba=${wabaId}): ${err?.name || 'network'}`);
+      return false;
     }
   }
 
   /**
-   * Registers the business phone for Cloud API. PIN is optional for numbers
-   * that were just verified inside Embedded Signup.
+   * Registers the business phone for Cloud API messaging. Meta requires a
+   * 6-digit PIN (it becomes the number's two-step verification PIN).
    */
   async registerPhoneNumber(
     accessToken: string,
     phoneNumberId: string,
-    pin?: string,
-  ): Promise<void> {
+    pin: string,
+  ): Promise<{ ok: boolean; error?: string }> {
     try {
       const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
         method: 'POST',
@@ -352,21 +456,48 @@ export class WhatsAppIntegrationService {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          ...(pin ? { pin } : {}),
-        }),
+        body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
       });
-      if (!res.ok) {
-        const body: any = await res.json().catch(() => null);
-        // Already registered is fine.
-        const msg = String(body?.error?.message || '');
-        if (/already registered/i.test(msg) || body?.error?.code === 100) return;
-        this.logger.warn(`Phone register warning (phone=${phoneNumberId}): code=${body?.error?.code ?? res.status}`);
+      if (res.ok) return { ok: true };
+      const body: any = await res.json().catch(() => null);
+      const code = Number(body?.error?.code);
+      this.logger.warn(`Phone register failed (phone=${phoneNumberId}): code=${code || res.status}`);
+      if (code === 133005) {
+        return { ok: false, error: 'That PIN does not match the two-step verification PIN already set on this number.' };
       }
-    } catch (err: any) {
-      this.logger.warn(`Phone register error (phone=${phoneNumberId}): ${err?.name || 'network'}`);
+      if (code === 133016 || code === 133009) {
+        return { ok: false, error: 'Too many registration attempts for this number. Please wait and try again later.' };
+      }
+      return { ok: false, error: describeWhatsAppError(body?.error, res.status) };
+    } catch {
+      return { ok: false, error: WHATSAPP_NETWORK_ERROR };
     }
+  }
+
+  /** Registers the workspace's connected number with Cloud API and records the result. */
+  async registerConnectedPhone(tenantId: string, pin: string): Promise<{ phoneRegistered: true }> {
+    const creds = await this.getCredentials(tenantId);
+    if (!creds) throw new BadRequestException(WHATSAPP_NOT_CONNECTED_MESSAGE);
+    const result = await this.registerPhoneNumber(creds.accessToken, creds.phoneNumberId, pin);
+    if (!result.ok) throw new BadRequestException(result.error || 'Could not register this phone number.');
+
+    const integration = await this.prisma.integration.findFirst({
+      where: { tenantId, type: 'WHATSAPP' },
+      select: { id: true, metadata: true },
+    });
+    if (integration) {
+      await this.prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          metadata: {
+            ...((integration.metadata as Record<string, any>) || {}),
+            phoneRegistered: true,
+            phoneRegisteredAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
+    return { phoneRegistered: true };
   }
 
   /** Validates credentials against the live Graph API and returns the phone info. */

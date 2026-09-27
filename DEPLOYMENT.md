@@ -228,8 +228,8 @@ client secret.
 | `RAZORPAY_KEY_ID` / `_SECRET` | For payments (India) | Checkout unavailable |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | For payments (intl) | Checkout + webhooks unavailable |
 | `META_WEBHOOK_VERIFY_TOKEN` | For WhatsApp | Meta webhook handshake fails |
-| `META_APP_ID` | WhatsApp Embedded Signup | “Continue with Meta” unavailable |
-| `META_APP_SECRET` | WhatsApp Embedded Signup | Token exchange / webhook signatures fail |
+| `META_APP_ID` | WhatsApp Embedded Signup | “Continue with Meta” disabled (dialog names the missing variable) |
+| `META_APP_SECRET` | WhatsApp Embedded Signup | Token exchange, `debug_token` validation, and webhook signatures fail |
 | `META_EMBEDDED_SIGNUP_CONFIG_ID` | WhatsApp Embedded Signup | Meta login dialog cannot launch |
 
 Sources:
@@ -245,7 +245,8 @@ Sources:
   returns `RESEND_OAUTH_CLIENT_ID`.
 - Google Cloud Console: Calendar OAuth client ID and secret.
 - Razorpay/Stripe dashboards: live keys and webhook signing secrets.
-- Meta Developer dashboard: WhatsApp webhook verify token.
+- Meta Developer dashboard: WhatsApp App ID, App Secret, Embedded Signup
+  config ID, and webhook verify token — see "Meta WhatsApp setup" below.
 
 `ENCRYPTION_KEY` warning: rotating it orphans every already-encrypted
 integration credential. To rotate safely, move the old value into
@@ -287,8 +288,8 @@ curl https://<backend-project>.vercel.app/health
 # 2. Vercel proxy reaches the API (this is the endpoint that was 503ing)
 curl https://doloyal.com/backend/health
 
-# 3. Apex is canonical (www should 30x to apex, not the reverse)
-curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://www.doloyal.com
+# 3. www is canonical (apex 308-redirects to https://www.doloyal.com/)
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://doloyal.com
 ```
 
 Step 2 returning the same JSON as step 1 means the original dashboard failure
@@ -301,3 +302,58 @@ verification receives the provider payload without an extra proxy hop:
 Stripe:   https://<backend-project>.vercel.app/integrations/webhook/stripe
 WhatsApp: https://<backend-project>.vercel.app/integrations/webhook/whatsapp
 ```
+
+The same-origin proxy URL also works for WhatsApp (it forwards the raw body
+and `x-hub-signature-256` unchanged):
+`https://www.doloyal.com/backend/integrations/webhook/whatsapp`. Always use the
+`www` host — Meta does not follow the apex → www redirect.
+
+---
+
+## Meta WhatsApp setup
+
+"Continue with Meta" stays disabled (with the missing variable names shown in
+the connect dialog) until the API project has all three Embedded Signup
+variables and the App ID / App Secret pair is confirmed with Meta. Advanced
+credentials (access token + Phone Number ID) keep working either way.
+
+In [Meta App Dashboard](https://developers.facebook.com/apps) (a Business-type
+app with the WhatsApp and Facebook Login for Business products):
+
+1. **App settings → Basic**
+   - Copy **App ID** → `META_APP_ID` and **App secret** (Show) → `META_APP_SECRET`.
+   - App domains: `doloyal.com`, `www.doloyal.com`.
+   - Privacy Policy URL `https://www.doloyal.com/privacy-policy`, Terms URL
+     `https://www.doloyal.com/terms`, User data deletion
+     `https://www.doloyal.com/data-deletion`.
+2. **Facebook Login for Business → Settings**
+   - Client OAuth login, Web OAuth login, and **Login with the JavaScript SDK**: Yes.
+   - Valid OAuth Redirect URIs and **Allowed Domains for the JavaScript SDK**:
+     `https://www.doloyal.com/` (add `https://doloyal.com/` too if the apex
+     redirect is ever removed).
+3. **Facebook Login for Business → Configurations → Create configuration**
+   - Login variation: **WhatsApp Embedded Signup**.
+   - Assets: WhatsApp accounts; permissions `whatsapp_business_management`
+     and `whatsapp_business_messaging`.
+   - Copy the **Configuration ID** → `META_EMBEDDED_SIGNUP_CONFIG_ID`.
+4. **WhatsApp → Configuration → Webhook**
+   - Callback URL: `https://www.doloyal.com/backend/integrations/webhook/whatsapp`.
+   - Verify token: any random string (`openssl rand -hex 24`) → `META_WEBHOOK_VERIFY_TOKEN`.
+   - Subscribe to the `messages` field.
+5. **App Review**: request Advanced Access for `whatsapp_business_management`
+   and `whatsapp_business_messaging`. Until approved (and the app is Live),
+   only people with a role on the app can complete Embedded Signup.
+
+Set the four `META_*` variables on the **API** Vercel project (the one the web
+project's `API_BASE_URL` points to), Production scope, then redeploy the API.
+Never set them on the web project or with a `NEXT_PUBLIC_` prefix.
+
+Checks after redeploy:
+
+```bash
+# Handshake: echoes the challenge only when the verify token matches (else 403).
+curl "https://www.doloyal.com/backend/integrations/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=<META_WEBHOOK_VERIFY_TOKEN>&hub.challenge=ok"
+```
+
+Then open Integrations → WhatsApp: "Continue with Meta" should be enabled. If
+the dialog says the App ID / App Secret do not match, re-copy both from step 1.

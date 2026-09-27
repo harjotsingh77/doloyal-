@@ -43,6 +43,7 @@ import {
 } from "@doloyal/ui";
 import { api } from "@/lib/api";
 import { getApiBaseUrl } from "@/lib/api-base";
+import { launchWhatsAppEmbeddedSignup, loadFacebookSdk } from "@/lib/whatsapp-embedded-signup";
 import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 import { IntegrationCard } from "@/components/integrations/integration-card";
@@ -141,12 +142,21 @@ export default function IntegrationsPage() {
   const [whatsappAdvanced, setWhatsappAdvanced] = React.useState(false);
   const [whatsappMetaStatus, setWhatsappMetaStatus] = React.useState<{
     embeddedSignupAvailable: boolean;
-    metaAppId?: string | null;
-    embeddedSignupConfigId?: string | null;
-    graphVersion?: string;
+    problem?: string | null;
   } | null>(null);
+  const [whatsappSignup, setWhatsappSignup] = React.useState<{
+    state: string;
+    expiresAt: number;
+    configId: string;
+  } | null>(null);
+  const [whatsappMetaReady, setWhatsappMetaReady] = React.useState(false);
+  const [whatsappMetaPrepError, setWhatsappMetaPrepError] = React.useState<string | null>(null);
   const [whatsappConnectError, setWhatsappConnectError] = React.useState<string | null>(null);
   const [whatsappWebhookConfigured, setWhatsappWebhookConfigured] = React.useState<boolean | null>(null);
+  const [whatsappPhoneRegistered, setWhatsappPhoneRegistered] = React.useState<boolean | null>(null);
+  const [whatsappPin, setWhatsappPin] = React.useState("");
+  const [whatsappPinError, setWhatsappPinError] = React.useState<string | null>(null);
+  const [registeringPhone, setRegisteringPhone] = React.useState(false);
   const [connecting, setConnecting] = React.useState<string | null>(null);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [syncing, setSyncing] = React.useState<string | null>(null);
@@ -219,10 +229,14 @@ export default function IntegrationsPage() {
     if (detailDialog?.toUpperCase() !== "WHATSAPP") return;
     let cancelled = false;
     setWhatsappWebhookConfigured(null);
+    setWhatsappPin("");
+    setWhatsappPinError(null);
     api
       .getWhatsAppStatus()
       .then((s) => {
-        if (!cancelled) setWhatsappWebhookConfigured(Boolean(s.webhookConfigured));
+        if (cancelled) return;
+        setWhatsappWebhookConfigured(Boolean(s.webhookConfigured));
+        setWhatsappPhoneRegistered(typeof s.phoneRegistered === "boolean" ? s.phoneRegistered : null);
       })
       .catch(() => undefined);
     return () => {
@@ -236,7 +250,7 @@ export default function IntegrationsPage() {
   };
 
   const waEmbedded = Boolean(whatsappMetaStatus?.embeddedSignupAvailable);
-  const waShowForm = whatsappAdvanced || !waEmbedded;
+  const waShowForm = whatsappAdvanced || (whatsappMetaStatus != null && !waEmbedded);
 
   React.useEffect(() => {
     setWhatsappConnectError(null);
@@ -274,17 +288,21 @@ export default function IntegrationsPage() {
     // WhatsApp uses Embedded Signup (Meta login) in-dialog — do not route to classic OAuth.
     if (type.toUpperCase() === "WHATSAPP") {
       setConnectDialog(type);
+      setWhatsappMetaStatus(null);
       api.getWhatsAppStatus()
-        .then((s) =>
+        .then((s) => {
+          const available = Boolean(s.embeddedSignupAvailable);
           setWhatsappMetaStatus({
-            embeddedSignupAvailable: Boolean(s.embeddedSignupAvailable),
-            metaAppId: s.metaAppId,
-            embeddedSignupConfigId: s.embeddedSignupConfigId,
-            graphVersion: s.graphVersion,
+            embeddedSignupAvailable: available,
+            problem: available ? null : s.embeddedSignupProblem || "Meta login is not available right now.",
+          });
+          if (available) void prepareWhatsAppMetaLogin();
+        })
+        .catch((err: any) =>
+          setWhatsappMetaStatus({
+            embeddedSignupAvailable: false,
+            problem: err?.message || "Could not check Meta login availability.",
           }),
-        )
-        .catch(() =>
-          setWhatsappMetaStatus({ embeddedSignupAvailable: false }),
         );
       return;
     }
@@ -417,43 +435,83 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleWhatsAppMetaLogin = async () => {
-    const appId = whatsappMetaStatus?.metaAppId;
-    const configId = whatsappMetaStatus?.embeddedSignupConfigId;
-    if (!appId || !configId) {
-      toast.error(
-        "Meta login is not configured yet. Add META_APP_ID, META_APP_SECRET, and META_EMBEDDED_SIGNUP_CONFIG_ID, or use Advanced credentials.",
-      );
-      setWhatsappAdvanced(true);
+  /** Fetches a signed signup session and preloads the Meta SDK so the click can open the popup directly. */
+  const prepareWhatsAppMetaLogin = async () => {
+    setWhatsappMetaReady(false);
+    setWhatsappMetaPrepError(null);
+    try {
+      const session = await api.startWhatsAppEmbeddedSignup();
+      await loadFacebookSdk(session.appId, session.graphVersion || "v21.0");
+      setWhatsappSignup({
+        state: session.state,
+        expiresAt: new Date(session.expiresAt).getTime(),
+        configId: session.configId,
+      });
+      setWhatsappMetaReady(true);
+    } catch (err: any) {
+      setWhatsappSignup(null);
+      setWhatsappMetaPrepError(err?.message || "Could not start Meta login.");
+    }
+  };
+
+  const handleWhatsAppMetaLogin = () => {
+    const signup = whatsappSignup;
+    if (!signup || !whatsappMetaReady || signup.expiresAt - Date.now() < 60_000) {
+      void prepareWhatsAppMetaLogin();
+      setWhatsappConnectError("Meta login is still getting ready. Please click Continue with Meta again in a moment.");
       return;
     }
-    setConnecting("WHATSAPP");
     setWhatsappConnectError(null);
+    // FB.login must run synchronously inside this click so the Meta popup isn't blocked.
+    const login = launchWhatsAppEmbeddedSignup({ configId: signup.configId });
+    setConnecting("WHATSAPP");
+    setWhatsappSignup(null);
+    setWhatsappMetaReady(false);
+
+    void (async () => {
+      try {
+        const { code, session } = await login;
+        const result = await api.completeWhatsAppEmbeddedSignup({
+          state: signup.state,
+          code,
+          phoneNumberId: session.phoneNumberId,
+          wabaId: session.wabaId,
+          businessId: session.businessId,
+        });
+        setIntegrations((prev) => ({ ...prev, whatsapp: result }));
+        setWhatsappPhoneRegistered(typeof result?.phoneRegistered === "boolean" ? result.phoneRegistered : null);
+        clearConnectForm();
+        toast.success("WhatsApp Business account connected successfully");
+        setConnectDialog(null);
+        setDetailDialog("WHATSAPP");
+      } catch (err: any) {
+        const reason = whatsappFailureText(err);
+        setWhatsappConnectError(reason);
+        toast.error("WhatsApp connection failed.", { description: reason });
+        void prepareWhatsAppMetaLogin();
+      } finally {
+        setConnecting(null);
+      }
+    })();
+  };
+
+  const handleRegisterWhatsAppPhone = async () => {
+    const pin = whatsappPin.trim();
+    if (!/^\d{6}$/.test(pin)) {
+      setWhatsappPinError("Enter a 6-digit PIN.");
+      return;
+    }
+    setRegisteringPhone(true);
+    setWhatsappPinError(null);
     try {
-      const { launchWhatsAppEmbeddedSignup } = await import("@/lib/whatsapp-embedded-signup");
-      const { code, session } = await launchWhatsAppEmbeddedSignup({
-        appId,
-        configId,
-        graphVersion: whatsappMetaStatus?.graphVersion || "v21.0",
-      });
-      const result = await api.completeWhatsAppEmbeddedSignup({
-        code,
-        phoneNumberId: session.phoneNumberId,
-        wabaId: session.wabaId,
-        businessId: session.businessId,
-      });
-      setIntegrations((prev) => ({ ...prev, whatsapp: result }));
-      clearConnectForm();
-      toast.success("WhatsApp Business account connected successfully");
-      setConnectDialog(null);
-      setDetailDialog("WHATSAPP");
+      await api.registerWhatsAppPhone(pin);
+      setWhatsappPhoneRegistered(true);
+      setWhatsappPin("");
+      toast.success("Phone number registered for WhatsApp messaging");
     } catch (err: any) {
-      const reason = whatsappFailureText(err);
-      setWhatsappConnectError(reason);
-      toast.error("WhatsApp connection failed.", { description: reason });
-      setWhatsappAdvanced(true);
+      setWhatsappPinError(err?.message || "Could not register this phone number.");
     } finally {
-      setConnecting(null);
+      setRegisteringPhone(false);
     }
   };
 
@@ -705,7 +763,7 @@ export default function IntegrationsPage() {
                     {def.type === "WHATSAPP"
                       ? waEmbedded
                         ? "Login with Meta to connect your WhatsApp Business account, or use advanced credentials."
-                        : "Enter your WhatsApp Business Cloud API credentials to connect."
+                        : "Connect with your WhatsApp Business Cloud API credentials."
                       : def.hasOAuth
                         ? "Authorize via OAuth to connect your account."
                         : def.hasApiKey
@@ -736,20 +794,28 @@ export default function IntegrationsPage() {
                         Business account. After connecting, Doloyal can send retention messages to your existing customers.
                         Credentials are encrypted server-side and never shown again.
                       </p>
-                      {waEmbedded ? (
+                      {whatsappMetaStatus == null ? (
+                        <Button type="button" className="w-full gap-2" loading disabled>
+                          Checking Meta login…
+                        </Button>
+                      ) : waEmbedded ? (
                         <>
                           <Button
                             type="button"
                             className="w-full gap-2"
                             onClick={handleWhatsAppMetaLogin}
-                            loading={connecting === "WHATSAPP"}
-                            disabled={connecting === "WHATSAPP"}
+                            loading={connecting === "WHATSAPP" || (!whatsappMetaReady && !whatsappMetaPrepError)}
+                            disabled={connecting === "WHATSAPP" || (!whatsappMetaReady && !whatsappMetaPrepError)}
                           >
                             Continue with Meta
                           </Button>
-                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                            Opens Meta&apos;s secure WhatsApp Business signup. No access token is typed on this screen.
-                          </p>
+                          {whatsappMetaPrepError ? (
+                            <p className="text-xs text-[rgb(var(--color-danger))]">{whatsappMetaPrepError}</p>
+                          ) : (
+                            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                              Opens Meta&apos;s secure WhatsApp Business signup. No access token is typed on this screen.
+                            </p>
+                          )}
                           <button
                             type="button"
                             className="text-left text-xs font-medium text-[rgb(var(--color-primary))] hover:underline"
@@ -759,9 +825,20 @@ export default function IntegrationsPage() {
                           </button>
                         </>
                       ) : (
-                        <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
-                          Find these in Meta App Dashboard → WhatsApp → API Setup.
-                        </p>
+                        <>
+                          <Button type="button" className="w-full gap-2" disabled>
+                            Continue with Meta
+                          </Button>
+                          <div className="flex items-start gap-2 rounded-lg border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.08)] px-3 py-2 text-xs">
+                            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-warning))]" />
+                            <span className="text-[rgb(var(--color-muted-foreground))]">
+                              {whatsappMetaStatus.problem || "Meta login is not available right now."}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                            Connect with advanced credentials instead — find them in Meta App Dashboard → WhatsApp → API Setup.
+                          </p>
+                        </>
                       )}
                       {waShowForm ? (
                         <>
@@ -1055,6 +1132,37 @@ export default function IntegrationsPage() {
                           </p>
                         </div>
                       </div>
+                      {whatsappPhoneRegistered === false && (
+                        <div className="space-y-2 rounded-lg border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.08)] p-3">
+                          <p className="text-sm font-medium">Finish phone registration</p>
+                          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
+                            Meta requires this number to be registered for Cloud API before it can send messages. Choose a
+                            6-digit PIN — it becomes the number&apos;s two-step verification PIN (use the existing PIN if one is already set).
+                          </p>
+                          <div className="flex gap-2">
+                            <Input
+                              aria-label="6-digit PIN"
+                              type="password"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              maxLength={6}
+                              value={whatsappPin}
+                              onChange={(e) => {
+                                setWhatsappPin(e.target.value.replace(/\D/g, "").slice(0, 6));
+                                setWhatsappPinError(null);
+                              }}
+                              placeholder="••••••"
+                              className="max-w-[140px]"
+                            />
+                            <Button size="sm" onClick={handleRegisterWhatsAppPhone} loading={registeringPhone} disabled={registeringPhone}>
+                              Register number
+                            </Button>
+                          </div>
+                          {whatsappPinError && (
+                            <p className="text-xs text-[rgb(var(--color-danger))]">{whatsappPinError}</p>
+                          )}
+                        </div>
+                      )}
                       <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                         Access token and app secret are stored encrypted and never displayed here.
                       </p>

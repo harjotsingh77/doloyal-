@@ -6,6 +6,14 @@ import { getPublicAppUrl } from '../../common/helpers';
 import { WhatsAppIntegrationService } from './services/whatsapp.service';
 import { getIntegrationDef } from './integration-definitions';
 import { ensureWhatsAppSchema } from '../../common/whatsapp-schema';
+import {
+  assessBusinessToken,
+  createSignupState,
+  describeConfigProblem,
+  readEmbeddedSignupConfig,
+  signupStateKey,
+  verifySignupState,
+} from './services/meta-embedded-signup';
 import * as crypto from 'crypto';
 
 const p = (prisma: PrismaService) => prisma as any;
@@ -207,14 +215,52 @@ export class IntegrationsService {
   }
 
   /**
+   * Starts Meta WhatsApp Embedded Signup: checks server configuration and
+   * issues a signed, expiring state bound to this workspace + user. The
+   * browser must send it back with the Meta code to complete the connection.
+   */
+  async startWhatsAppEmbeddedSignup(tenantId: string, userId: string) {
+    const config = readEmbeddedSignupConfig();
+    const problem = describeConfigProblem(config);
+    if (problem) throw new BadRequestException(problem);
+    const appCheck = await this.whatsapp.verifyMetaApp();
+    if (!appCheck.ok) throw new BadRequestException(appCheck.error || 'Meta login is misconfigured on the server.');
+
+    const { state, expiresAt } = createSignupState(signupStateKey(), tenantId, userId);
+    return {
+      state,
+      expiresAt: new Date(expiresAt).toISOString(),
+      appId: config.appId,
+      configId: config.configId,
+      graphVersion: 'v21.0',
+    };
+  }
+
+  private readonly usedSignupNonces = new Map<string, number>();
+
+  /** Best-effort single use of a signup state on this instance; the state's expiry bounds it everywhere. */
+  private consumeSignupNonce(nonce: string, expiresAt: number): boolean {
+    const now = Date.now();
+    for (const [key, exp] of this.usedSignupNonces) {
+      if (exp < now) this.usedSignupNonces.delete(key);
+    }
+    if (this.usedSignupNonces.has(nonce)) return false;
+    this.usedSignupNonces.set(nonce, expiresAt);
+    return true;
+  }
+
+  /**
    * Completes Meta WhatsApp Embedded Signup (Facebook Login for Business).
-   * Exchanges the short-lived code, registers the phone, subscribes the WABA,
+   * Validates the signup state, exchanges the short-lived code, checks the
+   * business token (app, scopes, WABA access), confirms the phone belongs to
+   * the WABA, subscribes webhooks, registers the number (when a PIN is given),
    * then stores encrypted credentials on the tenant's WHATSAPP integration.
    */
   async completeWhatsAppEmbeddedSignup(
     tenantId: string,
     userId: string,
     input: {
+      state: string;
       code: string;
       phoneNumberId: string;
       wabaId: string;
@@ -222,45 +268,85 @@ export class IntegrationsService {
       pin?: string;
     },
   ) {
+    const config = readEmbeddedSignupConfig();
+    const problem = describeConfigProblem(config);
+    if (problem || !config.appId) throw new BadRequestException(problem || 'Meta login is not configured on the server.');
+
+    const stateCheck = verifySignupState(signupStateKey(), input.state, tenantId, userId);
+    if (!stateCheck.ok) {
+      throw new BadRequestException(
+        stateCheck.reason === 'expired'
+          ? 'This Meta login session expired. Please click Continue with Meta again.'
+          : 'This Meta login session is not valid for your workspace. Please click Continue with Meta again.',
+      );
+    }
+    if (!this.consumeSignupNonce(stateCheck.nonce, stateCheck.expiresAt)) {
+      throw new BadRequestException('This Meta login session was already used. Please click Continue with Meta again.');
+    }
+
     const code = String(input.code || '').trim();
     const phoneNumberId = String(input.phoneNumberId || '').trim();
     const wabaId = String(input.wabaId || '').trim();
-    if (!code) throw new BadRequestException('Meta login code is missing. Try Connect with Meta again.');
-    if (!phoneNumberId) throw new BadRequestException('WhatsApp Phone Number ID was not returned by Meta.');
-    if (!wabaId) throw new BadRequestException('WhatsApp Business Account ID was not returned by Meta.');
+    if (!code) throw new BadRequestException('Meta login code is missing. Please click Continue with Meta again.');
+    if (!/^\d{6,25}$/.test(phoneNumberId)) {
+      throw new BadRequestException('Meta did not return a phone number. Please finish adding a phone number in the Meta window.');
+    }
+    if (!/^\d{6,25}$/.test(wabaId)) {
+      throw new BadRequestException('Meta did not return a WhatsApp Business Account. Please try Continue with Meta again.');
+    }
 
     const { accessToken } = await this.whatsapp.exchangeEmbeddedSignupCode(code);
 
-    // Best-effort Cloud API registration + webhook subscription (Meta's required post-steps).
-    await this.whatsapp.registerPhoneNumber(accessToken, phoneNumberId, input.pin);
-    await this.whatsapp.subscribeWaba(accessToken, wabaId);
+    const tokenInfo = await this.whatsapp.debugToken(accessToken);
+    const tokenProblem = assessBusinessToken(tokenInfo, { appId: config.appId, wabaId });
+    if (tokenProblem) throw new BadRequestException(`WhatsApp connection failed. ${tokenProblem}`);
+
+    const phoneList = await this.whatsapp.listWabaPhoneNumbers(accessToken, wabaId);
+    if (!phoneList.ok) {
+      throw new BadRequestException(`WhatsApp connection failed. ${phoneList.error || 'Could not read the WhatsApp Business Account.'}`);
+    }
+    const phone = phoneList.phones?.find((p) => String(p.id) === phoneNumberId);
+    if (!phone) {
+      throw new BadRequestException(
+        'WhatsApp connection failed. The selected phone number does not belong to the selected WhatsApp Business Account.',
+      );
+    }
+
+    const webhookSubscribed = await this.whatsapp.subscribeWaba(accessToken, wabaId);
+
+    let phoneRegistered = String(phone.platform_type || '').toUpperCase() === 'CLOUD_API';
+    let registrationError: string | null = null;
+    if (!phoneRegistered && input.pin) {
+      const registration = await this.whatsapp.registerPhoneNumber(accessToken, phoneNumberId, input.pin);
+      phoneRegistered = registration.ok;
+      registrationError = registration.error || null;
+    }
 
     const verification = await this.whatsapp.verifyCredentials(accessToken, phoneNumberId);
     if (!verification.valid) {
       throw new BadRequestException(
-        `WhatsApp connection failed. ${verification.error || 'Please try Connect with Meta again.'}`,
+        `WhatsApp connection failed. ${verification.error || 'Please try Continue with Meta again.'}`,
       );
     }
 
-    // Use platform Meta App Secret for webhook signature verification when set.
-    const webhookSecret = process.env.META_APP_SECRET?.trim() || undefined;
-
-    return this.connect(tenantId, 'WHATSAPP', userId, {
+    const displayPhoneNumber = verification.displayPhoneNumber || phone.display_phone_number || undefined;
+    const verifiedName = verification.verifiedName || phone.verified_name || undefined;
+    const integration = await this.connect(tenantId, 'WHATSAPP', userId, {
       accessToken,
-      label: verification.verifiedName || 'WhatsApp Business',
-      webhookSecret,
+      label: verifiedName || 'WhatsApp Business',
       metadata: {
         phoneNumberId,
         wabaId,
         ...(input.businessId ? { businessId: String(input.businessId) } : {}),
-        ...(verification.displayPhoneNumber
-          ? { displayPhoneNumber: verification.displayPhoneNumber }
-          : {}),
-        ...(verification.verifiedName ? { verifiedName: verification.verifiedName } : {}),
+        ...(displayPhoneNumber ? { displayPhoneNumber } : {}),
+        ...(verifiedName ? { verifiedName } : {}),
+        phoneRegistered,
+        webhookSubscribed,
         connectedAt: new Date().toISOString(),
         connectedVia: 'embedded_signup',
       },
     });
+    return { ...integration, phoneRegistered, webhookSubscribed, registrationError };
   }
 
   async disconnect(tenantId: string, type: string) {

@@ -8,7 +8,7 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../../common/roles.decorator';
 import { RateLimit } from '../../common/rate-limit.guard';
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsBoolean, IsIn, MaxLength, ArrayMaxSize } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsBoolean, IsIn, MaxLength, ArrayMaxSize, Matches } from 'class-validator';
 import { INTEGRATION_DEFINITIONS } from './integration-definitions';
 
 class ConnectIntegrationDto {
@@ -47,11 +47,16 @@ class WhatsAppSendDto {
 }
 
 class WhatsAppEmbeddedSignupDto {
-  @IsString() @IsNotEmpty() code: string;
-  @IsString() @IsNotEmpty() phoneNumberId: string;
-  @IsString() @IsNotEmpty() wabaId: string;
-  @IsString() @IsOptional() businessId?: string;
-  @IsString() @IsOptional() pin?: string;
+  @IsString() @IsNotEmpty() @MaxLength(2048) state: string;
+  @IsString() @IsNotEmpty() @MaxLength(2048) code: string;
+  @IsString() @IsNotEmpty() @MaxLength(32) phoneNumberId: string;
+  @IsString() @IsNotEmpty() @MaxLength(32) wabaId: string;
+  @IsString() @IsOptional() @MaxLength(32) businessId?: string;
+  @IsOptional() @Matches(/^\d{6}$/, { message: 'PIN must be exactly 6 digits.' }) pin?: string;
+}
+
+class WhatsAppRegisterPhoneDto {
+  @Matches(/^\d{6}$/, { message: 'PIN must be exactly 6 digits.' }) pin: string;
 }
 
 @Controller('integrations')
@@ -130,6 +135,21 @@ export class IntegrationsController {
   }
 
   @Roles('OWNER', 'MANAGER')
+  @RateLimit(10, 60)
+  @Post('whatsapp/embedded-signup/start')
+  async startWhatsAppEmbeddedSignup(@CurrentUser() user: any) {
+    return this.integrationsService.startWhatsAppEmbeddedSignup(user.activeTenantId, user.id);
+  }
+
+  @Roles('OWNER', 'MANAGER')
+  @RateLimit(5, 60)
+  @Post('whatsapp/register-phone')
+  async registerWhatsAppPhone(@Body() dto: WhatsAppRegisterPhoneDto, @CurrentUser() user: any) {
+    return this.whatsappService.registerConnectedPhone(user.activeTenantId, dto.pin);
+  }
+
+  @Roles('OWNER', 'MANAGER')
+  @RateLimit(10, 60)
   @Post('whatsapp/embedded-signup')
   async completeWhatsAppEmbeddedSignup(
     @Body() dto: WhatsAppEmbeddedSignupDto,
@@ -139,6 +159,7 @@ export class IntegrationsController {
       user.activeTenantId,
       user.id,
       {
+        state: dto.state,
         code: dto.code,
         phoneNumberId: dto.phoneNumberId,
         wabaId: dto.wabaId,

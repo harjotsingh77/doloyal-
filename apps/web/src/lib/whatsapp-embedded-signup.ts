@@ -11,7 +11,7 @@ declare global {
     FB?: {
       init: (opts: Record<string, unknown>) => void;
       login: (
-        cb: (response: { authResponse?: { code?: string }; status?: string }) => void,
+        cb: (response: { authResponse?: { code?: string } | null; status?: string }) => void,
         opts: Record<string, unknown>,
       ) => void;
     };
@@ -25,51 +25,97 @@ export type EmbeddedSignupSession = {
   businessId?: string;
 };
 
+export type EmbeddedSignupMessage =
+  | { kind: "finish"; session: EmbeddedSignupSession }
+  | { kind: "failure"; message: string };
+
+/** Only Meta's own https pages may post Embedded Signup results to this window. */
+export function isMetaOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    return url.hostname === "facebook.com" || url.hostname.endsWith(".facebook.com");
+  } catch {
+    return false;
+  }
+}
+
+/** Parses a WA_EMBEDDED_SIGNUP postMessage payload (session info v3). Unrelated messages return null. */
+export function parseEmbeddedSignupMessage(data: unknown): EmbeddedSignupMessage | null {
+  let raw: any = data;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object" || raw.type !== "WA_EMBEDDED_SIGNUP") return null;
+
+  const event = String(raw.event || "").toUpperCase();
+  const info = raw.data && typeof raw.data === "object" ? raw.data : {};
+
+  if (event === "FINISH" || event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING") {
+    const phoneNumberId = String(info.phone_number_id || "").trim();
+    const wabaId = String(info.waba_id || "").trim();
+    if (!phoneNumberId || !wabaId) {
+      return { kind: "failure", message: "Meta did not return the WhatsApp number you selected. Please try again." };
+    }
+    return {
+      kind: "finish",
+      session: {
+        phoneNumberId,
+        wabaId,
+        businessId: info.business_id ? String(info.business_id) : undefined,
+      },
+    };
+  }
+  if (event === "FINISH_ONLY_WABA") {
+    return {
+      kind: "failure",
+      message: "No phone number was added in the Meta window. Please try again and add or select a WhatsApp number.",
+    };
+  }
+  if (event === "CANCEL" || event === "ERROR") {
+    if (info.error_message) {
+      return { kind: "failure", message: `Meta reported an error: ${String(info.error_message).slice(0, 200)}` };
+    }
+    return { kind: "failure", message: "Meta login was cancelled before it finished." };
+  }
+  return null;
+}
+
 let sdkPromise: Promise<void> | null = null;
 
+function initFb(appId: string, graphVersion: string) {
+  window.FB?.init({
+    appId,
+    cookie: true,
+    xfbml: false,
+    version: graphVersion.startsWith("v") ? graphVersion : `v${graphVersion}`,
+  });
+}
+
+/** Loads + initialises the FB JS SDK. Call ahead of time so the login click can open the popup immediately. */
 export function loadFacebookSdk(appId: string, graphVersion: string): Promise<void> {
   if (typeof window === "undefined") return Promise.reject(new Error("No window"));
-  if (window.FB) return Promise.resolve();
   if (sdkPromise) return sdkPromise;
 
-  sdkPromise = new Promise((resolve, reject) => {
+  sdkPromise = new Promise<void>((resolve, reject) => {
+    if (window.FB) {
+      initFb(appId, graphVersion);
+      resolve();
+      return;
+    }
     window.fbAsyncInit = () => {
       try {
-        window.FB?.init({
-          appId,
-          cookie: true,
-          xfbml: false,
-          version: graphVersion.startsWith("v") ? graphVersion : `v${graphVersion}`,
-        });
+        initFb(appId, graphVersion);
         resolve();
       } catch (err) {
         reject(err);
       }
     };
-
-    if (document.getElementById("facebook-jssdk")) {
-      // Script already injected; wait for init.
-      const started = Date.now();
-      const tick = () => {
-        if (window.FB) {
-          window.FB.init({
-            appId,
-            cookie: true,
-            xfbml: false,
-            version: graphVersion.startsWith("v") ? graphVersion : `v${graphVersion}`,
-          });
-          resolve();
-          return;
-        }
-        if (Date.now() - started > 15000) {
-          reject(new Error("Facebook SDK failed to load"));
-          return;
-        }
-        requestAnimationFrame(tick);
-      };
-      tick();
-      return;
-    }
+    if (document.getElementById("facebook-jssdk")) return;
 
     const script = document.createElement("script");
     script.id = "facebook-jssdk";
@@ -77,102 +123,78 @@ export function loadFacebookSdk(appId: string, graphVersion: string): Promise<vo
     script.defer = true;
     script.crossOrigin = "anonymous";
     script.src = "https://connect.facebook.net/en_US/sdk.js";
-    script.onerror = () => reject(new Error("Failed to load Facebook SDK"));
+    script.onerror = () => reject(new Error("Could not load Meta login. Check your connection or disable blockers for facebook.com."));
     document.body.appendChild(script);
+  }).catch((err) => {
+    sdkPromise = null;
+    throw err;
   });
 
   return sdkPromise;
 }
 
+export function isFacebookSdkReady(): boolean {
+  return typeof window !== "undefined" && Boolean(window.FB);
+}
+
 /**
- * Listens for the WA_EMBEDDED_SIGNUP message event that carries WABA + phone IDs.
- * Must be attached before launching FB.login.
+ * Opens Meta Embedded Signup. Must be called directly from a click handler
+ * after `loadFacebookSdk` has resolved — FB.login is invoked synchronously so
+ * browsers treat the popup as user-initiated.
  */
-export function waitForEmbeddedSignupSession(timeoutMs = 120_000): {
-  promise: Promise<EmbeddedSignupSession>;
-  cancel: () => void;
-} {
-  let done = false;
-  let timer: ReturnType<typeof setTimeout> | null = null;
+export function launchWhatsAppEmbeddedSignup(opts: {
+  configId: string;
+}): Promise<{ code: string; session: EmbeddedSignupSession }> {
+  if (!isFacebookSdkReady()) {
+    return Promise.reject(new Error("Meta login is still loading. Please try again in a moment."));
+  }
+  const FB = window.FB!;
 
-  const promise = new Promise<EmbeddedSignupSession>((resolve, reject) => {
-    const onMessage = (event: MessageEvent) => {
-      if (done) return;
-      if (!event.origin.includes("facebook.com") && !event.origin.includes("fb.com")) return;
+  return new Promise((resolve, reject) => {
+    let session: EmbeddedSignupSession | null = null;
+    let code: string | null = null;
+    let settled = false;
+    let sessionTimer: ReturnType<typeof setTimeout> | null = null;
 
-      try {
-        const raw = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        if (!raw || raw.type !== "WA_EMBEDDED_SIGNUP") return;
-
-        if (raw.event === "CANCEL" || raw.event === "error") {
-          done = true;
-          cleanup();
-          reject(new Error("Meta login was cancelled."));
-          return;
-        }
-
-        const phoneNumberId = String(raw?.data?.phone_number_id || "").trim();
-        const wabaId = String(raw?.data?.waba_id || "").trim();
-        const businessId = raw?.data?.business_id
-          ? String(raw.data.business_id)
-          : undefined;
-
-        if (phoneNumberId && wabaId) {
-          done = true;
-          cleanup();
-          resolve({ phoneNumberId, wabaId, businessId });
-        }
-      } catch {
-        // Ignore non-JSON / unrelated messages.
-      }
+    const finish = (error?: string) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("message", onMessage);
+      if (sessionTimer) clearTimeout(sessionTimer);
+      if (error) reject(new Error(error));
+      else resolve({ code: code!, session: session! });
     };
 
-    const cleanup = () => {
-      window.removeEventListener("message", onMessage);
-      if (timer) clearTimeout(timer);
+    const onMessage = (event: MessageEvent) => {
+      if (!isMetaOrigin(event.origin)) return;
+      const message = parseEmbeddedSignupMessage(event.data);
+      if (!message) return;
+      if (message.kind === "failure") {
+        finish(message.message);
+        return;
+      }
+      session = message.session;
+      if (code) finish();
     };
 
     window.addEventListener("message", onMessage);
-    timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      cleanup();
-      reject(new Error("Timed out waiting for Meta WhatsApp signup. Please try again."));
-    }, timeoutMs);
-  });
 
-  return {
-    promise,
-    cancel: () => {
-      done = true;
-    },
-  };
-}
-
-export async function launchWhatsAppEmbeddedSignup(opts: {
-  appId: string;
-  configId: string;
-  graphVersion?: string;
-}): Promise<{ code: string; session: EmbeddedSignupSession }> {
-  const graphVersion = opts.graphVersion || "v21.0";
-  await loadFacebookSdk(opts.appId, graphVersion);
-
-  if (!window.FB) {
-    throw new Error("Facebook SDK is unavailable.");
-  }
-
-  const sessionWait = waitForEmbeddedSignupSession();
-
-  const code = await new Promise<string>((resolve, reject) => {
-    window.FB!.login(
+    FB.login(
       (response) => {
-        const authCode = response?.authResponse?.code;
-        if (authCode) {
-          resolve(authCode);
+        code = response?.authResponse?.code || null;
+        if (!code) {
+          finish("Meta login was closed before it finished. Please try again.");
           return;
         }
-        sessionWait.cancel();
-        reject(new Error("Meta login did not return an authorization code. Please try again."));
+        if (session) {
+          finish();
+          return;
+        }
+        // The session message normally arrives first; allow a short grace period (codes expire in ~30s).
+        sessionTimer = setTimeout(
+          () => finish("Meta did not return the WhatsApp number you selected. Please try again."),
+          8_000,
+        );
       },
       {
         config_id: opts.configId,
@@ -186,7 +208,4 @@ export async function launchWhatsAppEmbeddedSignup(opts: {
       },
     );
   });
-
-  const session = await sessionWait.promise;
-  return { code, session };
 }

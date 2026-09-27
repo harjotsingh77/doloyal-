@@ -2427,6 +2427,8 @@ export const api = {
       connected: boolean;
       demoModeAvailable: boolean;
       embeddedSignupAvailable: boolean;
+      embeddedSignupProblem?: string | null;
+      phoneRegistered?: boolean | null;
       webhookConfigured?: boolean;
       metaAppId?: string | null;
       embeddedSignupConfigId?: string | null;
@@ -2439,7 +2441,14 @@ export const api = {
       label?: string | null;
     }>("/integrations/whatsapp/status", { cache: "reload" }),
 
+  startWhatsAppEmbeddedSignup: () =>
+    request<{ state: string; expiresAt: string; appId: string; configId: string; graphVersion: string }>(
+      "/integrations/whatsapp/embedded-signup/start",
+      { method: "POST", body: JSON.stringify({}) },
+    ),
+
   completeWhatsAppEmbeddedSignup: (data: {
+    state: string;
     code: string;
     phoneNumberId: string;
     wabaId: string;
@@ -2449,6 +2458,12 @@ export const api = {
     request<any>("/integrations/whatsapp/embedded-signup", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  registerWhatsAppPhone: (pin: string) =>
+    request<{ phoneRegistered: true }>("/integrations/whatsapp/register-phone", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
     }),
 
   listWhatsAppTemplates: () =>
