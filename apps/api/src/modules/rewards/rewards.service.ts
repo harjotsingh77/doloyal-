@@ -337,24 +337,39 @@ export class RewardsService {
 
   // ─── Program configs ───────────────────────────────────────────────────────
 
+  /**
+   * Seed a config row for every program type the tenant is missing. One read
+   * plus (only on first use) one insert — this used to be a sequential upsert
+   * per program type on every read of the rewards page.
+   */
   async ensurePrograms(tenantId: string) {
-    for (const programType of REWARD_PROGRAM_TYPES) {
-      await this.prisma.rewardProgramConfig.upsert({
-        where: { tenantId_programType: { tenantId, programType } },
-        create: {
-          tenantId,
-          programType,
-          enabled: false,
-          config: DEFAULT_PROGRAM_CONFIGS[programType] as any,
-        },
-        update: {},
-      });
-    }
+    const existing = await this.prisma.rewardProgramConfig.findMany({
+      where: { tenantId },
+      select: { programType: true },
+    });
+    await this.createMissingPrograms(tenantId, new Set(existing.map((r) => r.programType)));
+  }
+
+  private async createMissingPrograms(tenantId: string, present: Set<string>) {
+    const missing = REWARD_PROGRAM_TYPES.filter((programType) => !present.has(programType));
+    if (!missing.length) return false;
+    await this.prisma.rewardProgramConfig.createMany({
+      data: missing.map((programType) => ({
+        tenantId,
+        programType,
+        enabled: false,
+        config: DEFAULT_PROGRAM_CONFIGS[programType] as any,
+      })),
+      skipDuplicates: true,
+    });
+    return true;
   }
 
   async listPrograms(tenantId: string) {
-    await this.ensurePrograms(tenantId);
-    const rows = await this.prisma.rewardProgramConfig.findMany({ where: { tenantId } });
+    let rows = await this.prisma.rewardProgramConfig.findMany({ where: { tenantId } });
+    if (await this.createMissingPrograms(tenantId, new Set(rows.map((r) => r.programType)))) {
+      rows = await this.prisma.rewardProgramConfig.findMany({ where: { tenantId } });
+    }
     return rows.map((r) => ({
       id: r.id,
       tenantId: r.tenantId,

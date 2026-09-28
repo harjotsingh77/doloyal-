@@ -84,12 +84,18 @@ type RewardsBoot = {
 export default function RewardsPage() {
   const { format } = useCurrency();
   const [tab, setTab] = React.useState<string>("STANDARD");
-  const [search, setSearch] = React.useState("");
+  const [searchInput, setSearch] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Reward | null>(null);
   const [programDraft, setProgramDraft] = React.useState<Record<string, unknown>>({});
   const [savingProgram, setSavingProgram] = React.useState(false);
 
+  // Query on a debounced term so typing doesn't fire three requests per key.
+  const [search, setDebouncedSearchSource] = React.useState("");
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearchSource(searchInput), 300);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
   const category = tab !== "HISTORY" && tab !== "ALL" ? tab : undefined;
   const overviewQuery = useResource<RewardsOverview | null>({
     queryKey: ["rewards-overview"],
@@ -317,7 +323,7 @@ export default function RewardsPage() {
         <Input
           className="max-w-md pl-9"
           placeholder="Search rewards or redemptions…"
-          value={search}
+          value={searchInput}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>

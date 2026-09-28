@@ -692,13 +692,18 @@ export class LoyaltyService {
   // ─── Badges ───────────────────────────────────────────────────────────────
 
   async listBadges(tenantId: string) {
-    await this.ensureDefaultBadges(tenantId);
-    const badges = await this.prisma.loyaltyBadge.findMany({
+    const query = {
       where: { tenantId },
       include: { _count: { select: { unlocks: true } } },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'asc' as const },
       take: 100,
-    });
+    };
+    // Read first; seed the default set only for a tenant with no badges yet.
+    let badges = await this.prisma.loyaltyBadge.findMany(query);
+    if (badges.length === 0) {
+      await this.ensureDefaultBadges(tenantId);
+      badges = await this.prisma.loyaltyBadge.findMany(query);
+    }
     return badges.map((b) => ({
       id: b.id,
       name: b.name,
@@ -1738,8 +1743,10 @@ export class LoyaltyService {
   }
 
   async ensureDefaultTiers(tenantId: string) {
-    const count = await this.prisma.membershipTier.count({ where: { tenantId } });
-    if (count > 0) return this.prisma.membershipTier.findMany({ where: { tenantId }, orderBy: { rank: 'asc' } });
+    // Read directly; seed only for a tenant with no tiers yet (was a count
+    // followed by a read on every call).
+    const tiers = await this.prisma.membershipTier.findMany({ where: { tenantId }, orderBy: { rank: 'asc' } });
+    if (tiers.length > 0) return tiers;
     await this.prisma.membershipTier.createMany({
       data: [
         { tenantId, name: 'Bronze', rank: 1, minPoints: 0, pointsMultiplier: 1, color: '#CD7F32', benefits: ['Standard earning', 'Birthday bonus'], badgeLabel: 'Bronze' },

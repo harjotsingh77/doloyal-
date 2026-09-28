@@ -30,6 +30,7 @@ function userRow(overrides: Record<string, unknown> = {}) {
         createdAt: '2026-01-02T03:04:05.678',
         updatedAt: '2026-01-02T03:04:05.678',
         tenantSuspendedAt: null,
+        tenantCreatedAt: '2026-01-01T09:00:00',
       },
       {
         id: 'm-b',
@@ -39,6 +40,7 @@ function userRow(overrides: Record<string, unknown> = {}) {
         createdAt: '2026-02-02T00:00:00',
         updatedAt: '2026-02-02T00:00:00',
         tenantSuspendedAt: '2026-03-01T10:00:00',
+        tenantCreatedAt: '2026-02-01T00:00:00',
       },
     ],
     ...overrides,
@@ -91,7 +93,11 @@ describe('JwtStrategy.validate', () => {
     ]);
     // Nothing internal leaks into the principal that responses may serialize.
     expect(JSON.stringify(principal)).not.toContain('tenantSuspendedAt');
-    expect(principalTenantState(principal)).toEqual({ tenantId: 'tenant-a', suspendedAt: null });
+    expect(principalTenantState(principal)).toEqual({
+      tenantId: 'tenant-a',
+      suspendedAt: null,
+      createdAt: new Date('2026-01-01T09:00:00Z'),
+    });
     expect(principalUserRow<{ googleId: string }>(principal)?.googleId).toBe('g-1');
   });
 
@@ -118,7 +124,7 @@ describe('JwtStrategy.validate', () => {
   });
 
   it('looks up the tenant and customer for customer sessions alongside the user', async () => {
-    const tenant = { id: 'tenant-a', slug: 'olive-salon', suspendedAt: null };
+    const tenant = { id: 'tenant-a', slug: 'olive-salon', suspendedAt: null, createdAt: new Date('2026-01-01') };
     const { strategy: s, prisma } = strategy(userRow({ memberships: [] }), {
       tenant: { findUnique: vi.fn().mockResolvedValue(tenant) },
       customer: { findFirst: vi.fn().mockResolvedValue({ id: 'cust-1' }) },
@@ -127,7 +133,7 @@ describe('JwtStrategy.validate', () => {
 
     expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
       where: { id: 'tenant-a' },
-      select: { id: true, slug: true, suspendedAt: true },
+      select: { id: true, slug: true, suspendedAt: true, createdAt: true },
     });
     expect(prisma.customer.findFirst).toHaveBeenCalledWith({
       where: { tenantId: 'tenant-a', userId: USER_ID },
@@ -139,7 +145,11 @@ describe('JwtStrategy.validate', () => {
       customerId: 'cust-1',
       clientSlug: 'olive-salon',
     });
-    expect(principalTenantState(principal)).toEqual({ tenantId: 'tenant-a', suspendedAt: null });
+    expect(principalTenantState(principal)).toEqual({
+      tenantId: 'tenant-a',
+      suspendedAt: null,
+      createdAt: new Date('2026-01-01'),
+    });
   });
 
   it('still rejects a customer session whose business is gone', async () => {
@@ -150,7 +160,7 @@ describe('JwtStrategy.validate', () => {
   });
 
   it('only lets platform admins impersonate', async () => {
-    const tenant = { id: 'tenant-z', name: 'Zed Spa', suspendedAt: null };
+    const tenant = { id: 'tenant-z', name: 'Zed Spa', suspendedAt: null, createdAt: null };
     const extra = { tenant: { findUnique: vi.fn().mockResolvedValue(tenant) } };
     await expect(
       strategy(userRow(), extra).strategy.validate({ sub: USER_ID, email: 'x', tv: 3, imp: 'tenant-z' }),
@@ -163,6 +173,6 @@ describe('JwtStrategy.validate', () => {
       imp: 'tenant-z',
     });
     expect(admin).toMatchObject({ activeTenantId: 'tenant-z', isImpersonating: true, impersonatedTenantName: 'Zed Spa' });
-    expect(principalTenantState(admin)).toEqual({ tenantId: 'tenant-z', suspendedAt: null });
+    expect(principalTenantState(admin)).toEqual({ tenantId: 'tenant-z', suspendedAt: null, createdAt: null });
   });
 });

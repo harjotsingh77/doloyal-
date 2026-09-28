@@ -3,6 +3,7 @@ import { api } from "./api";
 import { getStaffAuthToken } from "./access-token";
 import { writeQuerySnapshot } from "./api-cache";
 import { TENANT_QUERY_KEY } from "./tenant-query";
+import { warmCoreLoyaltyModules } from "./loyalty-features-context";
 
 let queued = false;
 let pausedUntil = 0;
@@ -167,20 +168,38 @@ const HREF_PREFETCH: Record<string, PrefetchEntry> = {
     run: () => api.listCampaigns(),
   },
   "/app/loyalty": {
-    queryKey: ["loyalty-overview", ""],
-    run: () => api.getLoyaltyOverview(),
+    // Keys match loyalty-features-context / loyalty/page.tsx.
+    queryKey: ["loyalty-feature-flags"],
+    run: async () => {
+      const [catalog] = await Promise.all([
+        api.getFeatureFlags(),
+        api
+          .getLoyaltyOverview()
+          .then((overview) =>
+            writeQuerySnapshot(["loyalty-overview"], getStaffAuthToken(), overview),
+          )
+          .catch(() => undefined),
+      ]);
+      warmCoreLoyaltyModules(catalog);
+      return catalog;
+    },
   },
   "/app/rewards": {
-    queryKey: ["rewards-page", "STANDARD", ""],
+    // Keys match rewards/page.tsx (default tab, no search).
+    queryKey: ["rewards-lists", "STANDARD", ""],
     run: async () => {
-      const [ov, list, progs, reds] = await Promise.all([
-        api.getRewardsOverview(),
+      const [list, progs, reds] = await Promise.all([
         api.listRewards({ category: "STANDARD" }),
         api.listRewardPrograms(),
         api.getRedemptions({ page: 1, pageSize: 50 }),
+        api
+          .getRewardsOverview()
+          .then((overview) =>
+            writeQuerySnapshot(["rewards-overview"], getStaffAuthToken(), overview),
+          )
+          .catch(() => undefined),
       ]);
       return {
-        overview: ov,
         rewards: list,
         programs: progs,
         redemptions: reds.items || [],

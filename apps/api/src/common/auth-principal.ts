@@ -9,6 +9,8 @@
 export interface PrincipalTenantState {
   tenantId: string;
   suspendedAt: Date | null;
+  /** When the business was created (onboarded); dashboards start here. */
+  createdAt?: Date | null;
 }
 
 const tenantStateByPrincipal = new WeakMap<object, PrincipalTenantState>();

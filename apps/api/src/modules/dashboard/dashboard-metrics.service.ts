@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { orderCountsAsRevenue } from '../../common/customer-commerce';
+import { clampRangeToOnboarding } from './onboarding-range';
 import {
   alignPreviousBucket,
   buildPeriodBuckets,
@@ -161,6 +162,7 @@ export class DashboardMetricsService {
     metric: string,
     from?: string,
     to?: string,
+    onboardedAt?: Date | null,
   ): Promise<DashboardMetricDetail> {
     if (!isDashboardMetricId(metric)) {
       throw new BadRequestException('Unknown dashboard metric');
@@ -168,7 +170,10 @@ export class DashboardMetricsService {
     const metricId = metric as DashboardMetricId;
     const now = new Date();
     const fallbackTo = toYmd(now);
-    const range = resolveComparisonRange(from || fallbackTo, to || fallbackTo);
+    const range = clampRangeToOnboarding(
+      resolveComparisonRange(from || fallbackTo, to || fallbackTo),
+      onboardedAt,
+    );
     // Load only the tables this metric needs — the previous path always
     // pulled every customer plus 6 other full windows (~7 queries) even for
     // a simple revenue card.

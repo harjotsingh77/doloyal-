@@ -39,6 +39,7 @@ import type { DashboardMetricDetail, DashboardMetricId, DashboardOverview } from
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { useResource } from "@/lib/use-resource";
+import { useTenant } from "@/lib/tenant-query";
 import { prefetchWorkspace } from "@/lib/prefetch-workspace";
 import { writeQuerySnapshot } from "@/lib/api-cache";
 import { getStaffAuthToken } from "@/lib/access-token";
@@ -50,16 +51,23 @@ const toYMD = (d: Date | string) => {
   return date.toISOString().slice(0, 10);
 };
 
+/** The later of two YYYY-MM-DD dates (empty values are ignored). */
+const laterYMD = (a: string, b: string) => (a && b ? (a > b ? a : b) : a || b);
+
 function DateRangePicker({
   fromDate,
   toDate,
+  minDate,
   onChange,
 }: {
   fromDate: string;
   toDate: string;
+  /** Business onboarding day — nothing earlier can be selected. */
+  minDate: string;
   onChange: (from: string, to: string) => void;
 }) {
   const [activePreset, setActivePreset] = React.useState<string>("30d");
+  const today = toYMD(new Date());
 
   const handlePreset = (preset: string) => {
     setActivePreset(preset);
@@ -70,13 +78,9 @@ function DateRangePicker({
       start.setDate(end.getDate() - 7);
     } else if (preset === "30d") {
       start.setDate(end.getDate() - 30);
-    } else if (preset === "90d") {
-      start.setDate(end.getDate() - 90);
-    } else if (preset === "month") {
-      start.setDate(1);
     }
 
-    onChange(toYMD(start), toYMD(end));
+    onChange(laterYMD(toYMD(start), minDate), toYMD(end));
   };
 
   return (
@@ -85,9 +89,11 @@ function DateRangePicker({
         <input
           type="date"
           value={fromDate}
+          min={minDate || undefined}
+          max={toDate || today}
           onChange={(e) => {
             setActivePreset("custom");
-            onChange(e.target.value, toDate);
+            onChange(laterYMD(e.target.value, minDate), toDate);
           }}
           className="bg-transparent text-xs font-semibold text-[rgb(var(--color-foreground))] outline-none border-none p-0 cursor-pointer"
         />
@@ -95,9 +101,11 @@ function DateRangePicker({
         <input
           type="date"
           value={toDate}
+          min={laterYMD(fromDate, minDate) || undefined}
+          max={today}
           onChange={(e) => {
             setActivePreset("custom");
-            onChange(fromDate, e.target.value);
+            onChange(fromDate, laterYMD(e.target.value, minDate));
           }}
           className="bg-transparent text-xs font-semibold text-[rgb(var(--color-foreground))] outline-none border-none p-0 cursor-pointer"
         />
@@ -107,8 +115,6 @@ function DateRangePicker({
         {[
           { id: "7d", label: "7 Days" },
           { id: "30d", label: "30 Days" },
-          { id: "90d", label: "90 Days" },
-          { id: "month", label: "This Month" },
         ].map((p) => (
           <button
             key={p.id}
@@ -131,11 +137,15 @@ function DateRangePicker({
 export default function DashboardPage() {
   const router = useRouter();
   const { format: fmt, formatCompact: fmtCompact } = useCurrency();
+  // Data is shown from the day the business onboarded, never before it.
+  const { data: tenant } = useTenant();
+  const onboardedYMD = tenant?.createdAt ? toYMD(tenant.createdAt) : "";
 
   const defaultEnd = new Date();
   const defaultStart = new Date(defaultEnd.getTime() - 30 * 86400000);
-  const [fromDate, setFromDate] = React.useState<string>(toYMD(defaultStart));
+  const [pickedFrom, setFromDate] = React.useState<string>(toYMD(defaultStart));
   const [toDate, setToDate] = React.useState<string>(toYMD(defaultEnd));
+  const fromDate = laterYMD(pickedFrom, onboardedYMD);
   const [openMetric, setOpenMetric] = React.useState<DashboardMetricId | null>(null);
 
   const overviewQuery = useResource<DashboardOverview>({
@@ -317,6 +327,7 @@ export default function DashboardPage() {
           <DateRangePicker
             fromDate={fromDate}
             toDate={toDate}
+            minDate={onboardedYMD}
             onChange={(from, to) => {
               setFromDate(from);
               setToDate(to);

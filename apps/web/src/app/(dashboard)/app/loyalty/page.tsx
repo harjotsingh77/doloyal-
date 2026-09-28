@@ -21,12 +21,27 @@ export default function LoyaltyPage() {
   const { features, enabledKeys, loading, isEnabled, updateConfig, refresh } =
     useLoyaltyFeatures();
   const [configureKey, setConfigureKey] = React.useState<string | null>(null);
+  // Stable key: keying on the enabled modules fetched the overview twice on
+  // every visit (once with the default modules, again when the flags loaded)
+  // and never matched the sidebar prefetch.
   const overviewQuery = useResource({
-    queryKey: ["loyalty-overview", Array.from(enabledKeys).sort().join(",")],
+    queryKey: ["loyalty-overview"],
     queryFn: () => api.getLoyaltyOverview().catch(() => null),
     scopes: ["loyalty", "rewards", "customers", "orders"],
   });
   const overview = overviewQuery.data ?? null;
+
+  // Enabling or disabling a module changes the overview; refresh it then.
+  const enabledSignature = Array.from(enabledKeys).sort().join(",");
+  const lastSignature = React.useRef<string | null>(null);
+  const refetchOverview = overviewQuery.refetch;
+  React.useEffect(() => {
+    if (loading) return;
+    if (lastSignature.current !== null && lastSignature.current !== enabledSignature) {
+      void refetchOverview();
+    }
+    lastSignature.current = enabledSignature;
+  }, [loading, enabledSignature, refetchOverview]);
 
   const ordered = React.useMemo(() => {
     const defs = getOrderedLoyaltyPageFeatures(enabledKeys);

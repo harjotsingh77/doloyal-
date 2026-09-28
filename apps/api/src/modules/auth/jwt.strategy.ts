@@ -44,7 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       isCustomer && payload.tid
         ? this.prisma.tenant.findUnique({
             where: { id: payload.tid },
-            select: { id: true, slug: true, suspendedAt: true },
+            select: { id: true, slug: true, suspendedAt: true, createdAt: true },
           })
         : null,
       isCustomer && payload.tid
@@ -56,7 +56,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       !isCustomer && payload.imp
         ? this.prisma.tenant.findUnique({
             where: { id: payload.imp },
-            select: { id: true, name: true, suspendedAt: true },
+            select: { id: true, name: true, suspendedAt: true, createdAt: true },
           })
         : null,
     ]);
@@ -94,7 +94,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         clientSlug: payload.slug || tenant.slug,
         isImpersonating: false,
       };
-      rememberPrincipalTenant(principal, { tenantId: tenant.id, suspendedAt: tenant.suspendedAt });
+      rememberPrincipalTenant(principal, {
+        tenantId: tenant.id,
+        suspendedAt: tenant.suspendedAt,
+        createdAt: tenant.createdAt,
+      });
       return principal;
     }
 
@@ -132,7 +136,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         impersonatedTenantId: tenant.id,
         impersonatedTenantName: tenant.name,
       };
-      rememberPrincipalTenant(principal, { tenantId: tenant.id, suspendedAt: tenant.suspendedAt });
+      rememberPrincipalTenant(principal, {
+        tenantId: tenant.id,
+        suspendedAt: tenant.suspendedAt,
+        createdAt: tenant.createdAt,
+      });
       rememberPrincipalUserRow(principal, user);
       return principal;
     }
@@ -159,6 +167,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       rememberPrincipalTenant(principal, {
         tenantId: activeMembership.tenantId,
         suspendedAt: user.tenantSuspendedAt.get(activeMembership.tenantId) ?? null,
+        createdAt: user.tenantCreatedAt.get(activeMembership.tenantId) ?? null,
       });
     }
     // GET /auth/me maps this same row instead of reading it again.
@@ -182,7 +191,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         where: { id: userId },
         include: { memberships: true },
       });
-      return user ? { ...user, tenantSuspendedAt: new Map() } : null;
+      return user ? { ...user, tenantSuspendedAt: new Map(), tenantCreatedAt: new Map() } : null;
     }
 
     const rows = await this.prisma.$queryRaw<PrincipalUserRow[]>`
@@ -198,7 +207,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             'role', m.role,
             'createdAt', m."createdAt",
             'updatedAt', m."updatedAt",
-            'tenantSuspendedAt', (SELECT t."suspendedAt" FROM "Tenant" t WHERE t.id = m."tenantId")
+            'tenantSuspendedAt', (SELECT t."suspendedAt" FROM "Tenant" t WHERE t.id = m."tenantId"),
+            'tenantCreatedAt', (SELECT t."createdAt" FROM "Tenant" t WHERE t.id = m."tenantId")
           )), '[]'::json)
           FROM "Membership" m
           WHERE m."userId" = u.id
@@ -210,8 +220,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!row) return null;
 
     const tenantSuspendedAt = new Map<string, Date | null>();
+    const tenantCreatedAt = new Map<string, Date | null>();
     const memberships = (row.memberships ?? []).map((m) => {
       tenantSuspendedAt.set(m.tenantId, parseDbTimestamp(m.tenantSuspendedAt));
+      tenantCreatedAt.set(m.tenantId, parseDbTimestamp(m.tenantCreatedAt));
       return {
         id: m.id,
         userId: m.userId,
@@ -237,6 +249,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       clerkId: row.clerkId,
       memberships,
       tenantSuspendedAt,
+      tenantCreatedAt,
     };
   }
 }
@@ -267,9 +280,11 @@ type PrincipalUser = {
   memberships: PrincipalMembership[];
   /** tenantId → that tenant's suspendedAt, for every membership. */
   tenantSuspendedAt: Map<string, Date | null>;
+  /** tenantId → when that tenant was created (onboarded). */
+  tenantCreatedAt: Map<string, Date | null>;
 };
 
-type PrincipalUserRow = Omit<PrincipalUser, 'memberships' | 'tenantSuspendedAt' | 'adminRole'> & {
+type PrincipalUserRow = Omit<PrincipalUser, 'memberships' | 'tenantSuspendedAt' | 'tenantCreatedAt' | 'adminRole'> & {
   adminRole: string | null;
   memberships: Array<{
     id: string;
@@ -279,6 +294,7 @@ type PrincipalUserRow = Omit<PrincipalUser, 'memberships' | 'tenantSuspendedAt' 
     createdAt: string;
     updatedAt: string;
     tenantSuspendedAt: string | null;
+    tenantCreatedAt: string | null;
   }> | null;
 };
 

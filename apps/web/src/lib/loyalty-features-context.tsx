@@ -31,6 +31,16 @@ export function LoyaltyFeaturesProvider({ children }: { children: React.ReactNod
 
   const [local, setLocal] = React.useState<FeatureFlagCatalogResponse | null>(null);
 
+  // Program Settings and Leaderboard are always on, but their modules only
+  // mount once the flags above resolve. Start their requests now so they run
+  // alongside the flags instead of after them; the modules pick them up from
+  // the shared in-flight request / page cache.
+  React.useEffect(() => {
+    warmCoreLoyaltyModules(catalogQuery.data ?? null);
+    // Mount only: later catalog changes re-render the modules, which fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   React.useEffect(() => {
     if (catalogQuery.data) setLocal(catalogQuery.data);
   }, [catalogQuery.data]);
@@ -91,6 +101,22 @@ export function LoyaltyFeaturesProvider({ children }: { children: React.ReactNod
   );
 
   return <FeaturesContext.Provider value={value}>{children}</FeaturesContext.Provider>;
+}
+
+/** Same requests the always-on modules make on mount (see core-modules.tsx). */
+export function warmCoreLoyaltyModules(catalog: FeatureFlagCatalogResponse | null) {
+  const cfg = (catalog?.features.find((f) => f.key === "leaderboard")?.config ?? {}) as Record<
+    string,
+    unknown
+  >;
+  void api.getLoyaltyConfig().catch(() => undefined);
+  void api
+    .getLoyaltyLeaderboard({
+      period: String(cfg.period || "monthly"),
+      metric: String(cfg.metric || "points"),
+      limit: Number(cfg.topCount || 10),
+    })
+    .catch(() => undefined);
 }
 
 export function useLoyaltyFeatures() {

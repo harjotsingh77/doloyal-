@@ -7,6 +7,7 @@ import {
   prismaActivityToShared,
 } from '../../common/helpers';
 import { resolveOverviewRange } from '@doloyal/shared';
+import { clampRangeToOnboarding } from './onboarding-range';
 
 interface TopServiceRow {
   service: string;
@@ -26,9 +27,10 @@ export class DashboardService {
   async getOverview(
     tenantId: string,
     query?: { days?: string; from?: string; to?: string },
+    onboardedAt?: Date | null,
   ) {
     const now = new Date();
-    const range = resolveOverviewRange(query);
+    const range = clampRangeToOnboarding(resolveOverviewRange(query), onboardedAt);
     const fromDate = range.currentFrom;
     const toDate = range.currentTo;
     const numDays = range.inclusiveDays;
