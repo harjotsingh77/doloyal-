@@ -3,6 +3,20 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Production API origin, when known at build time. `/backend/*` is then
+ * proxied by Vercel's edge (an external rewrite) instead of invoking the
+ * `app/backend/[...path]` route handler, which put a second serverless hop
+ * (and its cold start) in front of every API call. Without it the route
+ * handler still serves `/backend` and reads API_BASE_URL at request time.
+ */
+function apiRewriteOrigin() {
+  if (process.env.NODE_ENV !== "production") return null;
+  const raw = (process.env.API_BASE_URL || "").replace(/\/+$/, "");
+  if (!/^https:\/\//.test(raw) || /localhost|127\.0\.0\.1/.test(raw)) return null;
+  return raw;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack(config) {
@@ -38,6 +52,13 @@ const nextConfig = {
     ];
   },
   transpilePackages: ["@doloyal/ui", "@doloyal/shared"],
+  async rewrites() {
+    const origin = apiRewriteOrigin();
+    if (!origin) return [];
+    return {
+      beforeFiles: [{ source: "/backend/:path*", destination: `${origin}/:path*` }],
+    };
+  },
   async redirects() {
     return [
       {

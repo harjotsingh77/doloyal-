@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bot,
@@ -40,7 +40,7 @@ import { useBranch } from "@/lib/branch-context";
 import { useAuth } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant-query";
 import { getBusinessDisplayName, getBrandLogo, getBrandShortName } from "@/lib/branding";
-import { prefetchHref, pausePrefetch } from "@/lib/prefetch-workspace";
+import { prefetchHref } from "@/lib/prefetch-workspace";
 
 /**
  * Explicit icon registry for nav items referenced by name in
@@ -117,6 +117,7 @@ export const Sidebar = React.memo(function Sidebar({
   onMobileClose,
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { mode, workspaceBase, selectedBranch } = useBranch();
   const { user } = useAuth();
   // Tenant branding: custom logo/name when the business set one, otherwise
@@ -125,6 +126,28 @@ export const Sidebar = React.memo(function Sidebar({
   const brandName = getBusinessDisplayName(tenant);
   const brandShortName = getBrandShortName(tenant);
   const brandLogo = getBrandLogo(tenant);
+
+  // Links do not prefetch on render (that loaded every page's code and RSC
+  // payload on each dashboard load). A page's code and data are warmed only
+  // once the pointer rests on its link, or immediately on press.
+  const intentTimer = React.useRef<number | undefined>(undefined);
+  const warmNow = React.useCallback(
+    (appHref: string, href: string) => {
+      window.clearTimeout(intentTimer.current);
+      router.prefetch(href);
+      prefetchHref(appHref);
+    },
+    [router],
+  );
+  const warmOnIntent = React.useCallback(
+    (appHref: string, href: string) => {
+      window.clearTimeout(intentTimer.current);
+      intentTimer.current = window.setTimeout(() => warmNow(appHref, href), 150);
+    },
+    [warmNow],
+  );
+  const cancelWarm = React.useCallback(() => window.clearTimeout(intentTimer.current), []);
+  React.useEffect(() => cancelWarm, [cancelWarm]);
 
   const resolveHref = (href: string) => {
     if (mode === "branch" && selectedBranch) {
@@ -255,16 +278,16 @@ export const Sidebar = React.memo(function Sidebar({
                     <div className="relative flex items-center">
                       <Link
                         href={item.badge === "soon" ? "#" : href}
-                        prefetch={item.badge === "soon" ? undefined : true}
+                        prefetch={false}
                         onMouseEnter={() => {
-                          if (item.badge !== "soon") prefetchHref(item.href);
+                          if (item.badge !== "soon") warmOnIntent(item.href, href);
                         }}
+                        onMouseLeave={cancelWarm}
                         onPointerDown={() => {
-                          if (item.badge !== "soon") prefetchHref(item.href, true);
+                          if (item.badge !== "soon") warmNow(item.href, href);
                         }}
                         onClick={(e) => {
                           if (item.badge === "soon") e.preventDefault();
-                          else pausePrefetch(2500);
                           if (hasChildren && !collapsed) {
                             setOpenParents((prev) => ({ ...prev, [item.href]: true }));
                           }
@@ -345,16 +368,16 @@ export const Sidebar = React.memo(function Sidebar({
                               <li key={child.href}>
                                 <Link
                                   href={child.badge === "soon" ? "#" : childHref}
-                                  prefetch={child.badge === "soon" ? undefined : true}
+                                  prefetch={false}
                                   onMouseEnter={() => {
-                                    if (child.badge !== "soon") prefetchHref(child.href);
+                                    if (child.badge !== "soon") warmOnIntent(child.href, childHref);
                                   }}
+                                  onMouseLeave={cancelWarm}
                                   onPointerDown={() => {
-                                    if (child.badge !== "soon") prefetchHref(child.href, true);
+                                    if (child.badge !== "soon") warmNow(child.href, childHref);
                                   }}
                                   onClick={(e) => {
                                     if (child.badge === "soon") e.preventDefault();
-                                    else pausePrefetch(2500);
                                     onMobileClose?.();
                                   }}
                                   className={cn(

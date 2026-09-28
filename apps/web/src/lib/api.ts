@@ -2734,7 +2734,10 @@ export const api = {
     }),
 
   getSupportUnreadBadge: () =>
-    request<import("@doloyal/shared").SupportUnreadBadge>("/support/conversations/unread"),
+    // A polled badge: always ask the API (the page cache would answer for 90s).
+    request<import("@doloyal/shared").SupportUnreadBadge>("/support/conversations/unread", {
+      cache: "reload",
+    }),
 
   askDoloyal: (data: import("@doloyal/shared").AskDoloyalChatInput) =>
     request<import("@doloyal/shared").AskDoloyalChatResponse>("/support/conversations/chat", {

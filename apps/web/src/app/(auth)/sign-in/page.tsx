@@ -53,7 +53,7 @@ export default function SignInPage() {
     try {
       await login(email, password);
       // Start the dashboard data now, then switch pages without a full reload.
-      prefetchHref("/app/dashboard", true);
+      prefetchHref("/app/dashboard");
       router.replace("/app/dashboard");
     } catch (err: any) {
       setError(err?.message || "Login failed. Please try again.");

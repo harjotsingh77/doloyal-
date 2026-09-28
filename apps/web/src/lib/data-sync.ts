@@ -63,10 +63,18 @@ function bindCrossTab() {
   };
 }
 
+/**
+ * POSTs that change no workspace data. Treating them as mutations bumped the
+ * dashboard cache generation, so e.g. the session renewal on page load made
+ * every in-flight dashboard read (tenant, overview…) go to the network twice.
+ */
+const NON_MUTATING_POSTS = [/^\/auth\/refresh$/, /^\/assistant\/chat$/];
+
 export function scopesForApiPath(path: string, method = "GET"): AppDataScope[] | null {
   const verb = method.toUpperCase();
   if (verb === "GET" || verb === "HEAD" || verb === "OPTIONS") return null;
   const pathname = path.split("?")[0] || path;
+  if (NON_MUTATING_POSTS.some((re) => re.test(pathname))) return null;
   const matched = PATH_SCOPES.filter((row) => row.test.test(pathname)).flatMap((row) => row.scopes);
   if (!matched.length) return ["dashboard"];
   return Array.from(new Set(matched));

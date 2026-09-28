@@ -5,9 +5,6 @@ import { writeQuerySnapshot } from "./api-cache";
 import { TENANT_QUERY_KEY } from "./tenant-query";
 import { warmCoreLoyaltyModules } from "./loyalty-features-context";
 
-let queued = false;
-let pausedUntil = 0;
-
 /** Same default window the dashboard page uses: last 30 days as UTC YMD. */
 export function defaultDashboardRange() {
   const end = new Date();
@@ -16,77 +13,10 @@ export function defaultDashboardRange() {
   return { from: toYMD(start), to: toYMD(end) };
 }
 
-/** Pause background warm-up while the user is opening another page. */
-export function pausePrefetch(ms = 2500) {
-  pausedUntil = Date.now() + ms;
-}
-
 async function warm(queryKey: QueryKey, run: () => Promise<unknown>) {
   const data = await run();
   writeQuerySnapshot(queryKey, getStaffAuthToken(), data);
   return data;
-}
-
-/**
- * Warm a short list of sidebar destinations, one request at a time,
- * only after the current page has painted. Skips work that would fight
- * the active navigation for bandwidth / DB connections.
- */
-export function prefetchWorkspace() {
-  if (queued || typeof window === "undefined") return;
-  queued = true;
-  const range = defaultDashboardRange();
-  const jobs: Array<() => Promise<unknown>> = [
-    () => warm([...TENANT_QUERY_KEY], () => api.getTenant()),
-    () => warm(["customers", "", "ALL", "ALL"], () => api.listCustomers({ limit: 50 })),
-    () => warm(["campaigns"], () => api.listCampaigns()),
-    () => warm(["membership-tiers"], () => api.getTiers()),
-    () => warm(["appointments", "ALL", "", ""], () => api.listAppointments()),
-    () => warm(["invoices-page", "ALL"], () => api.listInvoices()),
-    () =>
-      api.listBookingLinks().then((links) => {
-        const token = getStaffAuthToken();
-        writeQuerySnapshot(["client-page-booking-links"], token, links);
-        writeQuerySnapshot(["booking-links"], token, links);
-        return links;
-      }),
-    () =>
-      warm(["dashboard-overview", range.from, range.to], () =>
-        api.getDashboardOverview({ from: range.from, to: range.to }),
-      ),
-    () => {
-      const entry = HREF_PREFETCH["/app/customers/products"];
-      const key = typeof entry.queryKey === "function" ? entry.queryKey() : entry.queryKey;
-      return warm(key, entry.run);
-    },
-    () => {
-      const entry = HREF_PREFETCH["/app/customers/orders"];
-      const key = typeof entry.queryKey === "function" ? entry.queryKey() : entry.queryKey;
-      return warm(key, entry.run);
-    },
-    () => {
-      const entry = HREF_PREFETCH["/app/reviews"];
-      const key = typeof entry.queryKey === "function" ? entry.queryKey() : entry.queryKey;
-      return warm(key, entry.run);
-    },
-  ];
-  const run = (index: number) => {
-    if (index >= jobs.length) return;
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-      window.setTimeout(() => run(index), 1000);
-      return;
-    }
-    if (Date.now() < pausedUntil) {
-      window.setTimeout(() => run(index), Math.max(200, pausedUntil - Date.now()));
-      return;
-    }
-    jobs[index]()
-      .catch(() => undefined)
-      .finally(() => {
-        window.setTimeout(() => run(index + 1), 450);
-      });
-  };
-  window.setTimeout(() => run(0), 1200);
 }
 
 type PrefetchEntry = {
@@ -343,47 +273,23 @@ const HREF_PREFETCH: Record<string, PrefetchEntry> = {
 /**
  * Prefetch destination data into both the GET cache and the React Query
  * snapshot store so the target page can paint without a loading gate.
- *
- * @param immediate — run now (pointerdown/click). Hover uses idle scheduling.
+ * Callers decide when: the sidebar waits for hover intent or a press, so
+ * sweeping the pointer across the menu does not fire every page's requests.
  */
-export function prefetchHref(href: string, immediate = false) {
+export function prefetchHref(href: string) {
   const entry = HREF_PREFETCH[href];
   if (!entry) return;
-  pausePrefetch(immediate ? 800 : 1200);
-
   const key = typeof entry.queryKey === "function" ? entry.queryKey() : entry.queryKey;
-  const exec = () => {
-    void warm(key, entry.run).catch(() => undefined);
-  };
-
-  if (immediate) {
-    exec();
-    return;
-  }
-
-  const schedule =
-    typeof window !== "undefined" && "requestIdleCallback" in window
-      ? (cb: () => void) =>
-          (
-            window as Window & {
-              requestIdleCallback: (fn: () => void, opts?: { timeout: number }) => number;
-            }
-          ).requestIdleCallback(cb, { timeout: 400 })
-      : (cb: () => void) => window.setTimeout(cb, 60);
-  schedule(exec);
+  void warm(key, entry.run).catch(() => undefined);
 }
 
-/** Warm tenant + booking links as soon as the app shell mounts. */
+/**
+ * Warm the tenant as soon as the app shell mounts (sidebar, currency and
+ * branding all read it). Other pages load their own data on visit or on
+ * sidebar hover — warming the whole workspace up front sent ~16 requests on
+ * every dashboard load and competed with the page for the DB pool.
+ */
 export function warmAppShell() {
   if (typeof window === "undefined") return;
   void warm([...TENANT_QUERY_KEY], () => api.getTenant()).catch(() => undefined);
-  // One network call → both cache keys (client-page + booking-links pages).
-  void api
-    .listBookingLinks()
-    .then((links) => {
-      const token = getStaffAuthToken();
-      writeQuerySnapshot(["client-page-booking-links"], token, links);
-      writeQuerySnapshot(["booking-links"], token, links);
-    })
-    .catch(() => undefined);
 }

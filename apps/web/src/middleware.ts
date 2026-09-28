@@ -52,5 +52,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  // `/backend/*` is the API proxy: it never needs host routing, and running
+  // middleware on it added an edge invocation to every API call.
+  matcher: ["/((?!_next/static|_next/image|backend/|favicon.ico|.*\\..*).*)"],
 };
