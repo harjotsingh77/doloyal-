@@ -2306,6 +2306,10 @@ export const api = {
 
   // Returns a new token scoped to the target workspace. The caller must store
   // it, otherwise later requests keep resolving to the previous workspace.
+  /** Renew the current (still valid) staff session. */
+  refreshSession: () =>
+    request<{ token: string }>("/auth/refresh", { method: "POST" }),
+
   switchTenant: (tenantId: string) =>
     request<{ token: string; user: AuthUser }>("/auth/switch-tenant", {
       method: "POST",

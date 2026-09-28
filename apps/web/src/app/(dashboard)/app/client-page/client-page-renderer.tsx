@@ -6,6 +6,7 @@ import { MasterClientTemplate, type MasterConfig } from "./master-template";
 import { clientPageBrand, liveCopy } from "./client-page-brand";
 import { readableTextColor } from "@/lib/branding";
 import type { HeroSlide } from "./portal-shared";
+import { siteTheme, siteThemeVars } from "./client-page-theme";
 
 type StoredSection = { id?: unknown; enabled?: unknown; hidden?: unknown; title?: unknown };
 
@@ -177,25 +178,32 @@ export function ClientPageRenderer({
   const accent = config?.brandColor && /^#[0-9a-fA-F]{6}$/.test(config.brandColor) ? config.brandColor : brand.accent;
   const accentForeground = readableTextColor(accent);
   const selectable = mode === "preview" ? onSelect : undefined;
+  const theme = siteTheme(config?.businessType);
+  const rootRef = React.useRef<HTMLDivElement>(null);
 
+  // Load the theme's typefaces into whichever document renders the page
+  // (the builder preview lives in an iframe).
   React.useEffect(() => {
-    const id = "client-site-fonts";
-    if (document.getElementById(id)) return;
-    const link = document.createElement("link");
+    const doc = rootRef.current?.ownerDocument ?? document;
+    const id = `client-site-fonts-${theme.id}`;
+    if (doc.getElementById(id)) return;
+    const link = doc.createElement("link");
     link.id = id;
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap";
-    document.head.appendChild(link);
-  }, []);
+    link.href = theme.fontHref;
+    doc.head.appendChild(link);
+  }, [theme.id, theme.fontHref]);
 
   return (
     <div
+      ref={rootRef}
       className="client-site min-h-[100dvh] overflow-x-hidden [&_[id^='portal-']]:scroll-mt-24"
       data-client-page-mode={mode}
+      data-site-theme={theme.id}
       style={{
+        ...siteThemeVars(theme),
         background: brand.background,
         color: brand.ink,
-        fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif",
         ["--site-accent" as string]: accent,
         ["--site-accent-fg" as string]: accentForeground,
         ["--site-ink" as string]: brand.ink,

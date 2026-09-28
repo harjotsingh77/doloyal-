@@ -371,6 +371,50 @@ body {
   animation-play-state: paused;
 }
 
+/* ── Public client page (booking site) ─────────────────────────────────
+   Typography, radii and surfaces come from the business-type theme
+   (client-page-theme.ts) via CSS variables on `.client-site`. */
+.client-site {
+  font-family: var(--site-body, "Outfit", ui-sans-serif, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11";
+}
+.client-site :is(h1, h2, h3) {
+  font-family: var(--site-display, inherit);
+  font-weight: var(--site-heading-weight, 600);
+  letter-spacing: var(--site-heading-tracking, -0.035em);
+  text-transform: var(--site-heading-case, none);
+  text-wrap: balance;
+}
+.client-site[data-site-theme="athletic"] :is(h1, h2, h3) {
+  font-stretch: 78%;
+  line-height: 0.98;
+}
+.client-site h4 {
+  font-family: var(--site-display, inherit);
+  letter-spacing: -0.015em;
+}
+.client-site p {
+  text-wrap: pretty;
+}
+.client-site ::selection {
+  background: color-mix(in srgb, var(--site-accent) 24%, transparent);
+}
+.client-site :is(a, button):focus-visible {
+  outline: 2px solid var(--site-accent);
+  outline-offset: 3px;
+}
+.client-site .tabular {
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.client-site[data-client-page-mode="published"]) {
+    scroll-behavior: smooth;
+  }
+}
+
 /* CookieHub: left-anchored, compact consent dialog (keeps Allow / Deny / Settings) */
 #cookiehub .ch2-dialog,
 #cookiehub .ch2-dialog-wrapper,

@@ -913,6 +913,17 @@ export class StaffService {
     },
   ) {
     const ua = parseUserAgent(opts.userAgent || '');
+    // History and profile bookkeeping are independent; run them together so
+    // sign-in isn't held up by a chain of sequential writes.
+    await Promise.all([this.recordLoginHistory(userId, tenantId, opts, ua), this.markProfileLogin(userId, tenantId, opts, ua)]);
+  }
+
+  private async recordLoginHistory(
+    userId: string,
+    tenantId: string | null,
+    opts: { successful: boolean; ip?: string; userAgent?: string },
+    ua: ReturnType<typeof parseUserAgent>,
+  ) {
     try {
       await this.prisma.loginHistory.create({
         data: {
@@ -930,13 +941,17 @@ export class StaffService {
     } catch (err) {
       console.warn('Login history write failed', err);
     }
-    if (opts.successful && tenantId) {
-      try {
-        await this.ensureProfile(userId, tenantId, 'STAFF');
-      } catch {
-        /* ignore */
-      }
-      await this.prisma.staffProfile.updateMany({
+  }
+
+  private async markProfileLogin(
+    userId: string,
+    tenantId: string | null,
+    opts: { successful: boolean; ip?: string },
+    ua: ReturnType<typeof parseUserAgent>,
+  ) {
+    if (!opts.successful || !tenantId) return;
+    const stamp = () =>
+      this.prisma.staffProfile.updateMany({
         where: { userId, tenantId },
         data: {
           isOnline: true,
@@ -948,7 +963,16 @@ export class StaffService {
           lastLoginOs: ua.os,
         },
       });
+    // The profile nearly always exists: update it directly and only create it
+    // (then update) when nothing matched.
+    const { count } = await stamp();
+    if (count > 0) return;
+    try {
+      await this.ensureProfile(userId, tenantId, 'STAFF');
+    } catch {
+      /* ignore */
     }
+    await stamp();
   }
 
   // ─── Invitations ─────────────────────────────────────────────────────────

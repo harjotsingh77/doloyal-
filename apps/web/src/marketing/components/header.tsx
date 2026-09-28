@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { hasActiveStaffSession } from "@/lib/access-token";
 import { motion, AnimatePresence, useMotionValueEvent, useScroll } from "framer-motion";
 import { ArrowRight, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,13 @@ const ALL_PAGES_MENU = [
 export function SiteHeader() {
   const [scrolled, setScrolled] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  // Signed-in visitors skip the sign-in form: "Log in" opens the dashboard.
+  // Resolved after mount (the session lives in localStorage) so server and
+  // client render the same markup.
+  const [loginHref, setLoginHref] = React.useState("/sign-in");
+  React.useEffect(() => {
+    if (hasActiveStaffSession()) setLoginHref("/app/dashboard");
+  }, []);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll();
@@ -162,7 +170,7 @@ export function SiteHeader() {
           {/* Right Action Buttons */}
           <div className="hidden items-center gap-3 md:flex">
             <Link
-              href="/sign-in"
+              href={loginHref}
               className="rounded-full px-4 py-2 text-[15px] font-semibold text-[#1F2937] transition-colors hover:text-[#2563EB]"
             >
               Log in
@@ -261,7 +269,7 @@ export function SiteHeader() {
                 </Link>
                 <div className="my-2 border-t border-gray-100" />
                 <Link
-                  href="/sign-in"
+                  href={loginHref}
                   onClick={() => setOpen(false)}
                   className="flex min-h-[44px] w-full items-center justify-center rounded-xl py-2.5 text-base font-semibold text-[#1F2937] hover:bg-gray-100/80 transition-colors"
                 >

@@ -75,7 +75,7 @@ export function LeaveReviewSection({
 
   return (
     <section id="portal-reviews" className="mx-auto max-w-[1280px] scroll-mt-8 space-y-4 px-5 py-10 sm:px-8 lg:px-10">
-      <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+      <div className="rounded-site-lg bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
         <p className="text-[13px] font-medium text-[color:var(--site-accent,#2563EB)]">From you</p>
         <h3 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[color:var(--site-ink,#171717)]">
           {title || "How did we do?"}
@@ -131,7 +131,7 @@ export function LeaveReviewSection({
       </div>
 
       {videos.length ? (
-        <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+        <div className="rounded-site-lg bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
           <h4 className="text-xl font-semibold tracking-[-0.03em]">On video</h4>
           <div className="mt-4 flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:overflow-visible">
             {videos.map((review) => (
@@ -142,7 +142,7 @@ export function LeaveReviewSection({
       ) : null}
 
       {texts.length ? (
-        <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+        <div className="rounded-site-lg bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
           <h4 className="text-xl font-semibold tracking-[-0.03em]">From other guests</h4>
           <div className="mt-4 grid gap-3">
             {texts.map((review) => (
@@ -167,7 +167,7 @@ export function LeaveReviewSection({
       ) : null}
 
       {success ? (
-        <div className="rounded-[22px] border border-black/[0.08] bg-white p-6">
+        <div className="rounded-site-md border border-black/[0.08] bg-white p-6">
           <div className="flex items-start gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-full text-white" style={{ backgroundColor: brandColor }}>
               <Check className="h-5 w-5" />
@@ -194,7 +194,7 @@ function PublicReviewCard({
 }) {
   const seed = review.customerId || review.authorName;
   return (
-    <article className={`min-w-[16rem] rounded-[24px] bg-black/[0.04] p-4 ${video ? "sm:min-w-0" : ""}`}>
+    <article className={`min-w-[16rem] rounded-site-md bg-black/[0.04] p-4 ${video ? "sm:min-w-0" : ""}`}>
       {video && review.mediaUrl ? (
         <ReviewVideoPlayer src={review.mediaUrl} poster={review.thumbnailUrl} aspect="portrait" className="mb-3" />
       ) : null}
@@ -306,7 +306,7 @@ function ReviewModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true">
       <form
         onSubmit={(e) => void submit(e)}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[22px] bg-white p-6 shadow-xl sm:rounded-[22px]"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[22px] bg-white p-6 shadow-xl sm:rounded-site-md"
       >
         <div className="flex items-start justify-between gap-3">
           <div>

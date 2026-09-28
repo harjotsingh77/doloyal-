@@ -327,7 +327,7 @@ export function SelectableBlock({
         e.stopPropagation();
         chrome.onSelect?.(sid);
       }}
-      className={`relative cursor-pointer transition duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${sid === "hero" || sid === "footer" ? "" : "rounded-[28px]"} ${isSelected ? "outline outline-[color:var(--site-accent,#2563EB)]" : "outline outline-[color:transparent] hover:outline-[color:rgba(23,23,23,.18)]"}`}
+      className={`relative cursor-pointer transition duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${sid === "hero" || sid === "footer" ? "" : "rounded-site-lg"} ${isSelected ? "outline outline-[color:var(--site-accent,#2563EB)]" : "outline outline-[color:transparent] hover:outline-[color:rgba(23,23,23,.18)]"}`}
       style={{ outlineWidth: screenPx(isSelected ? 2 : 1), outlineOffset: screenPx(3) }}
     >
       {isSelected && (

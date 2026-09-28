@@ -111,18 +111,21 @@ export class AuthService {
       );
     }
 
-    await this.staff.markLogin(user.id, activeMembership.tenantId, {
-      successful: true,
-      ...(meta || {}),
-    });
-
     const token = this.signStaffToken(user);
 
-    await this.touchSession(user.id, {
-      id: `sess-${Date.now()}`,
-      device: 'Web browser',
-      token,
-    });
+    // Independent bookkeeping writes run together; the session list was
+    // already loaded with the user above.
+    await Promise.all([
+      this.staff.markLogin(user.id, activeMembership.tenantId, {
+        successful: true,
+        ...(meta || {}),
+      }),
+      this.touchSession(
+        user.id,
+        { id: `sess-${Date.now()}`, device: 'Web browser', token },
+        user.sessions,
+      ),
+    ]);
 
     return {
       token,
@@ -516,10 +519,19 @@ export class AuthService {
     return { message: 'Logged out from all devices' };
   }
 
-  async touchSession(userId: string, session: { id: string; device: string; ip?: string; token?: string }) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return;
-    const sessions = Array.isArray(user.sessions) ? ([...(user.sessions as any[])] as any[]) : [];
+  async touchSession(
+    userId: string,
+    session: { id: string; device: string; ip?: string; token?: string },
+    /** The user's current `sessions` value, when the caller already has it. */
+    knownSessions?: unknown,
+  ) {
+    let current = knownSessions;
+    if (current === undefined) {
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { sessions: true } });
+      if (!user) return;
+      current = user.sessions;
+    }
+    const sessions = Array.isArray(current) ? ([...(current as any[])] as any[]) : [];
     const idx = sessions.findIndex((s) => s.id === session.id);
     const entry = {
       id: session.id,
@@ -535,6 +547,35 @@ export class AuthService {
       where: { id: userId },
       data: { sessions: sessions.slice(0, 10) },
     });
+  }
+
+  /**
+   * Sliding staff session: issue a fresh token for a principal whose current
+   * token JwtStrategy has just fully validated (signature, expiry, token
+   * version, suspension). Signing out, a password reset or "sign out
+   * everywhere" bump the token version, so renewed tokens are revoked exactly
+   * like the originals. Impersonation and customer sessions are not renewed.
+   */
+  async refreshStaffSession(principal: any): Promise<{ token: string }> {
+    if (principal?.sessionKind !== 'staff' || principal?.isImpersonating) {
+      throw new UnauthorizedException('This session cannot be renewed. Please sign in again.');
+    }
+    const row =
+      principalUserRow<{
+        id: string;
+        email: string;
+        tokenVersion: number;
+        isAdmin: boolean;
+        adminRole: string | null;
+      }>(principal) ??
+      (await this.prisma.user.findUnique({
+        where: { id: principal.id },
+        select: { id: true, email: true, tokenVersion: true, isAdmin: true, adminRole: true },
+      }));
+    if (!row) throw new UnauthorizedException('User not found');
+    return {
+      token: this.signStaffToken(row, principal.activeTenantId ? { tid: principal.activeTenantId } : {}),
+    };
   }
 
   private signStaffToken(

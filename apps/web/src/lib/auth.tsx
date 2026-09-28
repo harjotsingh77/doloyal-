@@ -3,9 +3,17 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { loadSupabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl, ensureCanonicalAuthOrigin } from "./supabase-config";
-import { getStaffAuthToken, isDoloyalAccessToken, purgeInvalidStaffSession } from "./access-token";
+import {
+  getStaffAuthToken,
+  isDoloyalAccessToken,
+  purgeInvalidStaffSession,
+  hasActiveStaffSession,
+  tokenExpiresAt,
+  tokenLifetimeMs,
+} from "./access-token";
 import { clearPageCache } from "./api-cache";
 
 interface Membership {
@@ -126,6 +134,48 @@ function fetchMeShared(token: string): Promise<AuthUser> {
   return promise;
 }
 
+/**
+ * An expired session can never be used again: clear it so the visitor is
+ * treated as signed out (sign-in page shows, dashboard redirects) instead of
+ * seeing a cached dashboard whose every request fails.
+ */
+function dropExpiredSession() {
+  if (typeof window === "undefined") return;
+  const token = getToken();
+  if (!token || !isDoloyalAccessToken(token)) return;
+  const exp = tokenExpiresAt(token);
+  if (exp !== null && exp <= Date.now()) {
+    setToken(null);
+    saveUser(null);
+  }
+}
+
+let lastRenewalAttempt = 0;
+
+/**
+ * Sliding session: once a staff token is past half its lifetime, swap it for
+ * a fresh one. Active users therefore stay signed in until they sign out;
+ * only a session left unused for its whole lifetime (7 days) expires.
+ */
+async function renewSessionIfDue() {
+  const token = getToken();
+  if (!token || !isDoloyalAccessToken(token)) return;
+  const exp = tokenExpiresAt(token);
+  const lifetime = tokenLifetimeMs(token);
+  if (exp === null || lifetime === null) return;
+  const remaining = exp - Date.now();
+  if (remaining <= 0 || remaining > lifetime / 2) return;
+  if (Date.now() - lastRenewalAttempt < 10 * 60_000) return;
+  lastRenewalAttempt = Date.now();
+  try {
+    const { token: next } = await api.refreshSession();
+    // Ignore the result if the user signed out or switched workspace meanwhile.
+    if (next && isDoloyalAccessToken(next) && getToken() === token) setToken(next);
+  } catch {
+    // Keep the current token; it is still valid until it expires.
+  }
+}
+
 /* ── Default demo user (used when no token exists) ───────────────────── */
 
 const DEMO_USER: AuthUser = {
@@ -169,6 +219,7 @@ export const DEMO_MODE = process.env.NODE_ENV !== "production";
  */
 function getInitialUser(): AuthUser | null {
   if (!DEMO_MODE) purgeInvalidStaffSession();
+  dropExpiredSession();
 
   const token = getToken();
   const saved = getSavedUser();
@@ -256,18 +307,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Keep an active session alive: check on load, hourly, and when the tab
+  // comes back into view.
+  React.useEffect(() => {
+    void renewSessionIfDue();
+    const interval = window.setInterval(() => void renewSessionIfDue(), 60 * 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void renewSessionIfDue();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  const queryClient = useQueryClient();
   const setAuth = React.useCallback(
     (token: string, userData: AuthUser) => {
       if (!DEMO_MODE && !isDoloyalAccessToken(token)) {
         return;
       }
+      // Sign-in now navigates client-side (no full reload), so data cached in
+      // memory for a different account must not survive into the new session.
+      if (getSavedUser()?.id !== userData.id) queryClient.clear();
       setToken(token);
       saveUser(userData);
       setUser(userData);
       setClaimsReady(true);
       setIsLoading(false);
+      // The sign-in response already carries the full claims: seed the
+      // shared /auth/me result so the dashboard doesn't request it again.
+      sharedMe = { token, promise: Promise.resolve(userData) };
     },
-    [],
+    [queryClient],
   );
 
   const clearAuth = React.useCallback(() => {
@@ -299,10 +372,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string) => {
       setIsLoading(true);
       try {
+        // The caller navigates to the dashboard client-side: a full page
+        // reload here used to re-download and re-boot the whole app before
+        // the dashboard could start loading.
         const result = await api.login(email, password);
         if (result?.token && result?.user) {
           setAuth(result.token, result.user);
-          window.location.href = "/app/dashboard";
           return;
         }
       } catch (err) {
@@ -311,7 +386,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const r = await api.demoLogin();
           if (r) {
             setAuth(r.token, r.user);
-            window.location.href = "/app/dashboard";
             return;
           }
         }
@@ -583,6 +657,21 @@ export function useAuth(): AuthContextValue {
   const ctx = React.useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+/**
+ * Sign-in / sign-up: someone already signed in goes straight to the
+ * dashboard. Only signing out (or a session left unused until it expires)
+ * brings the sign-in form back.
+ */
+export function useRedirectIfSignedIn(to = "/app/dashboard") {
+  const router = useRouter();
+  React.useEffect(() => {
+    const saved = getSavedUser();
+    if (hasActiveStaffSession() && saved && saved.sessionKind !== "customer") {
+      router.replace(to);
+    }
+  }, [router, to]);
 }
 
 const noopSubscribe = () => () => {};

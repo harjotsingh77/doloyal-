@@ -56,7 +56,7 @@ function ProfileButton({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`inline-flex h-10 items-center gap-2 rounded-full pl-1.5 pr-3 text-sm font-semibold ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-[color:var(--site-ink)]"}`}
+        className={`inline-flex h-10 items-center gap-2 rounded-full pl-1.5 pr-3 text-sm font-semibold ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-site-ink"}`}
       >
         <span
           className="grid h-7 w-7 place-items-center rounded-full text-[10px] font-semibold text-white"
@@ -69,7 +69,7 @@ function ProfileButton({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-2xl bg-white text-[color:var(--site-ink)] shadow-[0_18px_40px_rgba(17,17,17,.16)]"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-2xl bg-white text-site-ink shadow-[0_18px_40px_rgba(17,17,17,.16)]"
         >
           <div className="border-b border-black/[0.06] px-4 py-3">
             <p className="truncate text-sm font-semibold">{name}</p>
@@ -137,7 +137,7 @@ export function SiteMarquee({ text, enabled }: { text?: string; enabled?: boolea
   if (!enabled) return null;
   const line = (text?.trim() || "New this week  ·  Walk-ins welcome  ·  Book online anytime  ·  ").repeat(4);
   return (
-    <div className="site-marquee overflow-hidden border-b border-black/[0.06] bg-[color:var(--site-ink)] text-white" role="marquee">
+    <div className="site-marquee overflow-hidden border-b border-black/[0.06] bg-site-ink text-white" role="marquee">
       <div className="site-marquee-track flex w-max gap-10 py-2.5 text-[11px] font-medium tracking-[0.14em] uppercase">
         <span>{line}</span>
         <span aria-hidden>{line}</span>
@@ -210,7 +210,7 @@ export function SiteNav({
   const accountName = profileName(user, portal);
   const accountClientId = portal?.customer?.clientNumber?.trim() || null;
   const signInHref = `/book/${business.bookingLink?.slug || business.slug}/sign-in`;
-  const loginClass = `hidden h-10 items-center rounded-full px-4 text-sm font-semibold sm:inline-flex ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-[color:var(--site-ink)]"}`;
+  const loginClass = `hidden h-10 items-center rounded-full px-4 text-sm font-semibold sm:inline-flex ${frosted ? "border border-white/30 text-white" : "border border-black/[0.12] text-site-ink"}`;
   const goSignIn = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!onLogin) return;
     event.preventDefault();
@@ -219,7 +219,7 @@ export function SiteNav({
 
   return (
     <header ref={navRef} className={`${pin ? "sticky top-0 z-40" : "relative z-40"}`}>
-      <div className={`transition duration-500 ${frosted ? "bg-white/10 text-white backdrop-blur-xl" : "bg-[color:var(--site-bg)]/92 text-[color:var(--site-ink)] shadow-[0_10px_30px_rgba(17,17,17,.06)] backdrop-blur-xl"}`}>
+      <div className={`transition duration-500 ${frosted ? "bg-white/10 text-white backdrop-blur-xl" : "bg-site-bg/92 text-site-ink shadow-[0_10px_30px_rgba(17,17,17,.06)] backdrop-blur-xl"}`}>
         <div className="mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-4 px-5 sm:h-[4.25rem] sm:px-8 lg:px-10">
           <button type="button" onClick={() => onJump("portal-hero")} className="flex min-w-0 items-center gap-3">
             {brand.logoUrl ? (
@@ -243,10 +243,10 @@ export function SiteNav({
               type="button"
               onClick={() => onJump(pointsTarget)}
               aria-label={`${points.toLocaleString("en-IN")} loyalty points`}
-              className={`inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums ${frosted ? "bg-white/12 text-white" : "bg-black/[0.05] text-[color:var(--site-ink)]"}`}
+              className={`inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums ${frosted ? "bg-white/12 text-white" : "bg-black/[0.05] text-site-ink"}`}
             >
               {points.toLocaleString("en-IN")}
-              <span className={`text-[11px] font-medium ${frosted ? "text-white/70" : "text-[color:var(--site-ink)]/45"}`}>pts</span>
+              <span className={`text-[11px] font-medium ${frosted ? "text-white/70" : "text-site-ink/45"}`}>pts</span>
             </button>
             {accessory}
             {signedIn && user ? (
@@ -272,7 +272,7 @@ export function SiteNav({
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-50 bg-[color:var(--site-ink)]/92 p-6 text-white backdrop-blur-xl lg:hidden">
+        <div className="fixed inset-0 z-50 bg-site-ink/92 p-6 text-white backdrop-blur-xl lg:hidden">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">{brand.displayName}</p>
             <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="grid h-10 w-10 place-items-center rounded-full bg-white/10">
@@ -368,20 +368,20 @@ export function SiteFooter({
       <div className="mx-auto grid max-w-[1280px] gap-10 md:grid-cols-4">
         <div>
           <p className="text-sm font-semibold">{brand.displayName}</p>
-          <p className="mt-3 max-w-[28ch] text-sm leading-6 text-[color:var(--site-ink)]/55">{ui.body?.trim() || brand.tagline || brand.description}</p>
+          <p className="mt-3 max-w-[28ch] text-sm leading-6 text-site-ink/55">{ui.body?.trim() || brand.tagline || brand.description}</p>
         </div>
         <div>
           <p className="text-sm font-semibold">Explore</p>
-          <div className="mt-3 grid gap-2 text-sm text-[color:var(--site-ink)]/60">
-            <button type="button" className="text-left hover:text-[color:var(--site-ink)]" onClick={() => onJump("portal-hero")}>Home</button>
-            <button type="button" className="text-left hover:text-[color:var(--site-ink)]" onClick={() => onJump("portal-services")}>Services</button>
-            <button type="button" className="text-left hover:text-[color:var(--site-ink)]" onClick={() => onJump("portal-gallery")}>Gallery</button>
+          <div className="mt-3 grid gap-2 text-sm text-site-ink/60">
+            <button type="button" className="text-left hover:text-site-ink" onClick={() => onJump("portal-hero")}>Home</button>
+            <button type="button" className="text-left hover:text-site-ink" onClick={() => onJump("portal-services")}>Services</button>
+            <button type="button" className="text-left hover:text-site-ink" onClick={() => onJump("portal-gallery")}>Gallery</button>
           </div>
         </div>
         {ui.showPhone !== false ? (
         <div>
           <p className="text-sm font-semibold">Visit</p>
-          <div className="mt-3 grid gap-2 text-sm leading-6 text-[color:var(--site-ink)]/60">
+          <div className="mt-3 grid gap-2 text-sm leading-6 text-site-ink/60">
             {business.address ? <p>{business.address}</p> : null}
             {business.phone ? <a href={`tel:${business.phone.replace(/\s/g, "")}`}>{business.phone}</a> : null}
             {business.email ? <a href={`mailto:${business.email}`}>{business.email}</a> : null}
@@ -401,18 +401,18 @@ export function SiteFooter({
                   target="_blank"
                   rel="noreferrer"
                   aria-label={item.label}
-                  className={`grid h-10 w-10 place-items-center rounded-full bg-[color:var(--site-ink)] text-white ${animate ? "transition duration-500 hover:scale-105" : ""}`}
+                  className={`grid h-10 w-10 place-items-center rounded-full bg-site-ink text-white ${animate ? "transition duration-500 hover:scale-105" : ""}`}
                 >
                   <Icon className="h-4 w-4" />
                 </a>
               );
             })}
-            {!social.length ? <p className="text-sm text-[color:var(--site-ink)]/50">Add social links in Brand settings.</p> : null}
+            {!social.length ? <p className="text-sm text-site-ink/50">Add social links in Brand settings.</p> : null}
           </div>
         </div>
         ) : <div />}
       </div>
-      <div className="mx-auto mt-12 flex max-w-[1280px] flex-wrap justify-between gap-3 border-t border-black/[0.06] pt-6 text-xs text-[color:var(--site-ink)]/45">
+      <div className="mx-auto mt-12 flex max-w-[1280px] flex-wrap justify-between gap-3 border-t border-black/[0.06] pt-6 text-xs text-site-ink/45">
         <p>© {year} {brand.displayName}</p>
         <p>{ui.overlayText?.trim() || "Privacy · Terms"}</p>
       </div>

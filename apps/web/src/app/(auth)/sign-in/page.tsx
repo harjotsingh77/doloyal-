@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { prefetchHref } from "@/lib/prefetch-workspace";
 import { motion } from "framer-motion";
 import { Mail, Lock, ArrowRight } from "lucide-react";
 import { Button, Input, Card, CardContent, Logo } from "@doloyal/ui";
-import { useAuth, DEMO_MODE } from "@/lib/auth";
+import { useAuth, DEMO_MODE, useRedirectIfSignedIn } from "@/lib/auth";
 import { messageForAuthQuery } from "@/lib/oauth-errors";
 
 function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -33,6 +35,14 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
 
 export default function SignInPage() {
   const { login, loginWithGoogle, demoLogin, isLoading } = useAuth();
+  useRedirectIfSignedIn();
+  const router = useRouter();
+
+  // Fetch the dashboard's code while the visitor is typing, so it opens
+  // instantly after a successful sign-in.
+  React.useEffect(() => {
+    router.prefetch("/app/dashboard");
+  }, [router]);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -42,6 +52,9 @@ export default function SignInPage() {
     setError(null);
     try {
       await login(email, password);
+      // Start the dashboard data now, then switch pages without a full reload.
+      prefetchHref("/app/dashboard", true);
+      router.replace("/app/dashboard");
     } catch (err: any) {
       setError(err?.message || "Login failed. Please try again.");
     }

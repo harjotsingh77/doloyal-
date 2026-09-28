@@ -20,8 +20,33 @@ const config: Config = {
         foreground: "rgb(var(--color-foreground) / <alpha-value>)",
         "muted-foreground": "rgb(var(--color-muted-foreground) / <alpha-value>)",
         subtle: "rgb(var(--color-subtle) / <alpha-value>)",
+        // Public client page (booking site). Tokens are hex values set per
+        // business, so opacity modifiers are applied with color-mix().
+        site: {
+          ink: "color-mix(in srgb, var(--site-ink) calc(<alpha-value> * 100%), transparent)",
+          accent: "color-mix(in srgb, var(--site-accent) calc(<alpha-value> * 100%), transparent)",
+          bg: "color-mix(in srgb, var(--site-bg) calc(<alpha-value> * 100%), transparent)",
+          surface: "color-mix(in srgb, var(--site-surface) calc(<alpha-value> * 100%), transparent)",
+        },
+      },
+      opacity: {
+        "12": "0.12",
+        "14": "0.14",
+        "16": "0.16",
+        "62": "0.62",
+        "72": "0.72",
+        "78": "0.78",
+        "92": "0.92",
+      },
+      fontFamily: {
+        "site-display": ["var(--site-display)", "var(--site-body)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       borderRadius: {
+        // Public client page — set per business type (client-page-theme.ts).
+        "site-lg": "var(--site-r-lg, 28px)",
+        "site-md": "var(--site-r-md, 22px)",
+        "site-sm": "var(--site-r-sm, 14px)",
+        "site-btn": "var(--site-r-btn, 999px)",
         DEFAULT: "var(--radius)",
         sm: "var(--radius-sm)",
         lg: "var(--radius-lg)",

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { User, Mail, Phone, Lock, ArrowRight } from "lucide-react";
 import { Button, Input, Card, CardContent, Logo } from "@doloyal/ui";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useRedirectIfSignedIn } from "@/lib/auth";
 import { messageForAuthQuery } from "@/lib/oauth-errors";
 
 function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -33,6 +33,7 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
 
 export default function SignUpPage() {
   const { signUp, loginWithGoogle, isLoading } = useAuth();
+  useRedirectIfSignedIn();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");

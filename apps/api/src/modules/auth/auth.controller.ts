@@ -181,6 +181,14 @@ export class AuthController {
     return this.authService.getMe(user);
   }
 
+  /** Renew a still-valid staff session so active users stay signed in. */
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(60, 3600)
+  refresh(@CurrentUser() user: any) {
+    return this.authService.refreshStaffSession(user);
+  }
+
   @Post('switch-tenant')
   @HttpCode(HttpStatus.OK)
   async switchTenant(@Body() dto: SwitchTenantDto, @CurrentUser() user: any) {

@@ -80,7 +80,7 @@ export function IntroSection({
       <Inner>
         <Reveal on={config?.animations !== false}>
           <div className={`grid items-center gap-10 lg:grid-cols-[1.05fr_.95fr] lg:gap-16 ${imageFirst ? "" : "lg:[&>*:first-child]:order-2"}`}>
-            <div className="overflow-hidden rounded-[28px] bg-black/[0.04]">
+            <div className="overflow-hidden rounded-site-lg bg-black/[0.04]">
               <img
                 src={catalogImageSrc(brand.coverUrl, "https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1400&q=80")}
                 alt=""
@@ -88,9 +88,9 @@ export function IntroSection({
               />
             </div>
             <div>
-              <p className="text-[13px] font-medium text-[color:var(--site-accent)]">{ui.eyebrow?.trim() || `Welcome to ${brand.displayName}`}</p>
+              <p className="text-[13px] font-medium text-site-accent">{ui.eyebrow?.trim() || `Welcome to ${brand.displayName}`}</p>
               <h2 className="mt-3 max-w-[16ch] text-4xl font-semibold tracking-[-0.045em] sm:text-5xl sm:leading-[1.08]">{heading}</h2>
-              {body ? <p className="mt-5 max-w-[48ch] text-[15px] leading-7 text-[color:var(--site-ink)]/62">{body}</p> : null}
+              {body ? <p className="mt-5 max-w-[48ch] text-[15px] leading-7 text-site-ink/62">{body}</p> : null}
               <LoungeButton onClick={onBook} className="mt-8">
                 {ui.cta?.trim() || config?.heroButtonLabel?.trim() || copy.book}
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-white/15"><ArrowUpRight className="h-3.5 w-3.5" /></span>
@@ -134,7 +134,7 @@ export function WebsiteServices({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <SectionTitle>{title || copy.services}</SectionTitle>
-            {ui.body ? <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--site-ink)]/55">{ui.body}</p> : null}
+            {ui.body ? <p className="mt-2 max-w-xl text-sm leading-6 text-site-ink/55">{ui.body}</p> : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {["All", ...categories].map((name) => (
@@ -142,7 +142,7 @@ export function WebsiteServices({
                 key={name}
                 type="button"
                 onClick={() => setCat(name)}
-                className={`h-9 rounded-full px-4 text-sm font-medium ${cat === name ? "bg-[color:var(--site-ink)] text-white" : "bg-black/[0.04] text-[color:var(--site-ink)]/70"}`}
+                className={`h-9 rounded-full px-4 text-sm font-medium ${cat === name ? "bg-site-ink text-white" : "bg-black/[0.04] text-site-ink/70"}`}
               >
                 {name}
               </button>
@@ -151,7 +151,7 @@ export function WebsiteServices({
         </div>
         <div className={`mt-8 grid gap-5 ${colClass}`}>
           {shown.map((service, index) => (
-            <article key={service.id} className={`group overflow-hidden rounded-[24px] bg-white ring-1 ring-black/[0.06] ${layout === "horizontal" ? "sm:flex" : ""} ${config?.hoverEffects === false ? "" : "transition duration-700 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(17,17,17,.08)]"}`}>
+            <article key={service.id} className={`group overflow-hidden rounded-site-md bg-white ring-1 ring-black/[0.06] ${layout === "horizontal" ? "sm:flex" : ""} ${config?.hoverEffects === false ? "" : "transition duration-700 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(17,17,17,.08)]"}`}>
               {ui.showImage !== false && layout !== "list" ? (
                 <div className={`${layout === "horizontal" ? "sm:w-48 sm:shrink-0" : "aspect-[16/11]"} overflow-hidden`}>
                   <img src={catalogImageSrc(service.imageUrl, artFor(service.category || service.name, index))} alt="" className={`h-full w-full object-cover ${config?.hoverEffects === false ? "" : "transition duration-700 group-hover:scale-105"}`} onError={(event) => { event.currentTarget.src = artFor(service.category || service.name, index); }} />
@@ -162,9 +162,9 @@ export function WebsiteServices({
                   <h4 className="text-lg font-semibold tracking-[-0.03em]">{service.name}</h4>
                   {ui.showPrice !== false ? <span className="shrink-0 text-sm font-semibold">{formatPrice(service.price, currency)}</span> : null}
                 </div>
-                {service.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-[color:var(--site-ink)]/55">{service.description}</p> : null}
+                {service.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-site-ink/55">{service.description}</p> : null}
                 <div className="mt-5 flex items-center justify-between">
-                  {ui.showDuration !== false ? <span className="inline-flex items-center gap-1.5 text-xs text-[color:var(--site-ink)]/50"><Clock3 className="h-3.5 w-3.5" />{service.durationMinutes} min</span> : <span />}
+                  {ui.showDuration !== false ? <span className="inline-flex items-center gap-1.5 text-xs text-site-ink/50"><Clock3 className="h-3.5 w-3.5" />{service.durationMinutes} min</span> : <span />}
                   {ui.showCta !== false ? <LoungeButton onClick={() => onBook(service)} className="px-4 py-2 text-xs">{ui.cta?.trim() || "Buy"}</LoungeButton> : null}
                 </div>
               </div>
@@ -172,7 +172,7 @@ export function WebsiteServices({
           ))}
         </div>
         {!shown.length ? (
-          <p className="mt-8 rounded-[24px] bg-black/[0.03] px-5 py-10 text-center text-sm text-[color:var(--site-ink)]/55">Add products to show them here.</p>
+          <p className="mt-8 rounded-site-md bg-black/[0.03] px-5 py-10 text-center text-sm text-site-ink/55">Add products to show them here.</p>
         ) : null}
       </Inner>
     </section>,
@@ -203,10 +203,10 @@ export function FeaturedGrid({
     <section id="portal-services" className="py-16 sm:py-24">
       <Inner>
         <SectionTitle>{title || copy.featured}</SectionTitle>
-        {ui.body ? <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--site-ink)]/55">{ui.body}</p> : null}
+        {ui.body ? <p className="mt-2 max-w-xl text-sm leading-6 text-site-ink/55">{ui.body}</p> : null}
         <div className="mt-8 grid gap-4 md:grid-cols-6">
           {items.map((service, index) => (
-            <article key={service.id} className={`group overflow-hidden rounded-[24px] bg-white ring-1 ring-black/[0.06] ${index === 0 ? "md:col-span-4 md:row-span-2" : "md:col-span-2"}`}>
+            <article key={service.id} className={`group overflow-hidden rounded-site-md bg-white ring-1 ring-black/[0.06] ${index === 0 ? "md:col-span-4 md:row-span-2" : "md:col-span-2"}`}>
               <div className={`${index === 0 ? "aspect-[16/10] md:aspect-auto md:h-full md:min-h-[420px]" : "aspect-[16/11]"} overflow-hidden`}>
                 <img src={catalogImageSrc(service.imageUrl, artFor(service.category || service.name, index))} alt="" className={`h-full w-full object-cover ${config?.hoverEffects === false ? "" : "transition duration-700 group-hover:scale-105"}`} onError={(event) => { event.currentTarget.src = artFor(service.category || service.name, index); }} />
               </div>
@@ -215,7 +215,7 @@ export function FeaturedGrid({
                   <h4 className={`${index === 0 ? "text-2xl" : "text-lg"} font-semibold tracking-[-0.03em]`}>{service.name}</h4>
                   {ui.showPrice !== false ? <span className="text-sm font-semibold">{formatPrice(service.price, currency)}</span> : null}
                 </div>
-                <button type="button" onClick={() => onBook(service)} className="mt-4 text-sm font-semibold text-[color:var(--site-accent)]">{ui.cta?.trim() || "Buy"}</button>
+                <button type="button" onClick={() => onBook(service)} className="mt-4 text-sm font-semibold text-site-accent">{ui.cta?.trim() || "Buy"}</button>
               </div>
             </article>
           ))}
@@ -251,14 +251,14 @@ export function AboutStory({
       <Inner>
         <div className="max-w-[38rem]">
           <h2 className="text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">{title}</h2>
-          {story ? <p className="mt-5 text-[15px] leading-7 text-[color:var(--site-ink)]/62">{story}</p> : null}
+          {story ? <p className="mt-5 text-[15px] leading-7 text-site-ink/62">{story}</p> : null}
         </div>
         {ui.showCounters !== false ? (
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
           {stats.map((stat) => (
-            <div key={stat.label} className="rounded-[24px] bg-[color:var(--site-bg)] px-6 py-7 ring-1 ring-black/[0.04]">
+            <div key={stat.label} className="rounded-site-md bg-site-bg px-6 py-7 ring-1 ring-black/[0.04]">
               <p className="text-4xl font-semibold tracking-[-0.05em]">{stat.value}</p>
-              <p className="mt-2 text-sm text-[color:var(--site-ink)]/55">{stat.label}</p>
+              <p className="mt-2 text-sm text-site-ink/55">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -276,7 +276,7 @@ export function OffersSection({ chrome, config, title }: { chrome: PortalChrome;
     "offers",
     <section id="portal-offers" className="py-16 sm:py-24">
       <Inner>
-        <div className="overflow-hidden rounded-[28px] bg-[color:var(--site-ink)] px-8 py-12 text-white sm:px-12">
+        <div className="overflow-hidden rounded-site-lg bg-site-ink px-8 py-12 text-white sm:px-12">
           <p className="text-sm font-medium text-white/55">{title}</p>
           {ui.discount ? <p className="mt-4 text-5xl font-semibold tracking-[-0.05em]">{ui.discount}</p> : null}
           <h3 className="mt-3 max-w-[14ch] text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">{config?.offerTitle?.trim() || "This week's offer"}</h3>
@@ -310,7 +310,7 @@ export function GallerySection({ chrome, config, business, title }: { chrome: Po
         <SectionTitle>{title}</SectionTitle>
         <div className={`mt-8 ${layout === "grid" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3" : layout === "slider" ? "flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:none]" : "columns-1 gap-3 sm:columns-2 lg:columns-3"}`}>
           {urls.map((url, i) => (
-            <button key={`${url}-${i}`} type="button" onClick={() => setOpen(url)} className={`overflow-hidden rounded-[22px] ${layout === "slider" ? "min-w-[16rem] snap-start" : layout === "grid" ? "" : "mb-3 block w-full"}`}>
+            <button key={`${url}-${i}`} type="button" onClick={() => setOpen(url)} className={`overflow-hidden rounded-site-md ${layout === "slider" ? "min-w-[16rem] snap-start" : layout === "grid" ? "" : "mb-3 block w-full"}`}>
               <img src={catalogImageSrc(url, url)} alt="" className="w-full object-cover" />
             </button>
           ))}
@@ -335,7 +335,7 @@ export function VideoSection({ chrome, config, title }: { chrome: PortalChrome; 
     <section id="portal-video" className="py-16 sm:py-24">
       <Inner>
         <SectionTitle>{title}</SectionTitle>
-        <div className="relative mt-8 overflow-hidden rounded-[28px] bg-black">
+        <div className="relative mt-8 overflow-hidden rounded-site-lg bg-black">
           {yt ? (
             <iframe title={title} src={`https://www.youtube.com/embed/${yt}?autoplay=${ui.autoplay ? 1 : 0}&mute=1`} className="aspect-video w-full border-0" allow="autoplay; encrypted-media" />
           ) : url ? (
@@ -375,13 +375,13 @@ export function TestimonialsSection({
         <SectionTitle>{title}</SectionTitle>
         <div className="mt-8 flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none]">
           {items.map((item, index) => (
-            <figure key={`${item.name}-${index}`} className="min-w-[18rem] max-w-sm snap-start rounded-[24px] bg-white p-6 ring-1 ring-black/[0.06] sm:min-w-[22rem]">
+            <figure key={`${item.name}-${index}`} className="min-w-[18rem] max-w-sm snap-start rounded-site-md bg-white p-6 ring-1 ring-black/[0.06] sm:min-w-[22rem]">
               {ui.showRating !== false ? (
-                <div className="flex gap-0.5 text-[color:var(--site-accent)]">
+                <div className="flex gap-0.5 text-site-accent">
                   {Array.from({ length: item.rating || 5 }).map((_, i) => <Star key={i} className="h-3.5 w-3.5 fill-current" />)}
                 </div>
               ) : null}
-              <blockquote className={`${ui.showRating !== false ? "mt-4" : ""} text-[15px] leading-7 text-[color:var(--site-ink)]/75`}>“{item.text}”</blockquote>
+              <blockquote className={`${ui.showRating !== false ? "mt-4" : ""} text-[15px] leading-7 text-site-ink/75`}>“{item.text}”</blockquote>
               {ui.showAvatar !== false && item.name ? <figcaption className="mt-5 text-sm font-semibold">{item.name}</figcaption> : null}
             </figure>
           ))}
@@ -414,7 +414,7 @@ export function SocialProof({ chrome, config, business }: { chrome: PortalChrome
       <Inner className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
         <div>
           <p className="text-sm font-semibold">{ui.eyebrow?.trim() || "Follow us"}</p>
-          <div className="mt-2 flex flex-wrap gap-4 text-sm text-[color:var(--site-ink)]/55">
+          <div className="mt-2 flex flex-wrap gap-4 text-sm text-site-ink/55">
             {proof.map((item) => <span key={item}>{item}</span>)}
           </div>
         </div>
@@ -425,7 +425,7 @@ export function SocialProof({ chrome, config, business }: { chrome: PortalChrome
               href={item.href}
               target="_blank"
               rel="noreferrer"
-              className={`inline-flex h-11 items-center rounded-full bg-[color:var(--site-ink)] px-4 text-sm font-semibold text-white ${animate ? "transition duration-500 hover:scale-105" : ""}`}
+              className={`inline-flex h-11 items-center rounded-full bg-site-ink px-4 text-sm font-semibold text-white ${animate ? "transition duration-500 hover:scale-105" : ""}`}
             >
               {item.label}
             </a>
@@ -435,7 +435,7 @@ export function SocialProof({ chrome, config, business }: { chrome: PortalChrome
               {ui.cta.trim()}
             </a>
           ) : null}
-          {!items.length ? <p className="text-sm text-[color:var(--site-ink)]/50">Add social links in this section or Brand settings.</p> : null}
+          {!items.length ? <p className="text-sm text-site-ink/50">Add social links in this section or Brand settings.</p> : null}
         </div>
       </Inner>
     </section>,
@@ -460,9 +460,9 @@ export function FaqSection({ chrome, config, title }: { chrome: PortalChrome; co
             <div key={faq.question}>
               <button type="button" onClick={() => setOpen(open === i ? -1 : i)} className="flex w-full items-center justify-between gap-4 py-5 text-left text-[15px] font-semibold">
                 {faq.question}
-                <span className="text-lg font-normal text-[color:var(--site-ink)]/35">{open === i ? "–" : "+"}</span>
+                <span className="text-lg font-normal text-site-ink/35">{open === i ? "–" : "+"}</span>
               </button>
-              {open === i ? <p className="pb-5 text-sm leading-7 text-[color:var(--site-ink)]/60">{faq.answer}</p> : null}
+              {open === i ? <p className="pb-5 text-sm leading-7 text-site-ink/60">{faq.answer}</p> : null}
             </div>
           ))}
         </div>
@@ -497,18 +497,18 @@ export function ContactBooking({
       <Inner className="grid gap-10 lg:grid-cols-2">
         <div>
           <SectionTitle>{title}</SectionTitle>
-          {ui.body?.trim() ? <p className="mt-4 max-w-md text-[15px] leading-7 text-[color:var(--site-ink)]/62">{ui.body.trim()}</p> : null}
-          {business.address ? <p className={`${ui.body?.trim() ? "mt-2" : "mt-4"} max-w-md text-[15px] leading-7 text-[color:var(--site-ink)]/62`}>{business.address}</p> : null}
+          {ui.body?.trim() ? <p className="mt-4 max-w-md text-[15px] leading-7 text-site-ink/62">{ui.body.trim()}</p> : null}
+          {business.address ? <p className={`${ui.body?.trim() ? "mt-2" : "mt-4"} max-w-md text-[15px] leading-7 text-site-ink/62`}>{business.address}</p> : null}
           <div className="mt-6 flex flex-wrap gap-2">
             {ui.showPhone !== false && phone ? <a href={`tel:${phone}`} className="inline-flex h-11 items-center gap-2 rounded-full bg-black/[0.04] px-4 text-sm font-semibold"><Phone className="h-4 w-4" /> Call</a> : null}
             {ui.showEmail !== false && business.email ? <a href={`mailto:${business.email}`} className="inline-flex h-11 items-center rounded-full bg-black/[0.04] px-4 text-sm font-semibold">Email</a> : null}
             {ui.showWhatsapp !== false && wa ? <a href={`https://wa.me/${String(wa).replace(/\D/g, "")}`} className="inline-flex h-11 items-center rounded-full bg-black/[0.04] px-4 text-sm font-semibold">WhatsApp</a> : null}
-            {ui.showMap !== false && maps ? <a href={maps} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-[color:var(--site-ink)] px-4 text-sm font-semibold text-white"><MapPin className="h-4 w-4" /> Directions</a> : null}
+            {ui.showMap !== false && maps ? <a href={maps} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-site-ink px-4 text-sm font-semibold text-white"><MapPin className="h-4 w-4" /> Directions</a> : null}
           </div>
         </div>
-        <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
+        <div className="rounded-site-lg bg-white p-6 ring-1 ring-black/[0.06] sm:p-8">
           <p className="text-lg font-semibold tracking-[-0.03em]">{ui.formTitle?.trim() || "Send a note, or book a time"}</p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--site-ink)]/55">Name, phone, and a preferred time. We&apos;ll take it from there.</p>
+          <p className="mt-2 text-sm leading-6 text-site-ink/55">Name, phone, and a preferred time. We&apos;ll take it from there.</p>
           <LoungeButton onClick={onBook} className="mt-6">{ui.cta?.trim() || bookLabel}</LoungeButton>
         </div>
       </Inner>
@@ -530,9 +530,9 @@ export function MapSection({ chrome, config, business, title }: { chrome: Portal
       <Inner>
         <div className="mb-4 flex items-end justify-between gap-3">
           <h3 className="text-2xl font-semibold tracking-[-0.03em]">{title}</h3>
-          <a href={maps} target="_blank" rel="noreferrer" className="text-sm font-semibold text-[color:var(--site-accent)]">{ui.cta?.trim() || "Get directions"}</a>
+          <a href={maps} target="_blank" rel="noreferrer" className="text-sm font-semibold text-site-accent">{ui.cta?.trim() || "Get directions"}</a>
         </div>
-        <div className="overflow-hidden rounded-[28px] ring-1 ring-black/[0.06]">
+        <div className="overflow-hidden rounded-site-lg ring-1 ring-black/[0.06]">
           <iframe title="Map" src={embed} className="w-full border-0" style={{ height }} loading="lazy" />
         </div>
       </Inner>
@@ -560,9 +560,9 @@ export function FinalCta({
     chrome,
     "cta",
     <section id="portal-cta" className="px-5 pb-16 sm:px-8 lg:px-10">
-      <div className="relative mx-auto max-w-[1280px] overflow-hidden rounded-[28px]">
+      <div className="relative mx-auto max-w-[1280px] overflow-hidden rounded-site-lg">
         <img src={catalogImageSrc(brand.coverUrl, "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80")} alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-[color:var(--site-ink)]/72" />
+        <div className="absolute inset-0 bg-site-ink/72" />
         <div className="relative px-8 py-16 text-white sm:px-14 sm:py-20">
           <h2 className="max-w-[14ch] text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">{config?.ctaHeading?.trim() || copy.cta}</h2>
           <p className="mt-4 max-w-[42ch] text-[15px] leading-7 text-white/75">{config?.ctaBody?.trim() || "Pick a time that works. We'll have things ready."}</p>
@@ -597,17 +597,17 @@ export function CheckoutSection({
     <section id="portal-checkout" className="py-10 sm:py-14">
       <Inner>
         <SectionTitle>{title || "Checkout"}</SectionTitle>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--site-ink)]/55">
+        <p className="mt-2 max-w-xl text-sm leading-6 text-site-ink/55">
           {ui.body?.trim() || "Pay online when you book. At the store, choose card/UPI or cash if the business allows it."}
         </p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[20px] bg-white p-5 ring-1 ring-black/[0.06]">
+          <div className="rounded-site-sm bg-white p-5 ring-1 ring-black/[0.06]">
             <p className="text-sm font-semibold tracking-[-0.02em]">Booking</p>
-            <p className="mt-1.5 text-sm leading-6 text-[color:var(--site-ink)]/55">Online payment only — card or UPI.</p>
+            <p className="mt-1.5 text-sm leading-6 text-site-ink/55">Online payment only — card or UPI.</p>
           </div>
-          <div className="rounded-[20px] bg-white p-5 ring-1 ring-black/[0.06]">
+          <div className="rounded-site-sm bg-white p-5 ring-1 ring-black/[0.06]">
             <p className="text-sm font-semibold tracking-[-0.02em]">At the store</p>
-            <p className="mt-1.5 text-sm leading-6 text-[color:var(--site-ink)]/55">
+            <p className="mt-1.5 text-sm leading-6 text-site-ink/55">
               {cashEnabled ? "Online/card and cash are both available." : "Online/card only — cash is turned off."}
             </p>
           </div>
