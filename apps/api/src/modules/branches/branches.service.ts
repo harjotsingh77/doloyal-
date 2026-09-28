@@ -15,17 +15,19 @@ export class BranchesService {
   }
 
   async list(tenantId: string) {
-    const branches = await this.prisma.branch.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    // Real per-branch staff counts from the Staff table's direct link.
-    const staffCounts = await this.prisma.staff.groupBy({
-      by: ['branchId'],
-      where: { tenantId, branchId: { not: null } },
-      _count: { id: true },
-    });
+    // Independent reads — run together. Real per-branch staff counts come
+    // from the Staff table's direct link.
+    const [branches, staffCounts] = await Promise.all([
+      this.prisma.branch.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.staff.groupBy({
+        by: ['branchId'],
+        where: { tenantId, branchId: { not: null } },
+        _count: { id: true },
+      }),
+    ]);
     const countByBranch = new Map(
       staffCounts.filter((s) => s.branchId).map((s) => [s.branchId as string, s._count.id]),
     );

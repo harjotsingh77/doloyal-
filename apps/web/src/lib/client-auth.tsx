@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { AuthUser, ClientPortal } from "@doloyal/shared";
 import { api } from "./api";
-import { supabase, isSupabaseConfigured, getAuthCallbackUrl, getMissingSupabaseConfig, ensureCanonicalAuthOrigin } from "./supabase";
+import { loadSupabase, isSupabaseConfigured, getAuthCallbackUrl, getMissingSupabaseConfig, ensureCanonicalAuthOrigin } from "./supabase-config";
 import { toast } from "sonner";
 
 const TOKEN_KEY = "doloyal_client_token";
@@ -174,11 +174,13 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
     setIsLoading(true);
     sessionStorage.setItem(CLIENT_OAUTH_SLUG_KEY, slug);
     const redirectTo = getAuthCallbackUrl({ clientSlug: slug });
-    void supabase.auth
-      .signInWithOAuth({
-        provider: "google",
-        options: { redirectTo },
-      })
+    void loadSupabase()
+      .then((supabase) =>
+        supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo },
+        }),
+      )
       .then(({ error }) => {
         if (error) {
           googleInFlight.current = false;
@@ -212,7 +214,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       void (async () => {
         try {
           if (isSupabaseConfigured() && sessionStorage.getItem(CLIENT_OAUTH_SLUG_KEY)) {
-            await supabase.auth.signOut();
+            await (await loadSupabase()).auth.signOut();
           }
         } catch {
           // Local client session is still cleared below.

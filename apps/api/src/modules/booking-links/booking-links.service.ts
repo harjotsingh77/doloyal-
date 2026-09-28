@@ -205,28 +205,31 @@ export class BookingLinksService {
   }
 
   async list(tenantId: string) {
-    const links = await this.prisma.bookingLink.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-    if (!links.length) return [];
-
-    const staffMap = await this.buildStaffMap(tenantId);
     const now = new Date();
-    const linkIds = links.map((l) => l.id);
-
-    // One batch for upcoming counts instead of N full appointment scans.
-    const upcomingRows = await this.prisma.appointment.groupBy({
-      by: ['bookingLinkId'],
-      where: {
-        tenantId,
-        bookingLinkId: { in: linkIds },
-        startTime: { gte: now },
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-      },
-      _count: { _all: true },
-    });
+    // The links, staff names and upcoming counts are independent reads, so
+    // they run together. Upcoming counts are grouped for every link of the
+    // tenant (instead of `IN (<the 100 links>)`, which needed the links
+    // first) and only the listed links' counts are used — one batch, not N
+    // appointment scans.
+    const [links, staffMap, upcomingRows] = await Promise.all([
+      this.prisma.bookingLink.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      this.buildStaffMap(tenantId),
+      this.prisma.appointment.groupBy({
+        by: ['bookingLinkId'],
+        where: {
+          tenantId,
+          bookingLinkId: { not: null },
+          startTime: { gte: now },
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+    if (!links.length) return [];
     const upcomingMap = new Map(
       upcomingRows.map((r) => [r.bookingLinkId as string, r._count._all]),
     );

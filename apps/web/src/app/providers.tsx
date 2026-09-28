@@ -5,13 +5,13 @@ import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@doloyal/ui";
-import { AuthProvider } from "@/lib/auth";
-import { ClientAuthProvider } from "@/lib/client-auth";
-import { CurrencyProvider } from "@/lib/currency-context";
-import { BranchProvider } from "@/lib/branch-context";
 import { ThemeInitializer } from "@/components/theme-initializer";
-import { QuerySync } from "@/lib/query-sync";
 
+/**
+ * App-wide providers only. Session, workspace and currency providers live in
+ * the route groups that use them (see components/app-providers.tsx) so the
+ * public site does not download or run them.
+ */
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(
     () =>
@@ -38,16 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <ThemeInitializer />
       <QueryClientProvider client={queryClient}>
-        <QuerySync />
-        <TooltipProvider delayDuration={200}>
-          <AuthProvider>
-            <ClientAuthProvider>
-            <BranchProvider>
-              <CurrencyProvider>{children}</CurrencyProvider>
-            </BranchProvider>
-            </ClientAuthProvider>
-          </AuthProvider>
-        </TooltipProvider>
+        <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         <Toaster richColors closeButton position="bottom-right" toastOptions={{ duration: 4000, style: { borderRadius: "var(--radius)", fontSize: "0.875rem" } }} />
       </QueryClientProvider>
     </ThemeProvider>

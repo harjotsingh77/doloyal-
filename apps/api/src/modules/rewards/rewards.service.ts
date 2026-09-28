@@ -75,40 +75,42 @@ export class RewardsService {
 
   async getOverview(tenantId: string) {
     const yearStart = new Date(new Date().getFullYear(), 0, 1);
-    const [
-      totalRewards,
-      activeRewards,
-      redeemedAgg,
-      pendingRewards,
-      cashbackAgg,
-      birthdaySent,
-    ] = await Promise.all([
-      this.prisma.reward.count({ where: { tenantId } }),
-      this.prisma.reward.count({ where: { tenantId, status: 'ACTIVE' } }),
-      this.prisma.rewardRedemption.count({
-        where: { tenantId, status: { in: ['FULFILLED', 'PENDING'] } },
-      }),
-      this.prisma.rewardRedemption.count({ where: { tenantId, status: 'PENDING' } }),
-      this.prisma.cashbackTransaction.aggregate({
-        where: { tenantId, status: 'COMPLETED' },
-        _sum: { cashbackAmount: true },
-      }),
-      this.prisma.rewardRedemption.count({
-        where: {
-          tenantId,
-          createdAt: { gte: yearStart },
-          reward: { category: 'BIRTHDAY' },
-        },
-      }),
-    ]);
+    // Six counts in one statement: behind the transaction pooler each query
+    // costs several round trips, and six of them overflowed the five-connection
+    // pool into a second wave.
+    const [row] = await this.prisma.$queryRaw<
+      Array<{
+        totalRewards: number;
+        activeRewards: number;
+        redeemedRewards: number;
+        pendingRewards: number;
+        cashbackIssued: number | null;
+        birthdayRewardsSent: number;
+      }>
+    >`
+      SELECT
+        (SELECT COUNT(*) FROM "Reward" WHERE "tenantId" = ${tenantId})::int AS "totalRewards",
+        (SELECT COUNT(*) FROM "Reward" WHERE "tenantId" = ${tenantId} AND status = 'ACTIVE'::"RewardStatus")::int AS "activeRewards",
+        (SELECT COUNT(*) FROM "RewardRedemption" WHERE "tenantId" = ${tenantId}
+          AND status IN ('FULFILLED'::"RedemptionStatus", 'PENDING'::"RedemptionStatus"))::int AS "redeemedRewards",
+        (SELECT COUNT(*) FROM "RewardRedemption" WHERE "tenantId" = ${tenantId}
+          AND status = 'PENDING'::"RedemptionStatus")::int AS "pendingRewards",
+        (SELECT SUM("cashbackAmount") FROM "CashbackTransaction" WHERE "tenantId" = ${tenantId}
+          AND status = 'COMPLETED')::float8 AS "cashbackIssued",
+        (SELECT COUNT(*) FROM "RewardRedemption" rr
+          JOIN "Reward" r ON r.id = rr."rewardId"
+          WHERE rr."tenantId" = ${tenantId}
+            AND rr."createdAt" >= ${yearStart}
+            AND r.category = 'BIRTHDAY')::int AS "birthdayRewardsSent"
+    `;
 
     return {
-      totalRewards,
-      activeRewards,
-      redeemedRewards: redeemedAgg,
-      pendingRewards,
-      cashbackIssued: cashbackAgg._sum.cashbackAmount || 0,
-      birthdayRewardsSent: birthdaySent,
+      totalRewards: row?.totalRewards ?? 0,
+      activeRewards: row?.activeRewards ?? 0,
+      redeemedRewards: row?.redeemedRewards ?? 0,
+      pendingRewards: row?.pendingRewards ?? 0,
+      cashbackIssued: row?.cashbackIssued || 0,
+      birthdayRewardsSent: row?.birthdayRewardsSent ?? 0,
     };
   }
 

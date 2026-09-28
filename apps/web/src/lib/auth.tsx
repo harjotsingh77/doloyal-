@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "./api";
-import { supabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl, ensureCanonicalAuthOrigin } from "./supabase";
+import { loadSupabase, isSupabaseConfigured, getMissingSupabaseConfig, getAuthCallbackUrl, ensureCanonicalAuthOrigin } from "./supabase-config";
 import { getStaffAuthToken, isDoloyalAccessToken, purgeInvalidStaffSession } from "./access-token";
 import { clearPageCache } from "./api-cache";
 
@@ -103,6 +103,27 @@ function saveUser(u: AuthUser | null) {
   } else {
     localStorage.removeItem("doloyal_user");
   }
+}
+
+/**
+ * One background `/auth/me` per token per page load, shared by every
+ * AuthProvider instance — the same as when a single root provider owned the
+ * session. Route groups now mount their own provider, so moving between them
+ * would otherwise re-request the same claims on each navigation. A new token
+ * (sign-in, workspace switch), sign-out or a failed request fetches again;
+ * `refreshUser()` always goes to the API.
+ */
+let sharedMe: { token: string; promise: Promise<AuthUser> } | null = null;
+
+function fetchMeShared(token: string): Promise<AuthUser> {
+  if (sharedMe && sharedMe.token === token) return sharedMe.promise;
+  const promise = api.getMe();
+  const entry = { token, promise };
+  sharedMe = entry;
+  promise.catch(() => {
+    if (sharedMe === entry) sharedMe = null;
+  });
+  return promise;
 }
 
 /* ── Default demo user (used when no token exists) ───────────────────── */
@@ -208,7 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const realUser = await api.getMe();
+        const realUser = await fetchMeShared(token);
         if (realUser && !cancelled) {
           saveUser(realUser);
           setUser(realUser);
@@ -250,6 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearAuth = React.useCallback(() => {
+    sharedMe = null;
     clearPageCache();
     setToken(null);
     saveUser(null);
@@ -323,11 +345,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     const redirectTo = getAuthCallbackUrl();
     console.info("[auth] Starting Google OAuth, redirect_to:", redirectTo);
-    void supabase.auth
-      .signInWithOAuth({
-        provider: "google",
-        options: { redirectTo },
-      })
+    void loadSupabase()
+      .then((supabase) =>
+        supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo },
+        }),
+      )
       .then(({ error }) => {
         if (error) {
           googleLoginInFlight.current = false;
@@ -352,6 +376,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * onAuthStateChange listener after a refresh.
    */
   const resolveSupabaseSession = React.useCallback(async (): Promise<AuthUser | null> => {
+    const supabase = await loadSupabase();
     const { data } = await supabase.auth.getSession();
     const session = data.session;
     if (!session?.user) return null;
@@ -372,8 +397,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!isSupabaseConfigured()) return;
     let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    const syncSupabaseSession = async (accessToken: string) => {
+    const syncSupabaseSession = async (
+      supabase: Awaited<ReturnType<typeof loadSupabase>>,
+      accessToken: string,
+    ) => {
       if (cancelled) return;
       const cached = getSavedUser();
       const { data } = await supabase.auth.getUser(accessToken);
@@ -397,20 +426,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      if (typeof window !== "undefined" && sessionStorage.getItem("doloyal_client_oauth_slug")) {
-        return;
-      }
-      if (event === "SIGNED_OUT") {
-        clearAuth();
-      } else if (session) {
-        void syncSupabaseSession(session.access_token);
-      }
-    });
+    // The client loads after first paint; it is not needed to render.
+    void loadSupabase()
+      .then((supabase) => {
+        if (cancelled) return;
+        const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+          if (typeof window !== "undefined" && sessionStorage.getItem("doloyal_client_oauth_slug")) {
+            return;
+          }
+          if (event === "SIGNED_OUT") {
+            clearAuth();
+          } else if (session) {
+            void syncSupabaseSession(supabase, session.access_token);
+          }
+        });
+        unsubscribe = () => subscription.subscription.unsubscribe();
+      })
+      .catch(() => undefined);
 
     return () => {
       cancelled = true;
-      subscription.subscription.unsubscribe();
+      unsubscribe?.();
     };
   }, [setAuth, clearAuth]);
 
@@ -490,7 +526,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         if (isSupabaseConfigured()) {
-          await supabase.auth.signOut();
+          await (await loadSupabase()).auth.signOut();
         }
       } catch {
         // Local session is still cleared below even if signOut fails
@@ -549,6 +585,20 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+const noopSubscribe = () => () => {};
+
+/**
+ * False on the server and during hydration, true once hydrated (and on every
+ * client-side navigation). The session lives in localStorage, which the
+ * server cannot see: rendering session-dependent UI in the hydration pass
+ * made React discard the server HTML and re-render the whole root
+ * ("Hydration failed … the entire root will switch to client rendering")
+ * on every full page load.
+ */
+function useHydrated(): boolean {
+  return React.useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 /**
  * AuthGuard — protects dashboard routes.
  *
@@ -562,6 +612,7 @@ export function useAuth(): AuthContextValue {
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+  const hydrated = useHydrated();
 
   React.useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -575,6 +626,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       window.location.href = slug ? `/book/${slug}` : "/sign-in";
     }
   }, [user]);
+
+  // Match the server output (nothing) while hydrating; React re-renders with
+  // the cached session immediately afterwards, before the first paint.
+  if (!hydrated) return null;
 
   // Always render children — user is initialized synchronously from localStorage
   // so `isAuthenticated` is true from the very first render in normal usage.
@@ -595,6 +650,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user, claimsReady } = useAuth();
   const router = useRouter();
+  const hydrated = useHydrated();
 
   const isAdmin = user?.isAdmin === true;
 
@@ -604,6 +660,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isLoading, claimsReady, router]);
 
+  if (!hydrated) return null;
   if (!isAuthenticated && !isLoading && claimsReady) return null;
 
   if (!isAuthenticated || (isAuthenticated && !isAdmin && !claimsReady)) {

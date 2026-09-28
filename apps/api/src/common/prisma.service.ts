@@ -241,6 +241,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private inMemory = false;
   private stores = new Map<string, Map<string, any>>();
 
+  /** True in the dev-only in-memory demo mode, where raw SQL is unavailable. */
+  get isInMemory(): boolean {
+    return this.inMemory;
+  }
+
   constructor() {
     const url = process.env.DATABASE_URL?.trim();
     const isManaged = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);

@@ -1,5 +1,21 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  webpack(config) {
+    // @doloyal/shared publishes CommonJS for the API. Bundling that build
+    // defeats tree-shaking, so importing one helper pulled every zod schema
+    // into every page. The web app compiles the ESM source instead
+    // (already listed in transpilePackages; the package is side-effect free).
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@doloyal/shared$": path.resolve(here, "../../packages/shared/src/index.ts"),
+    };
+    return config;
+  },
   experimental: {
     optimizePackageImports: [
       "lucide-react",

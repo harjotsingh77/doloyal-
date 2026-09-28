@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { tenantContext } from './prisma.service';
 import { IS_PUBLIC_KEY } from '../modules/auth/jwt-auth.guard';
 import { PrismaService } from './prisma.service';
+import { principalTenantState } from './auth-principal';
 
 function requestPath(request: { routerPath?: string; url?: string }): string {
   return String(request.routerPath || request.url || '').split('?')[0];
@@ -47,11 +48,18 @@ export class TenantContextGuard implements CanActivate {
       throw new ForbiddenException('No active tenant context. Select a workspace first.');
     }
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: user.activeTenantId },
-      select: { suspendedAt: true },
-    });
-    if (tenant?.suspendedAt && user.isAdmin !== true) {
+    // JwtStrategy already read the active tenant's suspension state while
+    // authenticating; only fall back to a lookup when it did not (mock auth).
+    const known = principalTenantState(user);
+    const suspendedAt = known
+      ? known.suspendedAt
+      : (
+          await this.prisma.tenant.findUnique({
+            where: { id: user.activeTenantId },
+            select: { suspendedAt: true },
+          })
+        )?.suspendedAt;
+    if (suspendedAt && user.isAdmin !== true) {
       throw new ForbiddenException('This business has been suspended. Contact Doloyal support.');
     }
 

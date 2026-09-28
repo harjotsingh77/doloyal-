@@ -87,8 +87,11 @@ async function proxy(req: NextRequest, path: string[]) {
   upstream.headers.forEach((value, key) => {
     if (!HOP_BY_HOP.has(key.toLowerCase())) out.set(key, value);
   });
-  const body = await upstream.arrayBuffer();
-  return new NextResponse(body, { status: upstream.status, headers: out });
+  // Stream the body through rather than buffering it: the browser starts
+  // receiving large payloads immediately, and long-lived responses such as
+  // the commerce event stream (text/event-stream) are delivered as they are
+  // written instead of never completing.
+  return new NextResponse(upstream.body, { status: upstream.status, headers: out });
 }
 
 type Ctx = { params: { path: string[] } };

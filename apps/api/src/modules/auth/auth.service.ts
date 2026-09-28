@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, NotFoundException, ConflictException
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma.service';
 import { EncryptionService } from '../../common/encryption.service';
+import { principalUserRow } from '../../common/auth-principal';
 import { getPublicAppUrl } from '../../common/helpers';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -291,10 +292,14 @@ export class AuthService {
         clientSlug: user.clientSlug ?? null,
       };
     }
-    const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      include: { memberships: true },
-    });
+    // JwtStrategy loaded this user and their memberships for this very
+    // request; only look them up again when it did not (mock auth).
+    const dbUser =
+      principalUserRow<{ memberships: Array<{ tenantId: string; role: string }> } & Record<string, unknown>>(user) ??
+      (await this.prisma.user.findUnique({
+        where: { id: user.id },
+        include: { memberships: true },
+      }));
     if (!dbUser) return user;
     const staffMemberships = dbUser.memberships.filter((m) => m.role !== 'CUSTOMER');
     const activeMembership =

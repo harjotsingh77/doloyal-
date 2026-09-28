@@ -29,7 +29,7 @@ import { isApiError } from "@doloyal/shared";
 import { getApiBaseUrl, assertApiBaseUrlConfigured } from "./api-base";
 import { notifyFromApiPath, notifyAppChange } from "./data-sync";
 import { beginGetCache, isCacheableGet, readGetCache, readStaleCache, trackInflight, writeGetCache } from "./api-cache";
-import { supabase } from "./supabase";
+import { loadSupabase } from "./supabase-config";
 import { getClientAuthToken, getStaffAuthToken } from "./access-token";
 
 function apiBase(): string {
@@ -60,7 +60,11 @@ export interface WhatsAppTemplateSummary {
   components?: Array<{ type: string; format?: string; text?: string }>;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+/**
+ * @param fresh — internal: skip the page cache and in-flight sharing (used by
+ *   the shared loader itself, so it never waits on its own promise).
+ */
+async function request<T>(path: string, options: RequestInit = {}, fresh = false): Promise<T> {
   assertApiBaseUrlConfigured();
   const staffToken = getStaffAuthToken();
   const clientToken = getClientAuthToken();
@@ -77,13 +81,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const method = (options.method || "GET").toUpperCase();
-  const revalidate = options.cache === "reload";
+  const revalidate = fresh || options.cache === "reload";
   if (!revalidate && method === "GET" && isCacheableGet(path)) {
     const cached = readGetCache<T>(path, token);
     if (cached !== undefined) return cached;
+    // Callers that ask for the same resource at the same time (a layout, a
+    // page and a prefetch all reading the tenant, say) share one request.
+    // Keyed by cache generation, so a read issued after a mutation never
+    // joins a request that started before it.
+    const inflightKey = `${path}#g${beginGetCache(path)}`;
+    const load = () => request<T>(path, options, true);
     const stale = readStaleCache<T>(path, token);
     if (stale !== undefined) {
-      void trackInflight(path, token, () => request<T>(path, { ...options, cache: "reload" }))
+      void trackInflight(inflightKey, token, load)
         .then(() => {
           if (typeof window === "undefined") return;
           window.dispatchEvent(new CustomEvent("doloyal:cache-refreshed", { detail: { path } }));
@@ -91,6 +101,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         .catch(() => undefined);
       return stale;
     }
+    return trackInflight(inflightKey, token, load);
   }
   const cacheGeneration = method === "GET" ? beginGetCache(path) : 0;
   let res: Response;
@@ -201,6 +212,7 @@ async function uploadToSignedStorage(
       size: file.size,
     }),
   });
+  const supabase = await loadSupabase();
   const { error } = await supabase.storage
     .from(signed.bucket)
     .uploadToSignedUrl(signed.path, signed.token, file, {

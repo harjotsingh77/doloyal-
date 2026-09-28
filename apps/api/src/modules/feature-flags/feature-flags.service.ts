@@ -32,8 +32,14 @@ export class FeatureFlagsService {
   }
 
   async getBusinessFeatures(tenantId: string) {
-    await this.ensureCatalog(tenantId);
-    const rows = await this.prisma.featureFlag.findMany({ where: { tenantId } });
+    // Read first; seed the catalog (and re-read) only when a key is missing,
+    // which happens once per tenant. The common path is a single query.
+    let rows = await this.prisma.featureFlag.findMany({ where: { tenantId } });
+    const present = new Set(rows.map((r) => r.featureKey));
+    if (LOYALTY_FEATURE_CATALOG.some((f) => !present.has(f.key))) {
+      await this.ensureCatalog(tenantId);
+      rows = await this.prisma.featureFlag.findMany({ where: { tenantId } });
+    }
     const byKey = new Map(rows.map((r) => [r.featureKey, r]));
 
     const features = LOYALTY_FEATURE_CATALOG.map((def) => {
@@ -64,10 +70,14 @@ export class FeatureFlagsService {
 
   async isFeatureEnabled(tenantId: string, featureKey: string): Promise<boolean> {
     if (isCoreLoyaltyFeature(featureKey)) return true;
-    await this.ensureCatalog(tenantId);
-    const row = await this.prisma.featureFlag.findUnique({
-      where: { tenantId_featureKey: { tenantId, featureKey } },
-    });
+    const where = { tenantId_featureKey: { tenantId, featureKey } };
+    // Runs on every feature-gated request: look the flag up directly and seed
+    // the catalog only when this tenant has no row for it yet.
+    let row = await this.prisma.featureFlag.findUnique({ where });
+    if (!row) {
+      await this.ensureCatalog(tenantId);
+      row = await this.prisma.featureFlag.findUnique({ where });
+    }
     return !!row?.enabled;
   }
 

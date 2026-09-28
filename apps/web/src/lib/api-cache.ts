@@ -23,6 +23,8 @@ type DiskRow = { key: string; at: number; data: unknown };
 const store = new Map<string, Entry>();
 const generations = new Map<string, number>();
 const inflight = new Map<string, Promise<unknown>>();
+/** Entries are immutable once stored, so each is serialized at most once. */
+const serialized = new WeakMap<Entry, string>();
 let hydrated = false;
 let diskTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -147,18 +149,28 @@ function persist() {
   diskTimer = setTimeout(() => {
     diskTimer = null;
     try {
-      const rows: DiskRow[] = [];
+      // Serialize each row once, then drop the oldest until the payload fits.
+      // Re-stringifying the whole cache after every drop was quadratic and
+      // blocked the main thread once a large tenant payload was cached.
+      const parts: string[] = [];
       const now = Date.now();
+      let total = 2;
       for (const [key, entry] of store) {
         if (now - entry.at > KEEP_MS) continue;
-        rows.push({ key, at: entry.at, data: entry.data });
+        let part = serialized.get(entry);
+        if (part === undefined) {
+          part = JSON.stringify({ key, at: entry.at, data: entry.data } satisfies DiskRow);
+          serialized.set(entry, part);
+        }
+        parts.push(part);
+        total += part.length + 1;
       }
-      let json = JSON.stringify(rows);
-      while (json.length > MAX_DISK_CHARS && rows.length > 1) {
-        rows.shift();
-        json = JSON.stringify(rows);
+      let first = 0;
+      while (total > MAX_DISK_CHARS && parts.length - first > 1) {
+        total -= parts[first].length + 1;
+        first++;
       }
-      sessionStorage.setItem(DISK_KEY, json);
+      sessionStorage.setItem(DISK_KEY, `[${parts.slice(first).join(",")}]`);
     } catch {
       // Quota or private mode: memory cache still works for this tab.
     }
