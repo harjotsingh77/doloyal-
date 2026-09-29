@@ -7,7 +7,6 @@ import { FinalCta } from "./cta";
 import { FaqList } from "./faq";
 import { INDUSTRIES, getIndustry, type Industry } from "../data/industries";
 import { LogoMark } from "@doloyal/ui";
-import { TestimonialGrid } from "./testimonials";
 import { cn } from "@/lib/utils";
 
 export function IndustryHero({ industry }: { industry: Industry }) {
@@ -155,12 +154,6 @@ export function IndustryPageTemplate({ slug }: { slug: string }) {
     <div className="overflow-hidden">
       <IndustryHero industry={industry} />
       <IndustryFeatures industry={industry} />
-      <section className="pb-16 sm:pb-20">
-        <div className="mx-auto max-w-[1200px] px-5 sm:px-8">
-          <SectionHeading eyebrow="Loved by" title={`${industry.name} owners like you`} />
-          <TestimonialGrid items={industry.testimonials.map((t) => ({ quote: t.quote, name: t.name, role: t.role, initials: t.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase(), gradient: industry.gradient }))} />
-        </div>
-      </section>
       <IndustryWhy industry={industry} />
       <IndustryFaq industry={industry} />
       <section className="py-4 pb-20">
@@ -182,7 +175,7 @@ export function IndustryPageTemplate({ slug }: { slug: string }) {
       </section>
       <FinalCta
         title={<>Your {industry.name.toLowerCase()} business, <em className="font-[var(--font-instrument)] italic">full every day</em></>}
-        lead={`Join ${industry.name.toLowerCase()} owners growing retention with Doloyal — free for 14 days, no credit card.`}
+        lead={`Join ${industry.name.toLowerCase()} owners growing retention with Doloyal — free for 1 month.`}
       />
     </div>
   );

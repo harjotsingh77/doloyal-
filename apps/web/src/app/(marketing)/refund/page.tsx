@@ -3,7 +3,7 @@ import { LegalPage } from "@/marketing/components/legal";
 import { buildMetadata } from "@/marketing/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Refund Policy",
+  title: "Refund & Cancellation Policy",
   description: "Doloyal's refund policy for subscriptions and add-ons.",
   path: "/refund",
 });
@@ -11,13 +11,13 @@ export const metadata: Metadata = buildMetadata({
 export default function RefundPage() {
   return (
     <LegalPage
-      eyebrow="Refund Policy"
+      eyebrow="Refund & Cancellation Policy"
       title="Fair refunds, no fine print"
-      updated="July 20, 2026"
+      updated="September 29, 2026"
       sections={[
         {
           h: "Free trial",
-          p: "Every new business gets a 14-day free trial with all features, no credit card required. You'll never be charged unless you explicitly choose a paid plan.",
+          p: "Every new business gets a 1-month free trial with full platform access. You'll never be charged unless you explicitly choose a paid plan.",
         },
         {
           h: "14-day money-back guarantee",

@@ -28,12 +28,7 @@ export const nav = [
 
 export const trustBadges = [
   "No credit card required",
-  "14-day free trial",
+  "1-month free trial",
   "Setup in 5 minutes",
 ] as const;
 
-export const heroStats = [
-  { value: "1,000+", label: "local businesses" },
-  { value: "2.4M+", label: "customers tracked" },
-  { value: "38%", label: "avg. retention lift" },
-] as const;

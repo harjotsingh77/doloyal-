@@ -81,7 +81,7 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
           <div>
             <h3 className="text-xl font-bold tracking-[-0.01em]">Put it into practice today</h3>
             <p className="mt-1 text-sm text-white/60">
-              Try every idea in this article free for 14 days — no credit card.
+              Try every idea in this article free for 1 month.
             </p>
           </div>
           <Link

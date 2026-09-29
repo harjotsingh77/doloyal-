@@ -1,7 +1,7 @@
 export const FAQS = [
   {
     q: "What does the free trial include?",
-    a: "Every feature, unlocked, for 14 days — loyalty, rewards, bookings, website builder, and the AI retention engine. No credit card required, and you keep your data if you upgrade.",
+    a: "Every feature, unlocked, for 1 month — loyalty, rewards, bookings, website builder, and the AI retention engine. You keep your data if you upgrade.",
   },
   {
     q: "Which businesses is Doloyal built for?",

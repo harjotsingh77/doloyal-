@@ -196,7 +196,7 @@ export default function ContactPage() {
                   <Mail className="h-6 w-6" />
                 </div>
                 <h3 className="mt-4 text-lg font-bold text-[#282628]">Email Us Directly</h3>
-                <p className="mt-1 text-sm text-gray-500">We reply to every email within 2 hours.</p>
+                <p className="mt-1 text-sm text-gray-500">We usually reply within 1 business day.</p>
                 <a
                   href="mailto:hello@doloyal.com"
                   className="mt-4 inline-block text-lg font-extrabold text-[#2563EB] hover:underline"

@@ -82,8 +82,8 @@ export function Comparison() {
         <div className="relative mt-7 rounded-2xl bg-white/8 p-4 backdrop-blur">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-[13px] text-white/60">Average result after switching</div>
-              <div className="text-xl font-bold">+38% retention · 6 hrs saved / wk</div>
+              <div className="text-[13px] text-white/60">One platform instead of many tools</div>
+              <div className="text-xl font-bold">Loyalty, bookings &amp; follow-ups in one place</div>
             </div>
             <a href="/sign-up" className="group inline-flex items-center gap-1.5 text-[14px] font-semibold text-white">
               Try it free <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

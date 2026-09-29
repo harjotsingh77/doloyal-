@@ -122,7 +122,7 @@ export default function CareersPage() {
       </section>
 
       <div className="pb-24 sm:pb-32">
-        <FinalCta title={<>Not hiring? <em className="font-[var(--font-instrument)] italic">Not yet</em></>} lead="Try Doloyal on your own business while you're here — free for 14 days." />
+        <FinalCta title={<>Not hiring? <em className="font-[var(--font-instrument)] italic">Not yet</em></>} lead="Try Doloyal on your own business while you're here — free for 1 month." />
       </div>
     </div>
   );

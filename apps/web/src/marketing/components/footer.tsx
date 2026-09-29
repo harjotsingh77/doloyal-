@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Facebook, Linkedin, Instagram, Send } from "lucide-react";
+import { Linkedin, Instagram } from "lucide-react";
 import { site } from "../lib/site";
 import { Logo } from "@doloyal/ui";
 
@@ -32,18 +32,13 @@ const COLUMNS = [
     links: [
       { label: "Privacy Policy", href: "/privacy-policy" },
       { label: "Terms of Service", href: "/terms-of-service" },
+      { label: "Refund & Cancellation", href: "/refund" },
       { label: "Data Deletion", href: "/data-deletion" },
     ],
   },
 ];
 
 const SOCIALS = [
-  {
-    icon: Facebook,
-    label: "Facebook",
-    href: "https://facebook.com",
-    hoverClass: "hover:bg-[#1877F2]",
-  },
   {
     icon: Linkedin,
     label: "LinkedIn",
@@ -55,12 +50,6 @@ const SOCIALS = [
     label: "Instagram",
     href: site.social.instagram,
     hoverClass: "hover:bg-gradient-to-tr hover:from-[#F09433] hover:via-[#DC2743] hover:to-[#BC1888]",
-  },
-  {
-    icon: Send,
-    label: "Telegram",
-    href: "https://t.me",
-    hoverClass: "hover:bg-[#229ED9]",
   },
 ];
 
@@ -76,7 +65,11 @@ export function SiteFooter() {
               <Logo size={36} />
             </Link>
             <p className="mt-3.5 sm:mt-4 max-w-sm text-[13.5px] sm:text-[14px] leading-relaxed text-slate-500 font-normal">
-              Doloyal helps local businesses build stronger customer relationships, increase repeat visits, and manage customer retention from one simple platform.
+              Doloyal is a subscription software (SaaS) platform that helps local businesses manage customers, bookings, loyalty programs and follow-ups. We do not sell physical goods, financial products or payment services.
+            </p>
+            <p className="mt-3 text-[13px] leading-relaxed text-slate-500">
+              {site.legalName} ·{" "}
+              <a href={`mailto:${site.email}`} className="hover:text-[#2563EB]">{site.email}</a>
             </p>
           </div>
 

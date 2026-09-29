@@ -73,7 +73,7 @@ export default function SignUpPage() {
             Create your account
           </h1>
           <p className="mt-1.5 text-sm text-[rgb(var(--color-muted-foreground))]">
-            Start your 14-day free trial
+            Start your 1-month free trial
           </p>
         </div>
 

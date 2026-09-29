@@ -16,7 +16,7 @@ const FAQS = [
   },
   {
     q: "Will it play nice with my CRM?",
-    a: "Yes! Doloyal seamlessly integrates with your existing CRM, calendars, payment systems, WhatsApp, and 100+ business tools through our clean APIs.",
+    a: "Yes! Doloyal connects with Google Calendar, Razorpay, email and WhatsApp, and more integrations are on the way.",
   },
   {
     q: "Can I keep an eye on my sales goals?",

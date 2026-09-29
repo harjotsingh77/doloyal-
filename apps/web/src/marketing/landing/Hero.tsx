@@ -198,12 +198,7 @@ export function HeroContent() {
           className="flex justify-center"
         >
           <div className="inline-flex items-center gap-2.5 rounded-full border border-black/5 bg-white/90 px-3.5 py-1.5 sm:px-4 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.06)] backdrop-blur-md">
-            <div className="flex -space-x-1.5">
-              <img className="h-5 w-5 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="User avatar" />
-              <img className="h-5 w-5 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" alt="User avatar" />
-              <img className="h-5 w-5 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=120&q=80" alt="User avatar" />
-            </div>
-            <span className="text-[12px] sm:text-[12.5px] font-semibold text-[#282628]">3600+ 5_Stars Reviews</span>
+            <span className="text-[12px] sm:text-[12.5px] font-semibold text-[#282628]">Built for salons, spas, gyms, clinics &amp; local shops</span>
           </div>
         </motion.div>
 
@@ -289,8 +284,8 @@ export function HeroContent() {
                 <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-semibold text-gray-700">
                   <img className="h-6 w-6 sm:h-7 sm:w-7 rounded-full object-cover ring-2 ring-gray-100" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80" alt="User" />
                   <div className="hidden sm:block leading-tight">
-                    <span className="block text-[11px] font-bold text-gray-800">Prof. Arjuna</span>
-                    <span className="block text-[9px] text-gray-400 font-normal">arjun.aprof@gmail.com</span>
+                    <span className="block text-[11px] font-bold text-gray-800">Demo Business</span>
+                    <span className="block text-[9px] text-gray-400 font-normal">demo@doloyal.com</span>
                   </div>
                   <ChevronDown className="h-3 w-3 text-gray-400 hidden sm:block" />
                 </div>
@@ -303,7 +298,7 @@ export function HeroContent() {
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-sm sm:text-lg font-bold text-[#111827]">Dashboard</h3>
-                  <p className="text-[10px] sm:text-[11px] text-gray-500">Welcome back! Here&apos;s what&apos;s happening with your business.</p>
+                  <p className="text-[10px] sm:text-[11px] text-gray-500">Sample dashboard — illustrative demo data only.</p>
                 </div>
                 <div className="hidden sm:flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-600 shadow-sm">
                   <Calendar className="h-3 w-3 text-gray-400" />

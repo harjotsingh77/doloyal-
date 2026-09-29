@@ -3,7 +3,6 @@ import { site } from "@/marketing/lib/site";
 import { INDUSTRY_SLUGS } from "@/marketing/data/industries";
 import { FEATURES } from "@/marketing/data/features";
 import { BLOG_POSTS } from "@/marketing/data/blog";
-import { CASE_STUDIES } from "@/marketing/data/case-studies";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticPaths = [
@@ -11,8 +10,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/features",
     "/integrations",
     "/solutions",
-    "/customers",
-    "/case-studies",
     "/resources",
     "/blog",
     "/docs",
@@ -21,7 +18,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/about",
     "/contact",
     "/book-demo",
-    "/careers",
     "/affiliate",
     "/partner",
     "/roadmap",
@@ -39,7 +35,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...FEATURES.map((f) => `/${f.slug}`),
     ...INDUSTRY_SLUGS.map((s) => `/solutions/${s}`),
     ...BLOG_POSTS.map((p) => `/blog/${p.slug}`),
-    ...CASE_STUDIES.map((c) => `/case-studies/${c.slug}`),
   ];
 
   return staticPaths.map((path) => ({

@@ -323,7 +323,7 @@ export function MultiplierSection() {
               CRM
             </h2>
             <p className="mt-3 sm:mt-5 max-w-[420px] text-[15px] sm:text-[18px] lg:text-[19px] leading-[1.6] text-[#64748B]">
-              CRMs only collect data. Doloyal multiplies your revenue.
+              CRMs only collect data. Doloyal helps you bring customers back.
             </p>
           </div>
         </div>

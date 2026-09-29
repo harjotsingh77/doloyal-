@@ -104,7 +104,7 @@ export default function CustomersPage() {
             Your story could be <em className="font-[var(--font-instrument)] italic">next</em>
           </>
         }
-        lead="Join the owners who stopped losing customers. Free for 14 days — no credit card."
+        lead="Join the owners who stopped losing customers. Free for 1 month."
       />
     </div>
   );

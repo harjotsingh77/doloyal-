@@ -1,7 +1,6 @@
 "use client";
 
 import { HeroContent } from "@/marketing/landing/Hero";
-import { IntegrationStrip } from "@/marketing/landing/IntegrationStrip";
 import { ProblemSection } from "@/marketing/landing/ProblemSection";
 import { MultiplierSection } from "@/marketing/landing/MultiplierSection";
 import { Pricing } from "@/marketing/landing/Pricing";
@@ -13,9 +12,6 @@ export default function HomePage() {
     <div className="overflow-x-clip bg-white font-[family-name:var(--font-sora)]">
       {/* 1 · HERO */}
       <HeroContent />
-
-      {/* 2 · INTEGRATIONS TRUST STRIP */}
-      <IntegrationStrip />
 
       {/* 3 · THE PROBLEM */}
       <ProblemSection />

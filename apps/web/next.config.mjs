@@ -71,6 +71,11 @@ const nextConfig = {
         destination: "/book-demo",
         permanent: true,
       },
+      // Unverified customer stats / case studies are hidden until real ones exist.
+      { source: "/customers", destination: "/", permanent: false },
+      { source: "/case-studies", destination: "/", permanent: false },
+      { source: "/case-studies/:slug", destination: "/", permanent: false },
+      { source: "/careers", destination: "/about", permanent: false },
     ];
   },
 };

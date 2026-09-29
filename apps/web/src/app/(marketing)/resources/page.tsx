@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BookOpen, FileCode2, LifeBuoy, LineChart, Milestone, History, Users2, GraduationCap } from "lucide-react";
+import { ArrowRight, BookOpen, FileCode2, LifeBuoy, LineChart, Milestone, History, GraduationCap } from "lucide-react";
 import { PageHero } from "@/marketing/components/page-hero";
 import { SectionHeading, GradientWord, Stagger, StaggerItem } from "@/marketing/components/ui";
 import { FinalCta } from "@/marketing/components/cta";
@@ -16,7 +16,6 @@ export const metadata: Metadata = buildMetadata({
 
 const HUBS = [
   { icon: BookOpen, title: "Blog", desc: "Retention playbooks and growth tactics for local businesses.", href: "/blog", tag: "8 posts" },
-  { icon: Users2, title: "Case studies", desc: "Real numbers from salons, gyms, clinics, and cafés.", href: "/case-studies", tag: "4 studies" },
   { icon: FileCode2, title: "Documentation", desc: "Guides, API reference, and everything your team needs.", href: "/docs", tag: "In-depth" },
   { icon: FileCode2, title: "API Reference", desc: "REST endpoints, webhooks, and SDK quickstarts.", href: "/api", tag: "REST v1" },
   { icon: LifeBuoy, title: "Help Center", desc: "Answers to common questions, step by step.", href: "/help", tag: "Guides" },
