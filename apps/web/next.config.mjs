@@ -76,6 +76,8 @@ const nextConfig = {
       { source: "/case-studies", destination: "/", permanent: false },
       { source: "/case-studies/:slug", destination: "/", permanent: false },
       { source: "/careers", destination: "/about", permanent: false },
+      { source: "/status", destination: "/", permanent: false },
+      { source: "/changelog", destination: "/", permanent: false },
     ];
   },
 };

@@ -38,7 +38,7 @@ export const INDUSTRIES: Industry[] = [
     features: [
       {
         title: "Stylist-based booking",
-        description: "Clients book their favourite stylist in seconds — with reminders that cut no-shows by up to 34%.",
+        description: "Clients book their favourite stylist in seconds — with automatic reminders that help cut no-shows.",
       },
       {
         title: "Visit-stamp loyalty",
@@ -88,8 +88,8 @@ export const INDUSTRIES: Industry[] = [
         description: "Monthly rituals, prepaid credits, and couple packages — billed automatically every month.",
       },
       {
-        title: "Prepaid wallet",
-        description: "Guests top up once and spend across treatments, products, and add-ons without friction.",
+        title: "Prepaid packages",
+        description: "Sell treatment packages upfront and track sessions used — no loose ends.",
       },
       {
         title: "Gentle re-engagement",
@@ -359,7 +359,7 @@ export const INDUSTRIES: Industry[] = [
       },
       {
         title: "Family loyalty",
-        description: "Points from every pet in the family pool into one wallet for the owner.",
+        description: "Points from every pet in the family pool into one account for the owner.",
       },
     ],
     testimonials: [

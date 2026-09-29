@@ -46,14 +46,6 @@ export default function SolutionsPage() {
                     >
                       <ind.icon style={{ width: 22, height: 22 }} />
                     </span>
-                    <span
-                      className={cn(
-                        "bg-gradient-to-r bg-clip-text text-2xl font-bold tracking-tight text-transparent",
-                        ind.gradient,
-                      )}
-                    >
-                      {ind.heroStat.value}
-                    </span>
                   </div>
                   <h2 className="text-lg font-bold tracking-[-0.01em]">{ind.name}</h2>
                   <p className="mt-2 flex-1 text-[14.5px] leading-relaxed text-[rgb(var(--color-muted-foreground))]">

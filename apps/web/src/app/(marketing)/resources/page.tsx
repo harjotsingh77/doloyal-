@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BookOpen, FileCode2, LifeBuoy, LineChart, Milestone, History, GraduationCap } from "lucide-react";
+import { ArrowRight, BookOpen, FileCode2, LifeBuoy, LineChart, Milestone, GraduationCap } from "lucide-react";
 import { PageHero } from "@/marketing/components/page-hero";
 import { SectionHeading, GradientWord, Stagger, StaggerItem } from "@/marketing/components/ui";
 import { FinalCta } from "@/marketing/components/cta";
@@ -20,7 +20,6 @@ const HUBS = [
   { icon: FileCode2, title: "API Reference", desc: "REST endpoints, webhooks, and SDK quickstarts.", href: "/api", tag: "REST v1" },
   { icon: LifeBuoy, title: "Help Center", desc: "Answers to common questions, step by step.", href: "/help", tag: "Guides" },
   { icon: Milestone, title: "Roadmap", desc: "What we're building next — and what you voted for.", href: "/roadmap", tag: "Up next" },
-  { icon: History, title: "Changelog", desc: "Every release, ship note, and improvement.", href: "/changelog", tag: "All releases" },
   { icon: GraduationCap, title: "Onboarding", desc: "Get live in five minutes with our guides and templates.", href: "/docs?tab=get-started", tag: "5 min" },
 ];
 

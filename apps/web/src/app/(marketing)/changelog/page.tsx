@@ -38,7 +38,7 @@ const RELEASES = [
     type: "Fixes",
     items: [
       "Fixed rare double-booking when two customers booked the same slot",
-      "Razorpay refunds now sync back to customer wallets automatically",
+      "Razorpay refunds now sync back to invoices automatically",
       "Emails no longer land in spam for @gmail and @outlook domains",
     ],
   },

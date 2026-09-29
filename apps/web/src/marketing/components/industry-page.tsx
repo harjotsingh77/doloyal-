@@ -20,13 +20,6 @@ export function IndustryHero({ industry }: { industry: Industry }) {
         <ButtonPrimary href="/sign-up">Start Free Trial</ButtonPrimary>
         <ButtonGhost href="/book-demo">See it live</ButtonGhost>
       </div>
-      <div className="mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full border border-[rgb(var(--color-border))] bg-white px-4 py-2 sm:px-5 sm:py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <span className="text-xs sm:text-[13px] font-semibold text-[rgb(var(--color-subtle))]">Businesses using Doloyal see</span>
-        <span className={cn("bg-gradient-to-r bg-clip-text text-lg sm:text-xl font-bold tracking-tight text-transparent", industry.gradient)}>
-          {industry.heroStat.value}
-        </span>
-        <span className="text-xs sm:text-[13px] font-medium text-[rgb(var(--color-subtle))]">{industry.heroStat.label}</span>
-      </div>
     </PageHero>
   );
 }
@@ -113,15 +106,6 @@ export function IndustryWhy({ industry }: { industry: Industry }) {
                   </div>
                 </div>
               ))}
-              <div className="mt-5 rounded-2xl bg-[#0F172A] p-5 text-white">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-white/60">Launching this week</span>
-                  <span className={cn("bg-gradient-to-r bg-clip-text text-2xl font-bold text-transparent", industry.gradient)}>
-                    {industry.heroStat.value}
-                  </span>
-                </div>
-                <div className="mt-1.5 text-[12.5px] text-white/50">{industry.heroStat.label}</div>
-              </div>
             </div>
           </Reveal>
           <div

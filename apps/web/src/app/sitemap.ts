@@ -21,8 +21,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/affiliate",
     "/partner",
     "/roadmap",
-    "/changelog",
-    "/status",
     "/privacy",
     "/privacy-policy",
     "/data-deletion",
