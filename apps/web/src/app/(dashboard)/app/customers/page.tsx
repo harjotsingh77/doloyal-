@@ -60,6 +60,7 @@ export default function CustomersPage() {
   const [addEmail, setAddEmail] = React.useState("");
   const [addTags, setAddTags] = React.useState("");
   const [adding, setAdding] = React.useState(false);
+  const [addWhatsappOptIn, setAddWhatsappOptIn] = React.useState(false);
   const [importing, setImporting] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
@@ -140,6 +141,8 @@ export default function CustomersPage() {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
+      // Consent is stored as a tag; WhatsApp campaigns only reach opted-in customers.
+      if (addWhatsappOptIn && !tags.includes("whatsapp-opt-in")) tags.push("whatsapp-opt-in");
       await api.createCustomer({
         name: addName,
         phone: addPhone,
@@ -151,6 +154,7 @@ export default function CustomersPage() {
       setAddPhone("");
       setAddEmail("");
       setAddTags("");
+      setAddWhatsappOptIn(false);
       loadCustomers();
       toast.success("Customer added successfully");
     } catch (err) {
@@ -309,6 +313,15 @@ export default function CustomersPage() {
                       onChange={(e) => setAddTags(e.target.value)}
                     />
                   </Field>
+                  <label className="flex cursor-pointer items-start gap-2.5 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={addWhatsappOptIn}
+                      onChange={(e) => setAddWhatsappOptIn(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                    />
+                    <span>Customer agreed to receive WhatsApp messages from us (required for WhatsApp campaigns).</span>
+                  </label>
                 </div>
                 <DialogFooter>
                   <Button variant="secondary" onClick={() => setAddDialogOpen(false)}>

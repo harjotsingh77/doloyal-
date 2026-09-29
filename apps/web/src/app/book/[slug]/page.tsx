@@ -535,6 +535,7 @@ export default function BookingPage() {
   const [gender, setGender] = React.useState("");
   const [address, setAddress] = React.useState("");
   const [referralSource, setReferralSource] = React.useState("");
+  const [whatsappOptIn, setWhatsappOptIn] = React.useState(false);
   const [paymentMethod, setPaymentMethod] = React.useState("RAZORPAY");
   const [honeypot, setHoneypot] = React.useState("");
   const [validationErrors, setValidationErrors] = React.useState<Record<string, string>>({});
@@ -813,6 +814,7 @@ export default function BookingPage() {
       if (gender) payload.gender = gender;
       if (address.trim()) payload.address = address.trim();
       if (referralSource.trim()) payload.referralSource = referralSource.trim();
+      if (whatsappOptIn) payload.whatsappOptIn = true;
 
       const res = await fetch(`${BASE_URL}/public/book/${slug}`, {
         method: "POST",
@@ -1359,6 +1361,8 @@ export default function BookingPage() {
                 gender={gender}
                 address={address}
                 referralSource={referralSource}
+                whatsappOptIn={whatsappOptIn}
+                onChangeWhatsappOptIn={setWhatsappOptIn}
                 paymentMethod={paymentMethod}
                 honeypot={honeypot}
                 paymentMode="FULL"
@@ -1963,6 +1967,8 @@ function StepDetails({
   gender,
   address,
   referralSource,
+  whatsappOptIn,
+  onChangeWhatsappOptIn,
   paymentMethod,
   honeypot,
   paymentMode,
@@ -1995,6 +2001,8 @@ function StepDetails({
   gender: string;
   address: string;
   referralSource: string;
+  whatsappOptIn: boolean;
+  onChangeWhatsappOptIn: (v: boolean) => void;
   paymentMethod: string;
   honeypot: string;
   paymentMode: string;
@@ -2085,6 +2093,16 @@ function StepDetails({
         <FieldGroup label="Phone" required error={errors.phone}>
           <input type="tel" value={phone} onChange={(e) => onChangePhone(e.target.value)} placeholder="+91 98765 43210" className={inputClass(!!errors.phone)} />
         </FieldGroup>
+
+        <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-snug text-gray-600">
+          <input
+            type="checkbox"
+            checked={whatsappOptIn}
+            onChange={(e) => onChangeWhatsappOptIn(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300"
+          />
+          <span>I agree to receive booking updates and offers from this business on WhatsApp. Reply STOP anytime to unsubscribe.</span>
+        </label>
 
         {showEmail && (
           <FieldGroup label="Email" required={field("email").required} error={errors.email}>

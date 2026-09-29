@@ -27,6 +27,7 @@ import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 import { CommerceRealtimeService } from '../../common/commerce-realtime.service';
 import { formatWhatsAppNumber, toWhatsAppNumber } from '../../common/phone';
 import { ensureWhatsAppSchema } from '../../common/whatsapp-schema';
+import { withWhatsAppOptIn } from '../../common/whatsapp-consent';
 
 const DAY_MS = 86_400_000;
 
@@ -413,6 +414,7 @@ export class CustomersService {
     email?: string;
     notes?: string;
     tags?: string[];
+    whatsappOptIn?: boolean;
   }) {
     await ensureClientNumberColumn(this.prisma);
     const nameParts = data.name.trim().split(/\s+/);
@@ -439,7 +441,7 @@ export class CustomersService {
         phone: data.phone,
         email: data.email,
         notes: data.notes,
-        tags: data.tags || [],
+        tags: data.whatsappOptIn === true ? withWhatsAppOptIn(data.tags) : data.tags || [],
         status: 'ACTIVE',
         signupSource: 'MANUAL',
         clientNumber,

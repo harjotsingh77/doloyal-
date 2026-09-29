@@ -13,6 +13,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../integrations/services/email.service';
 import { WhatsAppIntegrationService } from '../integrations/services/whatsapp.service';
+import { hasWhatsAppOptIn, WHATSAPP_NOT_OPTED_IN_MESSAGE } from '../../common/whatsapp-consent';
 import {
   getAction,
   getCondition,
@@ -560,6 +561,9 @@ export class WorkflowEngineService {
         if (channel === 'WHATSAPP') {
           if (!customer?.phone) {
             throw new Error('This customer has no phone number on file.');
+          }
+          if (!hasWhatsAppOptIn(customer.tags)) {
+            throw new Error(WHATSAPP_NOT_OPTED_IN_MESSAGE);
           }
           const templateName = String(config.template || '').trim();
           const result = templateName

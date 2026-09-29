@@ -5,6 +5,13 @@ import { toWhatsAppNumber, formatWhatsAppNumber } from '../../../common/phone';
 import { ensureWhatsAppSchema } from '../../../common/whatsapp-schema';
 import { describeConfigProblem, readEmbeddedSignupConfig } from './meta-embedded-signup';
 import * as crypto from 'crypto';
+import {
+  hasWhatsAppOptOut,
+  WHATSAPP_OPTED_OUT_MESSAGE,
+  whatsAppConsentKeyword,
+  withWhatsAppOptIn,
+  withWhatsAppOptOut,
+} from '../../../common/whatsapp-consent';
 
 const GRAPH_VERSION = 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -673,10 +680,13 @@ export class WhatsAppIntegrationService {
   ): Promise<WhatsAppCustomerSendResult> {
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, tenantId },
-      select: { id: true, firstName: true, lastName: true, phone: true },
+      select: { id: true, firstName: true, lastName: true, phone: true, tags: true },
     });
     if (!customer) {
       throw new NotFoundException('Customer not found in this workspace.');
+    }
+    if (hasWhatsAppOptOut(customer.tags)) {
+      throw new BadRequestException(WHATSAPP_OPTED_OUT_MESSAGE);
     }
     if (!customer.phone?.trim()) {
       throw new BadRequestException('This customer does not have a phone / WhatsApp number.');
@@ -1047,7 +1057,7 @@ export class WhatsAppIntegrationService {
           { phone: fromDigits },
         ],
       },
-      select: { id: true },
+      select: { id: true, tags: true },
     });
     if (!customer) return false;
     const text =
@@ -1055,6 +1065,7 @@ export class WhatsAppIntegrationService {
       message?.button?.text ||
       message?.interactive?.button_reply?.title ||
       `[${message?.type || 'media'}]`;
+    await this.applyConsentKeyword(tenantId, customer, text);
     await this.prisma.activity.create({
       data: {
         tenantId,
@@ -1069,5 +1080,29 @@ export class WhatsAppIntegrationService {
       },
     });
     return true;
+  }
+
+  /** Honors STOP / START replies (Meta requires opt-out requests to be respected). */
+  private async applyConsentKeyword(
+    tenantId: string,
+    customer: { id: string; tags: string[] },
+    text: string,
+  ): Promise<void> {
+    const keyword = whatsAppConsentKeyword(text);
+    if (!keyword) return;
+    const tags = keyword === 'OPT_OUT' ? withWhatsAppOptOut(customer.tags) : withWhatsAppOptIn(customer.tags);
+    await this.prisma.customer.update({ where: { id: customer.id }, data: { tags } });
+    await this.prisma.activity.create({
+      data: {
+        tenantId,
+        customerId: customer.id,
+        type: 'WHATSAPP_RECEIVED',
+        message:
+          keyword === 'OPT_OUT'
+            ? 'Customer opted out of WhatsApp messages'
+            : 'Customer opted in to WhatsApp messages',
+        metadata: { consent: keyword, at: new Date().toISOString() },
+      },
+    });
   }
 }

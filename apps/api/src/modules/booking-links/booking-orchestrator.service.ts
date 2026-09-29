@@ -8,6 +8,7 @@ import {
   orderCountsAsRevenue,
 } from '../../common/customer-commerce';
 import { ensureClientNumber, ensureClientNumberColumn, nextClientNumber } from '../../common/client-number';
+import { withWhatsAppOptIn } from '../../common/whatsapp-consent';
 import { BookingLinksService } from './booking-links.service';
 import { BookingNotificationsService } from './booking-notifications.service';
 import { GoogleCalendarIntegrationService } from '../integrations/services/google-calendar.service';
@@ -354,7 +355,8 @@ export class BookingOrchestratorService {
         throw new BadRequestException('Customer creation is disabled for this link');
       }
       isNewCustomer = true;
-      const tags = dto.referralSource ? [`referral:${dto.referralSource}`] : [];
+      const baseTags = dto.referralSource ? [`referral:${dto.referralSource}`] : [];
+      const tags = dto.whatsappOptIn === true ? withWhatsAppOptIn(baseTags) : baseTags;
       await ensureClientNumberColumn(this.prisma);
       const clientNumber = await nextClientNumber(this.prisma, tenant.id);
       customer = await this.prisma.customer.create({
@@ -381,6 +383,12 @@ export class BookingOrchestratorService {
             email: customer.email || dto.email || dto.customerEmail || undefined,
             notes: dto.notes ? `${customer.notes || ''}\n${dto.notes}`.trim() : customer.notes,
           },
+        });
+      }
+      if (dto.whatsappOptIn === true) {
+        customer = await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { tags: withWhatsAppOptIn(customer.tags) },
         });
       }
       if (!customer.clientNumber) {

@@ -102,6 +102,7 @@ class CreatePublicBookingDto {
   @IsString() @IsOptional() gender?: string;
   @IsString() @IsOptional() address?: string;
   @IsString() @IsOptional() referralSource?: string;
+  @IsBoolean() @IsOptional() whatsappOptIn?: boolean;
   @IsString() @IsOptional() promoCode?: string;
   @IsNumber() @IsOptional() redeemPoints?: number;
   @IsString() @IsOptional() paymentMethod?: string;

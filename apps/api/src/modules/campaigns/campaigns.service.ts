@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../../common/prisma.service';
 import { EmailService } from '../integrations/services/email.service';
 import { WhatsAppIntegrationService } from '../integrations/services/whatsapp.service';
+import { WHATSAPP_MARKETING_WHERE } from '../../common/whatsapp-consent';
 
 export interface CreateCampaignInput {
   name: string;
@@ -139,7 +140,8 @@ export class CampaignsService {
     } else {
       // WHATSAPP
       customers = await this.prisma.customer.findMany({
-        where: { tenantId, phone: { not: '' }, ...audienceWhere },
+        // Only customers who opted in to WhatsApp and have not replied STOP.
+        where: { tenantId, phone: { not: '' }, ...audienceWhere, ...WHATSAPP_MARKETING_WHERE },
         select: { id: true, firstName: true, lastName: true, phone: true },
         take: AUDIENCE_CAP,
         orderBy: { createdAt: 'asc' },

@@ -24,6 +24,7 @@ import {
   IsNotEmpty,
   IsIn,
   IsEmail,
+  IsBoolean,
   MaxLength,
 } from 'class-validator';
 import type { FastifyRequest, FastifyReply } from 'fastify';
@@ -76,6 +77,11 @@ class CreateCustomerDto {
   @IsOptional()
   @IsArray()
   tags?: string[];
+
+  /** Staff confirms the customer agreed to receive WhatsApp messages. */
+  @IsOptional()
+  @IsBoolean()
+  whatsappOptIn?: boolean;
 }
 
 class UpdateCustomerDto {
