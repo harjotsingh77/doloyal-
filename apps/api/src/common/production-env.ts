@@ -15,9 +15,13 @@ export function isAuthProduction(): boolean {
 /**
  * Adds serverless-safe Prisma/Supabase query params without logging secrets.
  * Transaction-mode PgBouncer needs pgbouncer=true and TLS. A single Prisma
- * connection times out on dashboard overview (dozens of parallel queries,
- * Vercel iad1 → Supabase ap-southeast-1). Cap at 5 so Nano's pool of 15
- * survives a few concurrent function instances.
+ * connection times out on dashboard overview (several parallel queries).
+ * Cap at 5 so Nano's pool of 15 survives a few concurrent function instances.
+ *
+ * The database is in Supabase ap-southeast-1 (Singapore), so the API
+ * functions run in Vercel `sin1` (apps/api/vercel.json): in this mode every
+ * Prisma query is ~6 network round trips, and from another region each one
+ * crosses that distance (~350 ms per query from Mumbai, measured).
  */
 export function normalizeDatabaseUrl(raw: string): string {
   const url = new URL(raw);

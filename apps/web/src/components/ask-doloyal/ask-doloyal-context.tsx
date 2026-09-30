@@ -14,13 +14,19 @@ interface AskDoloyalContextValue {
 
 const AskDoloyalContext = React.createContext<AskDoloyalContextValue | null>(null);
 
+/** How often the unread badge is re-checked while the tab is visible. */
+const UNREAD_POLL_MS = 60_000;
+
 export function AskDoloyalProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [unread, setUnread] = React.useState(0);
   const refreshToken = React.useRef(0);
 
+  const lastCheckedAt = React.useRef(0);
+
   const refreshUnread = React.useCallback(async () => {
     const token = ++refreshToken.current;
+    lastCheckedAt.current = Date.now();
     try {
       const badge = await api.getSupportUnreadBadge();
       if (token === refreshToken.current) setUnread(badge.unread || 0);
@@ -32,15 +38,19 @@ export function AskDoloyalProvider({ children }: { children: React.ReactNode }) 
   // First check shortly after mount (so it does not compete with the page's
   // own data), then poll every 60s while the tab is visible, and re-check when
   // the tab comes back into view. Background tabs generate no traffic.
+  // Returning to the tab only re-checks when the badge is older than the
+  // poll would have left it: switching windows back and forth used to send a
+  // request on every return.
   React.useEffect(() => {
     const first = setTimeout(() => void refreshUnread(), 4_000);
     const t = setInterval(() => {
       if (typeof document === "undefined" || document.visibilityState === "visible") {
         void refreshUnread();
       }
-    }, 60_000);
+    }, UNREAD_POLL_MS);
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void refreshUnread();
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastCheckedAt.current >= UNREAD_POLL_MS) void refreshUnread();
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {

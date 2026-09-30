@@ -183,22 +183,40 @@ export function useCommerceLive(
     if (!token) return;
     const base = getApiBaseUrl().replace(/\/+$/, "");
     const url = `${base}/commerce/events?access_token=${encodeURIComponent(token)}`;
-    const source = new EventSource(url);
     const wanted = new Set(scopes);
-    source.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as { scope?: AppDataScope };
-        const scope = data?.scope;
-        if (!scope) return;
-        if (!wanted.has("all") && !wanted.has(scope)) return;
-        notifyAppChange([scope]);
-        reloadRef.current();
-      } catch {
-        // ignore malformed keepalive payloads
-      }
+    // The stream is only held open while the tab is visible. A hidden tab kept
+    // a serverless function busy (and reconnected every time it timed out)
+    // for updates nobody could see; polling above already pauses when hidden.
+    let source: EventSource | null = null;
+    const connect = () => {
+      if (source || document.visibilityState !== "visible") return;
+      source = new EventSource(url);
+      source.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as { scope?: AppDataScope };
+          const scope = data?.scope;
+          if (!scope) return;
+          if (!wanted.has("all") && !wanted.has(scope)) return;
+          notifyAppChange([scope]);
+          reloadRef.current();
+        } catch {
+          // ignore malformed keepalive payloads
+        }
+      };
     };
+    const disconnect = () => {
+      source?.close();
+      source = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") connect();
+      else disconnect();
+    };
+    connect();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      source.close();
+      document.removeEventListener("visibilitychange", onVisibility);
+      disconnect();
     };
   }, [scopesKey, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 }

@@ -473,15 +473,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 
+    // supabase-js re-emits SIGNED_IN every time the tab becomes visible (and
+    // INITIAL_SESSION on load). The event already carries the session's user,
+    // so compare against that instead of asking Supabase (`GET /auth/v1/user`)
+    // on each one. A mismatch still goes through `supabaseExchange`, where the
+    // API verifies the access token itself.
+    const sessionEmail = (session: { user?: { email?: string | null } | null }) => {
+      try {
+        return session.user?.email || null;
+      } catch {
+        return null; // user not stored with the session
+      }
+    };
+
     const syncSupabaseSession = async (
       supabase: Awaited<ReturnType<typeof loadSupabase>>,
-      accessToken: string,
+      session: { access_token: string; user?: { email?: string | null } | null },
     ) => {
       if (cancelled) return;
+      const accessToken = session.access_token;
       const cached = getSavedUser();
-      const { data } = await supabase.auth.getUser(accessToken);
-      const sbUser = data.user;
-      if (!sbUser || !sbUser.email) return;
+      const email =
+        sessionEmail(session) ?? (await supabase.auth.getUser(accessToken)).data.user?.email;
+      if (cancelled || !email) return;
+      const sbUser = { email };
       if (
         cached &&
         cached.email !== "demo@doloyal.ai" &&
@@ -511,7 +526,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (event === "SIGNED_OUT") {
             clearAuth();
           } else if (session) {
-            void syncSupabaseSession(supabase, session.access_token);
+            void syncSupabaseSession(supabase, session);
           }
         });
         unsubscribe = () => subscription.subscription.unsubscribe();

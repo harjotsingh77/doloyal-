@@ -3,7 +3,7 @@
   "version": 2,
   "framework": null,
   "regions": [
-    "bom1"
+    "sin1"
   ],
   "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@doloyal/api...",
