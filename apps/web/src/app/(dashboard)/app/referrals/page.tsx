@@ -397,13 +397,13 @@ export default function ReferralsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-[1.7rem]">
+          <h1 className="text-2xl font-semibold tracking-tight text-[rgb(var(--color-foreground))] md:text-[1.7rem]">
             Referral Program
           </h1>
-          <p className="max-w-2xl text-sm text-slate-500">
+          <p className="max-w-2xl text-sm text-[rgb(var(--color-muted-foreground))]">
             Create referral campaigns, generate secure referral links, and track referral performance
             in real time.
           </p>
@@ -438,12 +438,12 @@ export default function ReferralsPage() {
       </header>
 
       {error ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[rgb(var(--color-danger)/0.3)] bg-[rgb(var(--color-danger)/0.08)] px-4 py-3">
           <div className="flex items-start gap-2">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-danger))]" />
             <div>
-              <p className="text-sm font-medium text-rose-900">Unable to load referral analytics.</p>
-              <p className="text-xs text-rose-700">{error}</p>
+              <p className="text-sm font-medium text-[rgb(var(--color-danger))]">Unable to load referral analytics.</p>
+              <p className="text-xs text-[rgb(var(--color-danger))]">{error}</p>
             </div>
           </div>
           <Button size="sm" variant="secondary" onClick={() => void load()}>
@@ -459,10 +459,10 @@ export default function ReferralsPage() {
             type="button"
             onClick={() => setRange(r.id)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-xs font-medium transition",
+              "rounded-lg px-2.5 py-1 text-xs font-medium transition-all",
               range === r.id
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200/70",
+                ? "bg-[rgb(var(--color-primary))] font-semibold text-white shadow-sm"
+                : "border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-muted-foreground))] hover:bg-[rgb(var(--color-muted))] hover:text-[rgb(var(--color-foreground))]",
             )}
           >
             {r.label}
@@ -476,7 +476,7 @@ export default function ReferralsPage() {
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
             />
-            <span className="text-xs text-slate-400">to</span>
+            <span className="text-xs text-[rgb(var(--color-subtle))]">to</span>
             <Input
               type="date"
               className="h-8 text-xs"
@@ -492,7 +492,7 @@ export default function ReferralsPage() {
           ? Array.from({ length: 10 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
               >
                 <Skeleton className="h-3 w-20" />
                 <Skeleton className="mt-3 h-7 w-16" />
@@ -501,16 +501,16 @@ export default function ReferralsPage() {
           : kpis.map((k) => (
               <div
                 key={k.label}
-                className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-300"
+                className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-300"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-subtle))]">
                   {k.label}
                 </p>
-                <p className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900">
+                <p className="mt-1 truncate text-xl font-bold tracking-tight text-[rgb(var(--color-foreground))]">
                   {k.value}
                 </p>
                 {k.empty ? (
-                  <p className="mt-1 text-[10px] text-slate-400">No activity yet</p>
+                  <p className="mt-1 text-[10px] text-[rgb(var(--color-subtle))]">No activity yet</p>
                 ) : null}
               </div>
             ))}
@@ -554,23 +554,23 @@ export default function ReferralsPage() {
             <div className="space-y-3 pt-2">
               {funnel.map((s, i) => (
                 <div key={s.key || s.stage || s.label}>
-                  <div className="flex justify-between text-xs font-medium text-slate-700">
+                  <div className="flex justify-between text-xs font-medium text-[rgb(var(--color-foreground))]">
                     <span>{s.label}</span>
                     <span>
                       {s.count.toLocaleString()} · {s.percentage ?? 0}% success
                       {i > 0 ? ` · ${s.dropRate ?? 0}% drop` : ""}
                     </span>
                   </div>
-                  <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-[rgb(var(--color-muted))]">
                     <div
-                      className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                      className="h-full rounded-full bg-[rgb(var(--color-primary))] transition-all duration-500"
                       style={{
                         width: `${Math.min(100, Math.max(4, (s.count / (funnel[0]?.count || 1)) * 100))}%`,
                       }}
                     />
                   </div>
                   {i < funnel.length - 1 ? (
-                    <div className="py-1 text-center text-[10px] text-slate-300">↓</div>
+                    <div className="py-1 text-center text-[10px] text-[rgb(var(--color-subtle))]">↓</div>
                   ) : null}
                 </div>
               ))}
@@ -586,8 +586,8 @@ export default function ReferralsPage() {
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Referral Analytics</h2>
-          <p className="text-xs text-slate-500">ROI and performance calculated from live referral activity.</p>
+          <h2 className="text-lg font-bold text-[rgb(var(--color-foreground))]">Referral Analytics</h2>
+          <p className="text-xs text-[rgb(var(--color-muted-foreground))]">ROI and performance calculated from live referral activity.</p>
         </div>
         {displayLoading ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -619,12 +619,12 @@ export default function ReferralsPage() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+                className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-3 shadow-sm"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-subtle))]">
                   {item.label}
                 </p>
-                <p className="mt-1 truncate text-sm font-semibold text-slate-900">{item.value}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-[rgb(var(--color-foreground))]">{item.value}</p>
               </div>
             ))}
           </div>
@@ -639,8 +639,8 @@ export default function ReferralsPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Referral Campaigns</h2>
-            <p className="text-xs text-slate-500">Create, pause, resume, and archive referral promotions.</p>
+            <h2 className="text-lg font-bold text-[rgb(var(--color-foreground))]">Referral Campaigns</h2>
+            <p className="text-xs text-[rgb(var(--color-muted-foreground))]">Create, pause, resume, and archive referral promotions.</p>
           </div>
           <Button
             size="sm"
@@ -681,35 +681,35 @@ export default function ReferralsPage() {
             {campaigns.map((c) => (
               <div
                 key={c.id}
-                className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+                className="flex flex-col justify-between rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-sm transition hover:shadow-md"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-base font-semibold text-slate-900">{c.name}</h3>
+                    <h3 className="text-base font-semibold text-[rgb(var(--color-foreground))]">{c.name}</h3>
                     <Badge variant={STATUS_VARIANT[c.status] || "default"}>{c.status}</Badge>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                  <p className="mt-1 line-clamp-2 text-xs text-[rgb(var(--color-muted-foreground))]">
                     {c.description || "No description provided."}
                   </p>
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-xl bg-slate-50 p-2.5">
-                      <span className="mb-0.5 block text-[10px] font-semibold uppercase text-slate-400">
+                    <div className="rounded-xl bg-[rgb(var(--color-muted))] p-2.5">
+                      <span className="mb-0.5 block text-[10px] font-semibold uppercase text-[rgb(var(--color-subtle))]">
                         Referrer Gets
                       </span>
-                      <span className="font-bold text-slate-800">
+                      <span className="font-bold text-[rgb(var(--color-foreground))]">
                         {c.rewardValue} {c.rewardType}
                       </span>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-2.5">
-                      <span className="mb-0.5 block text-[10px] font-semibold uppercase text-slate-400">
+                    <div className="rounded-xl bg-[rgb(var(--color-muted))] p-2.5">
+                      <span className="mb-0.5 block text-[10px] font-semibold uppercase text-[rgb(var(--color-subtle))]">
                         Friend Gets
                       </span>
-                      <span className="font-bold text-slate-800">
+                      <span className="font-bold text-[rgb(var(--color-foreground))]">
                         {c.friendRewardValue} {c.friendRewardType}
                       </span>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[rgb(var(--color-muted-foreground))]">
                     <span>
                       {c.startsAt ? new Date(c.startsAt).toLocaleDateString() : "No start"} →{" "}
                       {c.endsAt ? new Date(c.endsAt).toLocaleDateString() : "Open"}
@@ -721,7 +721,7 @@ export default function ReferralsPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                <div className="mt-4 flex items-center justify-between border-t border-[rgb(var(--color-border))] pt-3 text-xs text-[rgb(var(--color-muted-foreground))]">
                   <span>
                     {c.totalLinksCount ?? 0} links · {c.conversionCount ?? c.totalConversions ?? 0}{" "}
                     converted · {format(c.revenueTotal ?? 0)}
@@ -737,7 +737,7 @@ export default function ReferralsPage() {
                         setCampaignOpen(true);
                       }}
                     >
-                      <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                      <Pencil className="h-3.5 w-3.5 text-[rgb(var(--color-muted-foreground))]" />
                     </Button>
                     {c.status === "ACTIVE" ? (
                       <Button
@@ -776,7 +776,7 @@ export default function ReferralsPage() {
                       title="Delete"
                       onClick={() => void deleteCampaign(c.id)}
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                      <Trash2 className="h-3.5 w-3.5 text-[rgb(var(--color-danger))]" />
                     </Button>
                   </div>
                 </div>
@@ -789,14 +789,14 @@ export default function ReferralsPage() {
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Recent Referral Links</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-lg font-semibold text-[rgb(var(--color-foreground))]">Recent Referral Links</h2>
+            <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
               Unique links with live click, visit, conversion, and revenue tracking.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[rgb(var(--color-subtle))]" />
               <Input
                 className="h-8 w-44 pl-8 text-xs"
                 placeholder="Search conversions…"
@@ -810,7 +810,7 @@ export default function ReferralsPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>
@@ -835,7 +835,7 @@ export default function ReferralsPage() {
                 </TableRow>
               ) : links.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-slate-400">
+                  <TableCell colSpan={10} className="py-10 text-center text-[rgb(var(--color-subtle))]">
                     Generate your first referral link to start tracking shares and conversions.
                   </TableCell>
                 </TableRow>
@@ -844,14 +844,14 @@ export default function ReferralsPage() {
                   <TableRow key={l.id}>
                     <TableCell>
                       <div className="min-w-[140px]">
-                        <p className="font-mono text-xs font-semibold text-blue-700">{l.code}</p>
-                        <p className="truncate text-[11px] text-slate-400">{l.name || l.url}</p>
+                        <p className="font-mono text-xs font-semibold text-[rgb(var(--color-primary))]">{l.code}</p>
+                        <p className="truncate text-[11px] text-[rgb(var(--color-subtle))]">{l.name || l.url}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600">
+                    <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
                       {l.customerName || "Generic"}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-500">
+                    <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">
                       {l.campaignName || "Default"}
                     </TableCell>
                     <TableCell className="text-xs font-medium">{l.clickCount ?? 0}</TableCell>
@@ -865,7 +865,7 @@ export default function ReferralsPage() {
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[l.status] || "default"}>{l.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-slate-400">
+                    <TableCell className="text-xs text-[rgb(var(--color-subtle))]">
                       {new Date(l.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
@@ -889,7 +889,7 @@ export default function ReferralsPage() {
                           title="Share"
                           onClick={() => setSelectedLink(l)}
                         >
-                          <Share2 className="h-3.5 w-3.5 text-blue-600" />
+                          <Share2 className="h-3.5 w-3.5 text-[rgb(var(--color-primary))]" />
                         </Button>
                         <Button
                           size="sm"
@@ -918,7 +918,7 @@ export default function ReferralsPage() {
                           title="Delete"
                           onClick={() => void deleteLink(l.id)}
                         >
-                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                          <Trash2 className="h-3.5 w-3.5 text-[rgb(var(--color-danger))]" />
                         </Button>
                       </div>
                     </TableCell>
@@ -932,8 +932,8 @@ export default function ReferralsPage() {
 
       {conversions.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Conversions</h2>
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+          <h2 className="text-lg font-semibold text-[rgb(var(--color-foreground))]">Recent Conversions</h2>
+          <div className="overflow-x-auto rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -955,7 +955,7 @@ export default function ReferralsPage() {
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[c.status] || "default"}>{c.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-slate-400">
+                    <TableCell className="text-xs text-[rgb(var(--color-subtle))]">
                       {new Date(c.date).toLocaleDateString()}
                     </TableCell>
                   </TableRow>
@@ -1020,8 +1020,8 @@ export default function ReferralsPage() {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <h3 className="mb-3 text-sm font-semibold text-slate-900">{title}</h3>
+    <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <h3 className="mb-3 text-sm font-semibold text-[rgb(var(--color-foreground))]">{title}</h3>
       {children}
     </div>
   );
@@ -1037,9 +1037,9 @@ function Empty({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-12 text-center">
-      <p className="text-sm font-medium text-slate-900">{title}</p>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
+    <div className="rounded-2xl border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.7)] px-6 py-12 text-center">
+      <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{title}</p>
+      <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
       {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
     </div>
   );
@@ -1275,7 +1275,7 @@ function CampaignDrawer({
         <Button variant="secondary" className="flex-1" disabled={saving} onClick={() => void save(false)}>
           Save Draft
         </Button>
-        <Button className="flex-1 bg-blue-600 text-white" disabled={saving} onClick={() => void save(true)}>
+        <Button className="flex-1 bg-[rgb(var(--color-primary))] text-white" disabled={saving} onClick={() => void save(true)}>
           Publish
         </Button>
       </div>
@@ -1413,38 +1413,38 @@ function GenerateLinkModal({
               </div>
 
               {selectedCustomer ? (
-                <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2 text-xs text-blue-900">
+                <div className="flex items-center justify-between rounded-xl border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.06)] px-3 py-2 text-xs text-[rgb(var(--color-foreground))]">
                   <span className="font-medium">
                     {selectedCustomer.name ||
                       `${selectedCustomer.firstName || ""} ${selectedCustomer.lastName || ""}`.trim()}
                   </span>
                   <button
                     type="button"
-                    className="text-blue-600 hover:underline"
+                    className="text-[rgb(var(--color-primary))] hover:underline"
                     onClick={() => setSelectedCustomer(null)}
                   >
                     Clear
                   </button>
                 </div>
               ) : customers.length > 0 ? (
-                <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 p-1">
+                <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-xl border border-[rgb(var(--color-border))] p-1">
                   {customers.map((c) => (
                     <button
                       key={c.id}
                       type="button"
-                      className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-[rgb(var(--color-foreground))] hover:bg-[rgb(var(--color-muted))]"
                       onClick={() => {
                         setSelectedCustomer(c);
                         setCustomers([]);
                       }}
                     >
                       {c.name || `${c.firstName || ""} ${c.lastName || ""}`.trim()}{" "}
-                      <span className="text-slate-400">({c.email || c.phone || "No contact"})</span>
+                      <span className="text-[rgb(var(--color-subtle))]">({c.email || c.phone || "No contact"})</span>
                     </button>
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-[rgb(var(--color-subtle))]">
                   Optional — leave blank for employee, influencer, partner, or public campaign links.
                 </p>
               )}
@@ -1475,7 +1475,7 @@ function GenerateLinkModal({
           <Field label="Custom Slug">
             <div className="space-y-1.5">
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs text-slate-400">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs text-[rgb(var(--color-subtle))]">
                   /r/
                 </span>
                 <Input
@@ -1489,21 +1489,21 @@ function GenerateLinkModal({
                 />
               </div>
               {checkingSlug ? (
-                <p className="flex items-center gap-1 text-[11px] text-slate-400">
+                <p className="flex items-center gap-1 text-[11px] text-[rgb(var(--color-subtle))]">
                   Checking availability…
                 </p>
               ) : slugStatus ? (
                 <p
                   className={cn(
                     "flex items-center gap-1 text-[11px] font-medium",
-                    slugStatus.available ? "text-emerald-600" : "text-rose-600",
+                    slugStatus.available ? "text-[rgb(var(--color-success))]" : "text-[rgb(var(--color-danger))]",
                   )}
                 >
                   {slugStatus.available ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
                   {slugStatus.message}
                 </p>
               ) : (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-[rgb(var(--color-subtle))]">
                   Optional — leave blank to auto-generate a secure code.
                 </p>
               )}
@@ -1518,11 +1518,11 @@ function GenerateLinkModal({
             />
           </Field>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted))] px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[rgb(var(--color-subtle))]">
               Live URL preview
             </p>
-            <p className="mt-1 truncate font-mono text-xs text-blue-700">{previewUrl}</p>
+            <p className="mt-1 truncate font-mono text-xs text-[rgb(var(--color-primary))]">{previewUrl}</p>
           </div>
         </div>
 
@@ -1607,11 +1607,11 @@ function LinkSuccessModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-700">
+          <div className="rounded-2xl border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.06)] px-4 py-3 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-primary))]">
               Referral code
             </p>
-            <p className="mt-1 font-mono text-xl font-semibold text-slate-900">{link.code}</p>
+            <p className="mt-1 font-mono text-xl font-semibold text-[rgb(var(--color-foreground))]">{link.code}</p>
             <Badge className="mt-2" variant={STATUS_VARIANT[link.status] || "default"}>
               {link.status}
             </Badge>
@@ -1619,7 +1619,7 @@ function LinkSuccessModal({
 
           <Field label="Referral URL">
             <div className="flex gap-2">
-              <Input readOnly value={link.url} className="bg-slate-50 font-mono text-xs" />
+              <Input readOnly value={link.url} className="bg-[rgb(var(--color-muted))] font-mono text-xs" />
               <Button
                 variant="secondary"
                 onClick={async () => {
@@ -1633,12 +1633,12 @@ function LinkSuccessModal({
             </div>
           </Field>
 
-          <div className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-4 text-center">
+          <div className="flex flex-col items-center rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={link.qrUrl}
               alt={`QR for ${link.code}`}
-              className="h-40 w-40 rounded-xl border border-slate-100 p-2"
+              className="h-40 w-40 rounded-xl border border-[rgb(var(--color-border))] p-2"
             />
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <Button
@@ -1709,7 +1709,7 @@ function LinkSuccessModal({
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-700">Share</p>
+            <p className="text-xs font-semibold text-[rgb(var(--color-foreground))]">Share</p>
             <div className="grid grid-cols-2 gap-2">
               <Button variant="secondary" size="sm" onClick={() => void share("whatsapp")}>
                 WhatsApp
@@ -1751,9 +1751,9 @@ function Drawer({
         className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs"
         onClick={onClose}
       />
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-6 py-4">
+          <h2 className="text-base font-semibold text-[rgb(var(--color-foreground))]">{title}</h2>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>

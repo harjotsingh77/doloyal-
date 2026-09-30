@@ -39,9 +39,9 @@ const FEATURE_ICONS: Record<string, React.ComponentType<{ className?: string }>>
 function MinimalIcon({ name, className }: { name: string; className?: string }) {
   const IconComponent = FEATURE_ICONS[name];
   if (!IconComponent) {
-    return <SlidersHorizontal className={cn("h-4 w-4 shrink-0 text-slate-400", className)} />;
+    return <SlidersHorizontal className={cn("h-4 w-4 shrink-0 text-[rgb(var(--color-subtle))]", className)} />;
   }
-  return <IconComponent className={cn("h-4 w-4 shrink-0 text-slate-400", className)} />;
+  return <IconComponent className={cn("h-4 w-4 shrink-0 text-[rgb(var(--color-subtle))]", className)} />;
 }
 
 export default function FeatureManagementPage() {
@@ -75,7 +75,7 @@ export default function FeatureManagementPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         <Skeleton className="h-20 w-full rounded-2xl" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
@@ -87,40 +87,40 @@ export default function FeatureManagementPage() {
   }
 
   return (
-    <div className="relative mx-auto max-w-7xl space-y-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-4 border-b border-slate-200/80 pb-6 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-6 pb-16">
+      <header className="flex flex-col gap-4 border-b border-[rgb(var(--color-border))] pb-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <Button asChild variant="ghost" size="sm" className="mb-2 -ml-2">
             <Link href="/app/loyalty">
               <ArrowLeft className="h-3.5 w-3.5" /> Back to Loyalty
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-[rgb(var(--color-foreground))] md:text-[1.7rem]">
             Feature Management
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
             Enable a module and it appears instantly on the Loyalty page below Leaderboard —
             fully connected to APIs, data, and automations.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm">
+          <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs shadow-sm">
             Core <span className="ml-1 font-bold">{coreCount}</span>
           </div>
-          <div className="rounded-xl border border-blue-200 bg-blue-50/50 px-3 py-2 text-xs text-blue-700 shadow-sm">
+          <div className="rounded-xl border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.06)] px-3 py-2 text-xs text-[rgb(var(--color-primary))] shadow-sm">
             Enabled <span className="ml-1 font-bold">{enabledOptionalCount}</span>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm">
+          <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs shadow-sm">
             Disabled <span className="ml-1 font-bold">{disabledOptionalCount}</span>
           </div>
         </div>
       </header>
 
-      <div className="sticky top-0 z-20 space-y-3 rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-md">
+      <div className="sticky top-0 z-20 space-y-3 rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface)/0.9)] p-4 shadow-sm backdrop-blur-md">
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-subtle))]" />
           <Input
-            className="h-10 border-slate-200 bg-slate-50/50 pl-10 text-sm focus:bg-white"
+            className="h-10 border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.5)] pl-10 text-sm focus:bg-[rgb(var(--color-surface))]"
             placeholder="Search modules…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -129,7 +129,7 @@ export default function FeatureManagementPage() {
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[rgb(var(--color-subtle))] hover:text-[rgb(var(--color-muted-foreground))]"
             >
               <X className="h-4 w-4" />
             </button>
@@ -141,7 +141,7 @@ export default function FeatureManagementPage() {
             onClick={() => setCategory("All")}
             className={cn(
               "whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition",
-              category === "All" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600",
+              category === "All" ? "bg-[rgb(var(--color-primary))] text-white" : "bg-[rgb(var(--color-muted))] text-[rgb(var(--color-muted-foreground))]",
             )}
           >
             All
@@ -153,7 +153,7 @@ export default function FeatureManagementPage() {
               onClick={() => setCategory(c)}
               className={cn(
                 "whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition",
-                category === c ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600",
+                category === c ? "bg-[rgb(var(--color-primary))] text-white" : "bg-[rgb(var(--color-muted))] text-[rgb(var(--color-muted-foreground))]",
               )}
             >
               {c}
@@ -174,18 +174,18 @@ export default function FeatureManagementPage() {
               className={cn(
                 "flex min-h-[190px] flex-col justify-between rounded-2xl border p-5 shadow-sm transition",
                 isEnabled
-                  ? "border-blue-200 bg-gradient-to-b from-blue-50/30 via-white to-white"
-                  : "border-slate-200/80 bg-slate-50/50 opacity-80",
+                  ? "border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.03)]"
+                  : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.5)] opacity-80",
               )}
             >
               <div>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <MinimalIcon name={feature.icon} />
-                    <h3 className="truncate text-base font-semibold text-slate-900">{feature.name}</h3>
+                    <h3 className="truncate text-base font-semibold text-[rgb(var(--color-foreground))]">{feature.name}</h3>
                   </div>
                   {feature.core ? (
-                    <span className="shrink-0 rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                    <span className="shrink-0 rounded-md bg-[rgb(var(--color-muted))] px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-muted-foreground))]">
                       Core
                     </span>
                   ) : (
@@ -214,12 +214,12 @@ export default function FeatureManagementPage() {
                     />
                   )}
                 </div>
-                <p className="mt-2 line-clamp-2 min-h-[2.25rem] text-xs leading-relaxed text-slate-500">
+                <p className="mt-2 line-clamp-2 min-h-[2.25rem] text-xs leading-relaxed text-[rgb(var(--color-muted-foreground))]">
                   {feature.description}
                 </p>
               </div>
-              <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                <span className="rounded-md bg-slate-100/90 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-[rgb(var(--color-border))] pt-3">
+                <span className="rounded-md bg-[rgb(var(--color-muted)/0.9)] px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-muted-foreground))]">
                   {feature.category}
                 </span>
                 <Button
@@ -238,7 +238,7 @@ export default function FeatureManagementPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.5)] px-6 py-16 text-center text-sm text-[rgb(var(--color-muted-foreground))]">
           No loyalty modules found matching your filters.
         </div>
       ) : null}

@@ -53,13 +53,13 @@ export function TiersModule({ feature, onConfigure }: LoyaltyModuleProps) {
           {tiers.map((t) => (
             <ModuleCard key={t.id}>
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-base font-semibold text-slate-900">{t.name}</p>
+                <p className="text-base font-semibold text-[rgb(var(--color-foreground))]">{t.name}</p>
                 <span
                   className="h-3 w-3 rounded-full"
                   style={{ background: t.color || "#2563eb" }}
                 />
               </div>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
                 Min {t.minPoints ?? 0} pts · {t.pointsMultiplier ?? 1}× multiplier
               </p>
               <div className="mt-3 flex flex-wrap gap-1">
@@ -194,8 +194,8 @@ export function ChallengesModule({ feature, onConfigure }: LoyaltyModuleProps) {
           {items.map((c) => (
             <ModuleCard key={c.id} className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{c.title}</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{c.title}</p>
+                <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">
                   {c.type} · Target {c.targetValue} · Reward {c.rewardPoints} pts · {c.participantsCount ?? c._count?.participants ?? 0} participants
                 </p>
               </div>
@@ -288,10 +288,10 @@ export function BadgesModule({ feature, onConfigure }: LoyaltyModuleProps) {
                 >
                   {(b.icon || "★").slice(0, 2)}
                 </span>
-                <p className="text-sm font-semibold text-slate-900">{b.name}</p>
+                <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{b.name}</p>
               </div>
-              <p className="text-xs text-slate-500">{b.description || "No description"}</p>
-              <p className="mt-2 text-xs text-slate-400">{b.unlockCount ?? 0} unlocked</p>
+              <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{b.description || "No description"}</p>
+              <p className="mt-2 text-xs text-[rgb(var(--color-subtle))]">{b.unlockCount ?? 0} unlocked</p>
             </ModuleCard>
           ))}
         </div>
@@ -324,15 +324,15 @@ export function StreaksModule({ feature, onConfigure }: LoyaltyModuleProps) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-3">
           <ModuleCard>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Active streaks</p>
+            <p className="text-xs uppercase tracking-wide text-[rgb(var(--color-subtle))]">Active streaks</p>
             <p className="mt-2 text-3xl font-semibold">{data?.activeStreaks ?? 0}</p>
           </ModuleCard>
           <ModuleCard>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Top streak</p>
+            <p className="text-xs uppercase tracking-wide text-[rgb(var(--color-subtle))]">Top streak</p>
             <p className="mt-2 text-3xl font-semibold">{data?.topStreak ?? 0}</p>
           </ModuleCard>
           <ModuleCard>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Milestones</p>
+            <p className="text-xs uppercase tracking-wide text-[rgb(var(--color-subtle))]">Milestones</p>
             <p className="mt-2 text-3xl font-semibold">{data?.milestones?.length ?? 0}</p>
           </ModuleCard>
         </div>
@@ -371,8 +371,8 @@ export function AnalyticsModule({ feature, onConfigure }: LoyaltyModuleProps) {
             .slice(0, 8)
             .map(([k, v]) => (
               <ModuleCard key={k}>
-                <p className="text-xs uppercase tracking-wide text-slate-400">{k}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">{String(v)}</p>
+                <p className="text-xs uppercase tracking-wide text-[rgb(var(--color-subtle))]">{k}</p>
+                <p className="mt-2 text-2xl font-semibold text-[rgb(var(--color-foreground))]">{String(v)}</p>
               </ModuleCard>
             ))}
         </div>
@@ -424,8 +424,8 @@ export function ActivityFeedModule({ feature, onConfigure }: LoyaltyModuleProps)
           {items.map((a) => (
             <ModuleCard key={a.id} className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm text-slate-900">{a.message || a.type}</p>
-                <p className="mt-1 text-xs text-slate-400">{a.createdAt}</p>
+                <p className="text-sm text-[rgb(var(--color-foreground))]">{a.message || a.type}</p>
+                <p className="mt-1 text-xs text-[rgb(var(--color-subtle))]">{a.createdAt}</p>
               </div>
               <Badge variant="outline">{a.type}</Badge>
             </ModuleCard>
@@ -482,7 +482,7 @@ export function AutomationsModule({ feature, onConfigure }: LoyaltyModuleProps) 
   return (
     <ModuleShell feature={feature} onConfigure={onConfigure}>
       <ModuleCard className="mb-4 space-y-3">
-        <p className="text-sm font-medium text-slate-900">IF / THEN builder</p>
+        <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">IF / THEN builder</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Name">
             <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
@@ -518,8 +518,8 @@ export function AutomationsModule({ feature, onConfigure }: LoyaltyModuleProps) 
           {rules.map((r) => (
             <ModuleCard key={r.id} className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-                <p className="text-xs text-slate-500">{r.trigger}</p>
+                <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{r.name}</p>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{r.trigger}</p>
               </div>
               <Badge variant="outline">{r.status}</Badge>
             </ModuleCard>
@@ -573,10 +573,10 @@ export function LedgerModule({ feature, onConfigure }: LoyaltyModuleProps) {
           {data.items.map((row: any) => (
             <ModuleCard key={row.id} className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-slate-900">{row.reason}</p>
-                <p className="text-xs text-slate-400">{row.createdAt}</p>
+                <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{row.reason}</p>
+                <p className="text-xs text-[rgb(var(--color-subtle))]">{row.createdAt}</p>
               </div>
-              <p className={`text-sm font-semibold ${row.amount >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              <p className={`text-sm font-semibold ${row.amount >= 0 ? "text-[rgb(var(--color-success))]" : "text-[rgb(var(--color-danger))]"}`}>
                 {row.amount >= 0 ? "+" : ""}
                 {row.amount}
               </p>
@@ -657,7 +657,7 @@ export function AdjustModule({ feature, onConfigure }: LoyaltyModuleProps) {
                 key={c.id}
                 type="button"
                 className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${
-                  customerId === c.id ? "bg-blue-50 text-blue-700" : "hover:bg-slate-50"
+                  customerId === c.id ? "bg-[rgb(var(--color-primary)/0.06)] text-[rgb(var(--color-primary))]" : "hover:bg-[rgb(var(--color-muted))]"
                 }`}
                 onClick={() => setCustomerId(c.id)}
               >
@@ -777,8 +777,8 @@ export function RewardsCategoryModule({
           {rewards.map((r) => (
             <ModuleCard key={r.id} className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{r.name}</p>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                   {r.pointsCost} pts · redeemed {r.redeemedCount ?? 0}
                 </p>
               </div>
@@ -815,15 +815,15 @@ export function ReferralsModule({ feature, onConfigure }: LoyaltyModuleProps) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-3">
           <ModuleCard>
-            <p className="text-xs uppercase text-slate-400">Referrals</p>
+            <p className="text-xs uppercase text-[rgb(var(--color-subtle))]">Referrals</p>
             <p className="mt-2 text-3xl font-semibold">{data?.stats?.total ?? data?.tree?.length ?? 0}</p>
           </ModuleCard>
           <ModuleCard>
-            <p className="text-xs uppercase text-slate-400">Completed</p>
+            <p className="text-xs uppercase text-[rgb(var(--color-subtle))]">Completed</p>
             <p className="mt-2 text-3xl font-semibold">{data?.stats?.completed ?? 0}</p>
           </ModuleCard>
           <ModuleCard>
-            <p className="text-xs uppercase text-slate-400">Reward pts issued</p>
+            <p className="text-xs uppercase text-[rgb(var(--color-subtle))]">Reward pts issued</p>
             <p className="mt-2 text-3xl font-semibold">{data?.stats?.pointsIssued ?? 0}</p>
           </ModuleCard>
         </div>
@@ -860,8 +860,8 @@ export function AuditLogsModule({ feature, onConfigure }: LoyaltyModuleProps) {
           {data.items.map((row: any) => (
             <ModuleCard key={row.id} className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-slate-900">{row.action}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{row.action}</p>
+                <p className="text-xs text-[rgb(var(--color-subtle))]">
                   {row.featureKey || "system"} · {row.createdAt}
                 </p>
               </div>
@@ -904,7 +904,7 @@ export function SurpriseModule({ feature, onConfigure }: LoyaltyModuleProps) {
             <ModuleCard key={r.id} className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">{r.name}</p>
-                <p className="text-xs text-slate-500">{r.type}</p>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{r.type}</p>
               </div>
               <Badge variant="outline">{r.enabled ? "ON" : "OFF"}</Badge>
             </ModuleCard>
@@ -1061,7 +1061,7 @@ export function ConfigOnlyModule({ feature, onConfigure }: LoyaltyModuleProps) {
   return (
     <ModuleShell feature={feature} onConfigure={onConfigure}>
       <ModuleCard>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
           This module is active and connected. Open <strong>Configure</strong> to manage all settings.
           Runtime behavior uses your saved configuration with live customer data.
         </p>
@@ -1069,9 +1069,9 @@ export function ConfigOnlyModule({ feature, onConfigure }: LoyaltyModuleProps) {
           {Object.entries(feature.config || {})
             .slice(0, 8)
             .map(([k, v]) => (
-              <div key={k} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">{k}</p>
-                <p className="truncate text-sm font-medium text-slate-800">{String(v)}</p>
+              <div key={k} className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted))] px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-[rgb(var(--color-subtle))]">{k}</p>
+                <p className="truncate text-sm font-medium text-[rgb(var(--color-foreground))]">{String(v)}</p>
               </div>
             ))}
         </div>

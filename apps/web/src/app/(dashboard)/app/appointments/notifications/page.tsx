@@ -273,7 +273,7 @@ export default function NotificationsPage() {
                           </TableCell>
                           <TableCell className="text-xs">{n.recipient}</TableCell>
                           <TableCell>
-                            <Badge variant={STATUS_COLORS[n.status] ?? "outline"} className="text-[0.6rem]">
+                            <Badge variant={STATUS_COLORS[n.status] ?? "outline"}>
                               {n.status}
                             </Badge>
                           </TableCell>
@@ -400,7 +400,7 @@ export default function NotificationsPage() {
                             {t.channel}
                           </div>
                         </div>
-                        <Badge variant={t.isActive ? "success" : "outline"} className="text-[0.55rem]">
+                        <Badge variant={t.isActive ? "success" : "outline"}>
                           {t.isActive ? "Active" : "Inactive"}
                         </Badge>
                       </div>

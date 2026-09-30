@@ -40,6 +40,7 @@ import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { useResource } from "@/lib/use-resource";
 import { useTenant } from "@/lib/tenant-query";
+import { ChurnRisk } from "@/components/customers/churn-risk";
 import { MetricDetailView } from "@/components/dashboard/metric-detail-view";
 
 const toYMD = (d: Date | string) => {
@@ -281,9 +282,6 @@ export default function DashboardPage() {
     periodRepeatCustomers + periodNewCustomers > 0
       ? Math.round((periodRepeatCustomers / Math.max(periodRepeatCustomers + periodNewCustomers, 1)) * 100)
       : 0;
-  const growthLabel =
-    periodGrowthPct === null ? "—" : formatPercent(periodGrowthPct);
-
   const openMetricTitle: Record<DashboardMetricId, string> = {
     revenue: "Revenue",
     customers: "Customer growth",
@@ -315,9 +313,21 @@ export default function DashboardPage() {
           />
         }
         actions={
-          <Badge variant="primary">
-            {growthLabel} vs last period
-          </Badge>
+          <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
+            <span
+              className={`font-semibold tabular-nums ${
+                periodGrowthPct === null || periodGrowthPct === 0
+                  ? "text-[rgb(var(--color-foreground))]"
+                  : periodGrowthPct > 0
+                    ? "text-[rgb(var(--color-success))]"
+                    : "text-[rgb(var(--color-danger))]"
+              }`}
+            >
+              {periodGrowthPct === null || periodGrowthPct === 0 ? "" : periodGrowthPct > 0 ? "↑ " : "↓ "}
+              {periodGrowthPct === null ? "—" : `${Math.abs(periodGrowthPct).toFixed(1)}%`}
+            </span>{" "}
+            vs last period
+          </p>
         }
       />
 
@@ -537,7 +547,7 @@ export default function DashboardPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Visits</TableHead>
                   <TableHead>LTV</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Churn risk</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -547,20 +557,7 @@ export default function DashboardPage() {
                     <TableCell>{c.visitCount}</TableCell>
                     <TableCell>{fmt(c.lifetimeValue)}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          c.churnRisk === "LOW"
-                            ? "success"
-                            : c.churnRisk === "MEDIUM"
-                              ? "warning"
-                              : c.churnRisk === "HIGH"
-                                ? "accent"
-                                : "danger"
-                        }
-                        className="text-[0.65rem]"
-                      >
-                        {c.churnRisk}
-                      </Badge>
+                      <ChurnRisk level={c.churnRisk} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -801,7 +798,7 @@ function InsightCard({
       {onClick ? <CardHoverHint /> : null}
       <div className="flex items-center justify-between gap-3">
         <span className="text-[13px] font-semibold">{title}</span>
-        <Badge variant={badgeVariant} className="text-[0.6rem] uppercase tracking-wider">
+        <Badge variant={badgeVariant}>
           {badge}
         </Badge>
       </div>

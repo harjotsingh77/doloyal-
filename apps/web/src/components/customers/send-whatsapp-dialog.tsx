@@ -564,7 +564,7 @@ function DeliveryStatusPanel({
           )}
           <p className="font-semibold">{statusHeadline(status)}</p>
         </div>
-        <Badge variant={failed ? "danger" : status === "QUEUED" ? "primary" : "success"} className="text-[0.65rem]">
+        <Badge variant={failed ? "danger" : status === "QUEUED" ? "primary" : "success"}>
           {status}
         </Badge>
       </div>

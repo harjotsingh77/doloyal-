@@ -444,7 +444,7 @@ export default function CustomersPage() {
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{c.phone}</TableCell>
                     <TableCell className="text-[rgb(var(--color-muted-foreground))]">{c.email ?? "—"}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[0.65rem]">{c.status ?? "ACTIVE"}</Badge>
+                      <Badge variant="outline">{c.status ?? "ACTIVE"}</Badge>
                     </TableCell>
                     <TableCell>{c.pointsBalance.toLocaleString("en-IN")}</TableCell>
                     <TableCell className="text-xs text-[rgb(var(--color-muted-foreground))]">

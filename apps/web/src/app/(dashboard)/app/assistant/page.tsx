@@ -1067,7 +1067,7 @@ function AssistantInner() {
           <button
             type="button"
             onClick={stopGenerating}
-            className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#111827] text-white transition hover:bg-black"
+            className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--color-primary))] text-white transition hover:bg-[rgb(var(--color-primary)/0.9)]"
             aria-label="Stop generating"
           >
             <Square className="h-3.5 w-3.5 fill-current" />

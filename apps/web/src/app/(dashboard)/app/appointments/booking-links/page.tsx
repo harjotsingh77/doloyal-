@@ -81,21 +81,23 @@ import { useResource } from "@/lib/use-resource";
 import { toast } from "sonner";
 
 /* ── SaaS Color System & Tokens ────────────────────────────────────────── */
+// Mapped onto the app's design tokens so this page follows the workspace
+// theme (and dark mode) like every other page.
 const PALETTE = {
-  bg: "#F8FAFC",
-  card: "#FFFFFF",
-  border: "#E5E7EB",
-  primary: "#2563EB",
-  primaryHover: "#1D4ED8",
-  primaryLight: "#EFF6FF",
-  success: "#10B981",
-  successBg: "#ECFDF5",
-  warning: "#F59E0B",
-  warningBg: "#FFFBEB",
-  danger: "#EF4444",
-  dangerBg: "#FEF2F2",
-  text: "#111827",
-  muted: "#6B7280",
+  bg: "transparent",
+  card: "rgb(var(--color-surface))",
+  border: "rgb(var(--color-border))",
+  primary: "rgb(var(--color-primary))",
+  primaryHover: "rgb(var(--color-primary) / 0.9)",
+  primaryLight: "rgb(var(--color-primary) / 0.08)",
+  success: "rgb(var(--color-success))",
+  successBg: "rgb(var(--color-success) / 0.1)",
+  warning: "rgb(var(--color-warning))",
+  warningBg: "rgb(var(--color-warning) / 0.1)",
+  danger: "rgb(var(--color-danger))",
+  dangerBg: "rgb(var(--color-danger) / 0.08)",
+  text: "rgb(var(--color-foreground))",
+  muted: "rgb(var(--color-muted-foreground))",
 };
 
 type ViewMode = "grid" | "table" | "board";
@@ -911,8 +913,8 @@ export default function BookingLinksPage() {
   /* ── Render Page ──────────────────────────────────────────────────────── */
 
   return (
-    <div className="min-h-screen font-sans" style={{ backgroundColor: PALETTE.bg, color: PALETTE.text }}>
-      <div className="mx-auto w-full max-w-[1440px] space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div style={{ color: PALETTE.text }}>
+      <div className="space-y-6">
         {/* ── Section 1: Standard Dashboard PageHeader ────────────────── */}
         <PageHeader
           title="Booking Links"

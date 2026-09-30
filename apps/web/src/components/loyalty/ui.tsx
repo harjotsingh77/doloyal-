@@ -47,11 +47,11 @@ export function Section({
     <section id={id} className={cn("scroll-mt-28", className)}>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+          <h2 className="text-xl font-semibold tracking-tight text-[rgb(var(--color-foreground))] sm:text-2xl">
             {title}
           </h2>
           {description ? (
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">{description}</p>
+            <p className="mt-1 max-w-2xl text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
           ) : null}
         </div>
         {action}
@@ -77,7 +77,7 @@ export function SoftCard({
       viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
       className={cn(
-        "rounded-[18px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]",
+        "rounded-[18px] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]",
         hover && "transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(15,23,42,0.08)]",
         className,
       )}
@@ -123,7 +123,7 @@ export function Sparkline({
 
 export function ProgressBar({ value, color = "#2563EB" }: { value: number; color?: string }) {
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-[rgb(var(--color-muted))]">
       <motion.div
         initial={{ width: 0 }}
         whileInView={{ width: `${Math.min(100, Math.max(0, value))}%` }}
@@ -155,9 +155,9 @@ export function formatValue(
 
 export function EmptyBlock({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-12 text-center">
-      <p className="text-sm font-medium text-slate-900">{title}</p>
-      <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>
+    <div className="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.7)] px-6 py-12 text-center">
+      <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{title}</p>
+      <p className="mt-1 max-w-sm text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
     </div>
   );
 }

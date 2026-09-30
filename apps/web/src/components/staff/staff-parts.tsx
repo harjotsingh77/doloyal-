@@ -285,7 +285,7 @@ function RoleAccessPreview({ role }: { role: string }) {
       </p>
       <div className="flex flex-wrap gap-1.5">
         {preview.can.map((m) => (
-          <Badge key={m} variant="outline" className="text-[0.65rem]">
+          <Badge key={m} variant="outline">
             <span className="font-medium">{m}</span>
           </Badge>
         ))}
@@ -535,7 +535,7 @@ export function PermChips({ permissions }: { permissions: string[] }) {
     <div className="flex flex-wrap gap-1.5">
       {Array.from(grouped.entries()).map(([module, labels], i) => (
         <div key={module} className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-[0.65rem]">
+          <Badge variant="outline">
             <span className="font-semibold">{module}</span>
             <span className="text-[rgb(var(--color-muted-foreground))]">: {labels.join(", ")}</span>
           </Badge>
@@ -700,11 +700,11 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold text-[rgb(var(--color-foreground))]">{sfName(detail)}</span>
-                  <Badge variant={roleBadge(detail.role)} className="text-[0.65rem]">{ROLE_LABELS[detail.role]}</Badge>
+                  <Badge variant={roleBadge(detail.role)}>{ROLE_LABELS[detail.role]}</Badge>
                 </div>
                 <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{detail.role}</p>
                 <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-[rgb(var(--color-muted-foreground))]">
-                  {detail.isOnline ? <Badge variant="success" className="text-[0.6rem]">Online</Badge> : <Badge variant="outline" className="text-[0.6rem]">Offline</Badge>}
+                  {detail.isOnline ? <Badge variant="success">Online</Badge> : <Badge variant="outline">Offline</Badge>}
                   {!detail.isCurrentUser && (
                     <button
                       className="font-medium text-[rgb(var(--color-primary))] hover:underline"
@@ -829,7 +829,7 @@ export function ManageMemberDialog({ memberId, open, onOpenChange, onChanged }: 
                     <div key={h.id} className="flex items-center justify-between gap-2 rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <Badge variant={h.successful ? "success" : "danger"} className="text-[0.6rem]">{h.successful ? "Success" : "Failed"}</Badge>
+                          <Badge variant={h.successful ? "success" : "danger"}>{h.successful ? "Success" : "Failed"}</Badge>
                           <span className="truncate text-sm text-[rgb(var(--color-foreground))]">
                             {h.device || h.browser || "Device"}
                           </span>
@@ -881,7 +881,7 @@ function NoteRow({ note, onDelete }: { note: EmployeeNote; onDelete: () => void 
     <div className="rounded-[var(--radius)] border border-[rgb(var(--color-border))] p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {note.category && <Badge variant="outline" className="text-[0.6rem]">{note.category}</Badge>}
+          {note.category && <Badge variant="outline">{note.category}</Badge>}
           <span className="text-xs text-[rgb(var(--color-muted-foreground))]">by {note.authorName ?? "—"} · {relTime(note.createdAt)}</span>
         </div>
         <button className="text-xs text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-danger))]" onClick={onDelete}>
@@ -1085,9 +1085,9 @@ export function InvitationDetailDrawer({ invitationId, open, onOpenChange, onCha
                 </button>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <Badge variant={roleBadge(detail.role)} className="text-[0.65rem]">{ROLE_LABELS[detail.role]}</Badge>
-                <Badge variant={statusBadge(detail.status)} className="text-[0.65rem]">{INVITATION_STATUS_LABELS[detail.status]}</Badge>
-                {detail.resendCount > 0 && <Badge variant="outline" className="text-[0.6rem]">Resent {detail.resendCount}×</Badge>}
+                <Badge variant={roleBadge(detail.role)}>{ROLE_LABELS[detail.role]}</Badge>
+                <Badge variant={statusBadge(detail.status)}>{INVITATION_STATUS_LABELS[detail.status]}</Badge>
+                {detail.resendCount > 0 && <Badge variant="outline">Resent {detail.resendCount}×</Badge>}
               </div>
             </div>
 
@@ -1108,7 +1108,7 @@ export function InvitationDetailDrawer({ invitationId, open, onOpenChange, onCha
                   <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-[rgb(var(--color-muted-foreground))]">Locations</span>
                   <div className="flex flex-wrap gap-1.5">
                     {detail.branchNames.map((b) => (
-                      <Badge key={b} variant="outline" className="text-[0.65rem]">
+                      <Badge key={b} variant="outline">
                         <MapPin className="mr-1 h-3 w-3" /> {b}
                       </Badge>
                     ))}
@@ -1391,10 +1391,10 @@ export function InvitationsPanel({ onChanged, onViewMember }: {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={roleBadge(inv.role)} className="text-[0.65rem]">{ROLE_LABELS[inv.role]}</Badge>
+                      <Badge variant={roleBadge(inv.role)}>{ROLE_LABELS[inv.role]}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusBadge(inv.status)} className="text-[0.65rem]">{INVITATION_STATUS_LABELS[inv.status]}</Badge>
+                      <Badge variant={statusBadge(inv.status)}>{INVITATION_STATUS_LABELS[inv.status]}</Badge>
                       <p className="mt-0.5 text-[0.6rem] text-[rgb(var(--color-muted-foreground))]">
                         {inv.status === "PENDING" && inv.expiresAt ? `expires ${fmtDate(inv.expiresAt)}` : inv.sentAt ? `sent ${relTime(inv.sentAt)}` : ""}
                       </p>

@@ -22,7 +22,9 @@ export function AskDoloyalProvider({ children }: { children: React.ReactNode }) 
   const [unread, setUnread] = React.useState(0);
   const refreshToken = React.useRef(0);
 
-  const lastCheckedAt = React.useRef(0);
+  // Starts at mount so a visibility change before the first scheduled check
+  // does not add a second request on load.
+  const lastCheckedAt = React.useRef(Date.now());
 
   const refreshUnread = React.useCallback(async () => {
     const token = ++refreshToken.current;

@@ -103,7 +103,7 @@ export function IntegrationCard({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge
             variant="default"
-            className="rounded-md px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wider text-[rgb(var(--color-muted-foreground))]"
+            className="rounded-md px-2 py-0.5 text-[0.62rem] font-semibold text-[rgb(var(--color-muted-foreground))]"
           >
             {category}
           </Badge>

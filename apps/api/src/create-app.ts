@@ -49,6 +49,9 @@ export async function createApp(): Promise<NestFastifyApplication> {
       logger: false,
       bodyLimit: 45 * 1024 * 1024,
       trustProxy: isProduction,
+      // Open event streams (SSE) otherwise keep the server from closing, so a
+      // restart hangs with the port released and nothing listening.
+      forceCloseConnections: true,
     }),
     { rawBody: true },
   );

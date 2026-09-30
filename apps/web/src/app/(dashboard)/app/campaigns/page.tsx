@@ -5,6 +5,7 @@ import {
   Pause,
   Play,
   Clock,
+  Sparkles,
   MessageSquare,
   Smartphone,
   Mail,
@@ -16,7 +17,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
   PageHeader,
   Badge,
   Skeleton,
@@ -54,7 +54,9 @@ interface Campaign {
   openRate: number;
   redeemRate: number;
   status: Status;
-  scheduleDate: string;
+  scheduleDate: string | null;
+  sentAt: string | null;
+  createdAt: string;
   failedCount?: number;
 }
 
@@ -63,6 +65,22 @@ const CHANNEL_ICON: Record<Channel, React.ReactNode> = {
   EMAIL: <Mail className="h-4 w-4" />,
   WHATSAPP: <Smartphone className="h-4 w-4" />,
 };
+
+const CHANNEL_LABEL: Record<Channel, string> = {
+  SMS: "SMS",
+  EMAIL: "Email",
+  WHATSAPP: "WhatsApp",
+};
+
+const formatDay = (value: string) =>
+  new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+/** What the date on a campaign card refers to, so a draft never shows a made-up schedule. */
+function campaignDateLabel(c: Campaign): string {
+  if (c.sentAt) return `Sent ${formatDay(c.sentAt)}`;
+  if (c.scheduleDate) return `Scheduled ${formatDay(c.scheduleDate)}`;
+  return c.createdAt ? `Created ${formatDay(c.createdAt)}` : "Not scheduled";
+}
 
 const STATUS_VARIANT: Record<Status, "primary" | "outline" | "success" | "warning" | "danger"> = {
   DRAFT: "outline",
@@ -103,6 +121,9 @@ export default function CampaignsPage() {
   const [newDate, setNewDate] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [sendingId, setSendingId] = React.useState<string | null>(null);
+  const [aiGoal, setAiGoal] = React.useState("");
+  const [drafting, setDrafting] = React.useState(false);
+  const [draftNote, setDraftNote] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const campaignsQuery = useResource<Campaign[]>({
@@ -120,7 +141,9 @@ export default function CampaignsPage() {
         openRate: c.openRate || 0,
         redeemRate: c.redeemRate || 0,
         status: API_STATUS_TO_UI[c.status] || "DRAFT",
-        scheduleDate: c.scheduleDate ? String(c.scheduleDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        scheduleDate: c.scheduleDate ? String(c.scheduleDate).slice(0, 10) : null,
+        sentAt: c.sentAt ? String(c.sentAt) : null,
+        createdAt: String(c.createdAt || ""),
       }));
     },
     scopes: ["campaigns", "customers", "dashboard"],
@@ -146,7 +169,7 @@ export default function CampaignsPage() {
       ? sentCampaigns.reduce((s, c) => s + c.openRate, 0) / sentCampaigns.length
       : 0;
     const totalRedeem = campaigns.reduce((s, c) => s + (c.sentCount > 0 && c.redeemRate > 0 ? Math.round(c.sentCount * (c.redeemRate / 100)) : 0), 0);
-    const active = campaigns.filter((c) => c.status === "SCHEDULED" || c.status === "SENDING" || c.status === "COMPLETED").length;
+    const active = campaigns.filter((c) => c.status === "SCHEDULED" || c.status === "SENDING").length;
     return { totalSent, avgOpen, totalRedeem, active };
   }, [campaigns]);
 
@@ -175,6 +198,31 @@ export default function CampaignsPage() {
     }
   };
 
+  const draftWithAi = async () => {
+    if (aiGoal.trim().length < 3 || newChannel === "SMS") return;
+    setDrafting(true);
+    setDraftNote(null);
+    try {
+      const draft = await api.draftCampaignWithAi({
+        goal: aiGoal.trim(),
+        channel: newChannel,
+        audience: newAudience,
+      });
+      if (!newName.trim()) setNewName(draft.name);
+      if (newChannel === "EMAIL") setNewSubject(draft.subject);
+      setNewMessage(draft.body);
+      setDraftNote(
+        draft.source === "ai"
+          ? "Draft written by AI. Review and edit it before creating the campaign."
+          : "AI is not available right now, so this is a basic starting template. Edit it before creating the campaign.",
+      );
+    } catch (err: any) {
+      setDraftNote(err?.message || "Could not write a draft. Try again.");
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!newName || !newMessage) return;
     setSubmitting(true);
@@ -200,6 +248,8 @@ export default function CampaignsPage() {
       setNewAudience("All");
       setNewMessage("");
       setNewDate("");
+      setAiGoal("");
+      setDraftNote(null);
       await load();
     } catch (err: any) {
       showToast("error", err?.message || "Failed to create campaign");
@@ -269,7 +319,6 @@ export default function CampaignsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="EMAIL">Email</SelectItem>
-                      <SelectItem value="SMS">SMS</SelectItem>
                       <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
                     </SelectContent>
                   </Select>
@@ -312,13 +361,48 @@ export default function CampaignsPage() {
                     </SelectContent>
                   </Select>
                 </Field>
+                <div className="rounded-[0.625rem] border border-[rgb(var(--color-border))] p-3">
+                  <Field label="Write with AI">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g. Invite customers back for our Diwali offers"
+                        value={aiGoal}
+                        onChange={(e) => setAiGoal(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void draftWithAi();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="shrink-0"
+                        disabled={drafting || aiGoal.trim().length < 3}
+                        onClick={() => void draftWithAi()}
+                      >
+                        <Sparkles />
+                        {drafting ? "Writing..." : "Draft"}
+                      </Button>
+                    </div>
+                  </Field>
+                  <p className="mt-2 text-xs text-[rgb(var(--color-muted-foreground))]">
+                    {draftNote ??
+                      "Say what the campaign is about and AI fills in the message for the channel and audience above. Nothing is sent."}
+                  </p>
+                </div>
                 <Field label="Message" required>
                   <Textarea
+                    className="min-h-[140px]"
                     placeholder="Write your campaign message..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                   />
                 </Field>
+                <p className="-mt-2 text-xs text-[rgb(var(--color-muted-foreground))]">
+                  <code>{"{{firstName}}"}</code> is replaced with each customer&apos;s name.
+                </p>
                 <Field label="Schedule date">
                   <Input
                     type="date"
@@ -383,16 +467,14 @@ export default function CampaignsPage() {
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base">{c.name}</CardTitle>
-                  <Badge variant={STATUS_VARIANT[c.status]} className="shrink-0 text-[0.65rem] uppercase tracking-wider">
+                  <Badge variant={STATUS_VARIANT[c.status]} className="shrink-0">
                     {STATUS_LABEL[c.status]}
                   </Badge>
                 </div>
-                <CardDescription>
-                  <div className="mt-1 flex items-center gap-1.5 text-xs">
-                    {CHANNEL_ICON[c.channel]}
-                    <span>{c.channel}</span>
-                  </div>
-                </CardDescription>
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-[rgb(var(--color-muted-foreground))]">
+                  {CHANNEL_ICON[c.channel]}
+                  <span>{CHANNEL_LABEL[c.channel]}</span>
+                </div>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-3">
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -428,11 +510,7 @@ export default function CampaignsPage() {
                 <div className="mt-auto flex items-center justify-between gap-2 border-t border-[rgb(var(--color-border))] pt-3">
                   <div className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-muted-foreground))]">
                     <Clock className="h-3.5 w-3.5" />
-                    {new Date(c.scheduleDate).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {campaignDateLabel(c)}
                   </div>
                   <div className="flex items-center gap-1">
                     {(c.channel === "EMAIL" || c.channel === "WHATSAPP") &&

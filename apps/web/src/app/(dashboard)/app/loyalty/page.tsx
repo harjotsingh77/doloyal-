@@ -60,16 +60,15 @@ export default function LoyaltyPage() {
   }));
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]" />
+    <div>
 
-      <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="pb-16">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-[rgb(var(--color-foreground))] md:text-[1.7rem]">
               Loyalty
             </h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            <p className="mt-2 max-w-2xl text-sm text-[rgb(var(--color-muted-foreground))]">
               Program Settings and Leaderboard are always on. Every other module appears
               here instantly when enabled in Feature Management — fully wired to live data.
             </p>
@@ -87,13 +86,13 @@ export default function LoyaltyPage() {
         </div>
 
         {/* Sticky module nav — only enabled modules */}
-        <div className="sticky top-0 z-20 -mx-4 mb-8 border-b border-slate-200/80 bg-white/80 px-4 py-3 backdrop-blur-md sm:mx-0 sm:rounded-2xl sm:border sm:px-4">
+        <div className="sticky top-0 z-20 -mx-4 mb-8 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface)/0.8)] px-4 py-3 backdrop-blur-md sm:mx-0 sm:rounded-2xl sm:border sm:px-4">
           <div className="flex gap-2 overflow-x-auto pb-1">
             {navItems.map((item) => (
               <a
                 key={item.id}
                 href={`#${item.id}`}
-                className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+                className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-1.5 text-xs font-medium text-[rgb(var(--color-muted-foreground))] transition hover:border-[rgb(var(--color-primary)/0.25)] hover:text-[rgb(var(--color-primary))]"
               >
                 {item.label}
               </a>
@@ -107,10 +106,10 @@ export default function LoyaltyPage() {
             {overview.kpis.slice(0, 4).map((kpi: any) => (
               <div
                 key={kpi.key}
-                className="rounded-[18px] border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                className="rounded-[18px] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
               >
-                <p className="text-xs text-slate-500">{kpi.label}</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{kpi.label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-[rgb(var(--color-foreground))]">
                   {kpi.value}
                 </p>
               </div>
@@ -139,11 +138,11 @@ export default function LoyaltyPage() {
             </AnimatePresence>
 
             {ordered.length <= 2 ? (
-              <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
-                <p className="text-sm font-medium text-slate-900">
+              <div className="rounded-[18px] border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.8)] px-6 py-12 text-center">
+                <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">
                   Enable modules from Feature Management
                 </p>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
                   Tiers, challenges, badges, rewards, automations, and more will animate in
                   below the Leaderboard the moment you turn them on.
                 </p>

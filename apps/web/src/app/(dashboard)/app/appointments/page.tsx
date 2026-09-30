@@ -947,7 +947,7 @@ function TableView({
               <TableCell className="text-[rgb(var(--color-muted-foreground))]">{a.serviceName}</TableCell>
               <TableCell className="text-[rgb(var(--color-muted-foreground))]">{a.staffName ?? "—"}</TableCell>
               <TableCell>
-                <Badge variant={STATUS_COLORS[a.status] ?? "outline"} className="gap-1 text-[0.65rem]">
+                <Badge variant={STATUS_COLORS[a.status] ?? "outline"} className="gap-1">
                   {STATUS_ICONS[a.status]}
                   {STATUS_LABELS[a.status] ?? a.status}
                 </Badge>
@@ -1030,7 +1030,7 @@ function KanbanView({
           <div key={col.key} className="flex min-w-[200px] flex-1 flex-col rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.3)]">
             <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-3 py-2">
               <div className="flex items-center gap-2">
-                <Badge variant={STATUS_COLORS[col.key] ?? "outline"} className="text-[0.6rem] px-1.5 py-0">
+                <Badge variant={STATUS_COLORS[col.key] ?? "outline"} className="px-1.5 py-0">
                   {items.length}
                 </Badge>
                 <span className="text-xs font-semibold">{col.label}</span>
@@ -1053,7 +1053,7 @@ function KanbanView({
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold">{formatTime(appt.startsAt)}</span>
-                      <Badge variant={STATUS_COLORS[appt.status] ?? "outline"} className="text-[0.5rem] px-1 py-0">
+                      <Badge variant={STATUS_COLORS[appt.status] ?? "outline"} className="px-1 py-0">
                         {STATUS_LABELS[appt.status]}
                       </Badge>
                     </div>
@@ -1181,7 +1181,7 @@ function CalendarView({
                   {day}
                 </span>
                 {dayAppts.length > 0 && (
-                  <Badge variant="accent" className="text-[0.5rem] px-1 py-0">
+                  <Badge variant="accent" className="px-1 py-0">
                     {dayAppts.length}
                   </Badge>
                 )}
@@ -1240,7 +1240,7 @@ function CalendarView({
                       <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{a.serviceName}{a.staffName ? ` · ${a.staffName}` : ""}</p>
                     </div>
                   </div>
-                  <Badge variant={STATUS_COLORS[a.status] ?? "outline"} className="text-[0.6rem]">
+                  <Badge variant={STATUS_COLORS[a.status] ?? "outline"}>
                     {STATUS_LABELS[a.status]}
                   </Badge>
                 </button>
@@ -1349,7 +1349,7 @@ function TimelineView({
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-xs font-semibold truncate">{formatTime(a.startsAt)}</span>
-                  <Badge variant={STATUS_COLORS[a.status] ?? "outline"} className="text-[0.5rem] px-1 py-0 shrink-0">
+                  <Badge variant={STATUS_COLORS[a.status] ?? "outline"} className="px-1 py-0 shrink-0">
                     {STATUS_LABELS[a.status]}
                   </Badge>
                 </div>
@@ -1510,7 +1510,7 @@ function DetailContent({
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <span>{appt.customerName}</span>
-          <Badge variant={STATUS_COLORS[appt.status] ?? "outline"} className="gap-1 text-[0.6rem]">
+          <Badge variant={STATUS_COLORS[appt.status] ?? "outline"} className="gap-1">
             {STATUS_ICONS[appt.status]}
             {STATUS_LABELS[appt.status] ?? appt.status}
           </Badge>
@@ -1588,7 +1588,7 @@ function DetailContent({
           {(appt as AppointmentDetail).paymentStatus && (
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-[rgb(var(--color-muted-foreground))]">Payment:</span>
-              <Badge variant={PAYMENT_STATUS_COLORS[(appt as AppointmentDetail).paymentStatus!] ?? "outline"} className="text-[0.55rem]">
+              <Badge variant={PAYMENT_STATUS_COLORS[(appt as AppointmentDetail).paymentStatus!] ?? "outline"}>
                 {(appt as AppointmentDetail).paymentStatus}
               </Badge>
             </div>

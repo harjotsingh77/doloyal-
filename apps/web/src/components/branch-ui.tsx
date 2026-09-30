@@ -59,7 +59,7 @@ export function StatusBadge({
   children: React.ReactNode;
 }) {
   return (
-    <Badge variant={tone as any} className="text-[0.6rem] uppercase tracking-wider">
+    <Badge variant={tone as any}>
       {children}
     </Badge>
   );

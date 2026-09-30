@@ -91,7 +91,7 @@ export function createEntityModule(opts: {
         ) : (
           <div className="space-y-4">
             <ModuleCard>
-              <p className="mb-3 text-sm font-medium text-slate-900">Add {opts.entityLabel}</p>
+              <p className="mb-3 text-sm font-medium text-[rgb(var(--color-foreground))]">Add {opts.entityLabel}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {opts.fields.map((f) => (
                   <Field key={f.key} label={f.label}>
@@ -125,10 +125,10 @@ export function createEntityModule(opts: {
                   <ModuleCard key={e.id} className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{e.name || opts.entityLabel}</p>
+                        <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">{e.name || opts.entityLabel}</p>
                         <Badge variant="outline">{e.status}</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">
                         {Object.entries(e.data || {})
                           .slice(0, 6)
                           .map(([k, v]) => `${k}: ${String(v)}`)

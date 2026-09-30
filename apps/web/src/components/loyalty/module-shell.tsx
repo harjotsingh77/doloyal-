@@ -31,13 +31,13 @@ export function ModuleShell({
     >
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-primary))]">
             {feature.category}
           </p>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+          <h2 className="text-xl font-semibold tracking-tight text-[rgb(var(--color-foreground))] sm:text-2xl">
             {feature.name}
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">{feature.description}</p>
+          <p className="mt-1 max-w-2xl text-sm text-[rgb(var(--color-muted-foreground))]">{feature.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {actions}
@@ -64,7 +64,7 @@ export function ModuleCard({
   return (
     <div
       className={cn(
-        "rounded-[18px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]",
+        "rounded-[18px] border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]",
         className,
       )}
     >
@@ -84,9 +84,9 @@ export function ModuleLoading() {
 
 export function ModuleEmpty({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
-      <p className="text-sm font-medium text-slate-900">{title}</p>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
+    <div className="rounded-[18px] border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.8)] px-6 py-12 text-center">
+      <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{title}</p>
+      <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{description}</p>
     </div>
   );
 }

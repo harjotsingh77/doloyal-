@@ -600,7 +600,7 @@ function BusinessProfileForm() {
               autoComplete="organization"
             />
           </SettingRow>
-          <SettingRow label="Display name" htmlFor="bp-tagline" stacked description="Shown under your name on booking pages.">
+          <SettingRow label="Tagline" htmlFor="bp-tagline" stacked description="Shown under your name on booking pages.">
             <Input
               id="bp-tagline"
               value={draft.tagline}
@@ -609,20 +609,22 @@ function BusinessProfileForm() {
             />
           </SettingRow>
         </div>
-        <SettingRow label="Industry" description="Helps tailor templates and defaults.">
-          <Select value={draft.category} onValueChange={(v) => set("category", v as BusinessCategory)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select industry" />
-            </SelectTrigger>
-            <SelectContent>
-              {BUSINESS_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {BUSINESS_CATEGORY_LABELS[c]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingRow>
+        <div className="grid gap-x-6 sm:grid-cols-2">
+          <SettingRow label="Industry" stacked description="Helps tailor templates and defaults.">
+            <Select value={draft.category} onValueChange={(v) => set("category", v as BusinessCategory)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                {BUSINESS_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {BUSINESS_CATEGORY_LABELS[c]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingRow>
+        </div>
         <SettingRow label="Description" htmlFor="bp-desc" stacked>
           <Textarea
             id="bp-desc"

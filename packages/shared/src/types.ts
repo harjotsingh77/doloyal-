@@ -2530,6 +2530,19 @@ export interface SupportUnreadBadge {
   unread: number;
 }
 
+/** One entry in the staff notification feed (header bell). */
+export interface AppNotificationItem {
+  id: string;
+  /** ANNOUNCEMENT | TICKET | WEBSITE | BILLING | FEEDBACK | TREND */
+  type: string;
+  title: string;
+  message?: string | null;
+  /** INFO | SUCCESS | WARNING */
+  severity: string;
+  link?: string | null;
+  createdAt: string;
+}
+
 export interface AdminAiAssistResult {
   draft: string;
   articles: { id: string; slug: string; title: string; category: string }[];

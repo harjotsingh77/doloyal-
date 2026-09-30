@@ -42,20 +42,34 @@ export class CampaignsService {
     if (!input.name || !input.body) {
       throw new BadRequestException('Campaign name and message are required.');
     }
+    if (input.channel === 'SMS') {
+      throw new BadRequestException('SMS campaigns are not available yet. Use Email or WhatsApp.');
+    }
+    let scheduleDate: Date | null = null;
+    if (input.scheduleDate) {
+      scheduleDate = new Date(input.scheduleDate);
+      if (Number.isNaN(scheduleDate.getTime())) {
+        throw new BadRequestException('Schedule date is not a valid date.');
+      }
+    }
     const audience = input.audience || 'All';
-    const recipients = await this.countAudience(tenantId, audience);
+    const recipients = await this.countAudience(tenantId, audience, input.channel);
 
     return this.prisma.campaign.create({
       data: {
         tenantId,
         name: input.name,
-        subject: input.subject || input.name,
+        // For WhatsApp, `subject` holds the approved template name. It must stay
+        // empty when none was given: defaulting it to the campaign name made
+        // every free-form WhatsApp campaign look for a template that does not exist.
+        subject:
+          input.channel === 'WHATSAPP' ? (input.subject || '').trim() : input.subject || input.name,
         body: input.body,
         channel: input.channel,
         audience,
         recipients,
-        status: input.scheduleDate ? 'SCHEDULED' : 'DRAFT',
-        scheduleDate: input.scheduleDate ? new Date(input.scheduleDate) : null,
+        status: scheduleDate ? 'SCHEDULED' : 'DRAFT',
+        scheduleDate,
       },
     }).then(async (campaign) => {
       await this.prisma.activity.create({
@@ -149,86 +163,114 @@ export class CampaignsService {
       customers = customers.filter((c) => c.phone);
     }
 
-    await this.prisma.campaign.update({
-      where: { id },
-      data: { status: 'SENDING' },
+    // Claim the campaign atomically: a double click, a second tab or the
+    // scheduler firing at the same moment must not send it twice.
+    const claimed = await this.prisma.campaign.updateMany({
+      where: { id, tenantId, status: { in: ['DRAFT', 'SCHEDULED', 'FAILED'] } },
+      data: { status: 'SENDING', recipients: customers.length },
     });
+    if (claimed.count === 0) {
+      throw new BadRequestException(
+        campaign.status === 'PAUSED'
+          ? 'This campaign is paused. Activate it before sending.'
+          : 'This campaign has already been sent or is being sent.',
+      );
+    }
 
     let sent = 0;
     let failed = 0;
     const batchSize = 20;
 
-    for (let i = 0; i < customers.length; i += batchSize) {
-      const batch = customers.slice(i, i + batchSize);
+    try {
 
-      if (campaign.channel === 'EMAIL') {
-        const results = await Promise.all(
-          batch.map((c: any) =>
-            this.emailService.sendBusinessEmail({
-              tenantId,
-              to: c.email,
-              subject: campaign.subject,
-              html: campaign.body,
-              customerId: c.id,
-              campaignId: campaign.id,
-              notificationType: 'CAMPAIGN',
-            }),
-          ),
-        );
-        for (const r of results) {
-          if (r.status === 'SENT') sent += 1;
-          else failed += 1;
-        }
-      } else {
-        // WHATSAPP — real sends through the tenant's connected Cloud API.
-        const templateName = (campaign.subject || '').trim();
-        const firstName = null as string | null;
-        void firstName;
-        for (const c of batch) {
-          try {
-            let result;
-            if (templateName) {
-              result = await this.whatsapp.sendTemplate(tenantId, c.phone, templateName, {
-                bodyParams: [c.firstName || 'there'].slice(0, 5),
-              });
-            } else {
-              result = await this.whatsapp.sendSessionText(
+      for (let i = 0; i < customers.length; i += batchSize) {
+        const batch = customers.slice(i, i + batchSize);
+
+        if (campaign.channel === 'EMAIL') {
+          const results = await Promise.all(
+            batch.map((c: any) =>
+              this.emailService.sendBusinessEmail({
                 tenantId,
-                c.phone,
-                this.renderCampaignBody(campaign.body, c),
-              );
-            }
-            await this.prisma.notification.create({
-              data: {
-                tenantId,
+                to: c.email,
+                subject: campaign.subject,
+                html: this.renderEmailHtml(campaign.body, c),
                 customerId: c.id,
-                type: 'CAMPAIGN',
-                channel: 'WHATSAPP',
-                recipient: c.phone,
-                subject: campaign.name,
-                body: campaign.body,
-                status: result.ok ? 'SENT' : 'FAILED',
-                sentAt: result.ok ? new Date() : null,
-                metadata: {
-                  campaignId: campaign.id,
-                  ...(result.providerMessageId ? { providerMessageId: result.providerMessageId } : {}),
-                  ...(result.error ? { error: result.error } : {}),
-                },
-              },
-            }).catch(() => undefined);
-            if (result.ok) sent += 1;
+                campaignId: campaign.id,
+                notificationType: 'CAMPAIGN',
+              }),
+            ),
+          );
+          for (const r of results) {
+            if (r.status === 'SENT') sent += 1;
             else failed += 1;
-          } catch (err: any) {
-            failed += 1;
-            this.logger.warn(`WhatsApp campaign send failed (${c.id}): ${err?.message}`);
+          }
+        } else {
+          // WHATSAPP — real sends through the tenant's connected Cloud API.
+          // Meta template names are lowercase letters, digits and underscores.
+          // Anything else (such as a campaign name stored by older versions) is
+          // not a template, so the message goes out as free-form text.
+          const subject = (campaign.subject || '').trim();
+          const templateName = /^[a-z0-9_]+$/.test(subject) ? subject : '';
+          for (const c of batch) {
+            try {
+              let result;
+              if (templateName) {
+                result = await this.whatsapp.sendTemplate(tenantId, c.phone, templateName, {
+                  bodyParams: [c.firstName || 'there'].slice(0, 5),
+                });
+              } else {
+                result = await this.whatsapp.sendSessionText(
+                  tenantId,
+                  c.phone,
+                  this.renderCampaignBody(campaign.body, c),
+                );
+              }
+              await this.prisma.notification.create({
+                data: {
+                  tenantId,
+                  customerId: c.id,
+                  type: 'CAMPAIGN',
+                  channel: 'WHATSAPP',
+                  recipient: c.phone,
+                  subject: campaign.name,
+                  body: campaign.body,
+                  status: result.ok ? 'SENT' : 'FAILED',
+                  sentAt: result.ok ? new Date() : null,
+                  metadata: {
+                    campaignId: campaign.id,
+                    ...(result.providerMessageId ? { providerMessageId: result.providerMessageId } : {}),
+                    ...(result.error ? { error: result.error } : {}),
+                  },
+                },
+              }).catch(() => undefined);
+              if (result.ok) sent += 1;
+              else failed += 1;
+            } catch (err: any) {
+              failed += 1;
+              this.logger.warn(`WhatsApp campaign send failed (${c.id}): ${err?.message}`);
+            }
           }
         }
-      }
 
-      // Simple pacing so bursts stay within provider rate limits.
-      if (i + batchSize < customers.length) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        // Simple pacing so bursts stay within provider rate limits.
+        if (i + batchSize < customers.length) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
       }
+    } catch (err: any) {
+      // Never leave a campaign stuck in SENDING: record what went out and fail it.
+      this.logger.error(`Campaign ${id} aborted after ${sent} sent: ${err?.message || err}`);
+      await this.prisma.campaign
+        .update({
+          where: { id },
+          data: { status: sent > 0 ? 'COMPLETED' : 'FAILED', sentAt: new Date(), sentCount: sent, failedCount: failed },
+        })
+        .catch(() => undefined);
+      throw new BadRequestException(
+        sent > 0
+          ? `Sending stopped after ${sent} customer${sent === 1 ? '' : 's'} because of an error.`
+          : 'The campaign could not be sent. Try again in a moment.',
+      );
     }
 
     const status = failed > 0 && sent === 0 ? 'FAILED' : 'COMPLETED';
@@ -268,9 +310,37 @@ export class CampaignsService {
       .replace(/\{\{\s*name\s*\}\}/gi, [customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'there');
   }
 
-  private async countAudience(tenantId: string, audience: string): Promise<number> {
+  /**
+   * Plain-text messages become simple HTML (escaped, line breaks kept) with
+   * the same placeholders WhatsApp messages support. A body that already
+   * contains HTML is sent as written.
+   */
+  private renderEmailHtml(body: string, customer: { firstName?: string | null; lastName?: string | null }): string {
+    const escape = (value: string) =>
+      value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (/<[a-z][\s\S]*>/i.test(body)) {
+      // Names come from customer records; never let one inject markup.
+      return this.renderCampaignBody(body, {
+        firstName: customer.firstName ? escape(customer.firstName) : customer.firstName,
+        lastName: customer.lastName ? escape(customer.lastName) : customer.lastName,
+      });
+    }
+    return escape(this.renderCampaignBody(body, customer))
+      .split(/\n{2,}/)
+      .map((paragraph) => `<p>${paragraph.replace(/\n/g, '<br />')}</p>`)
+      .join('');
+  }
+
+  /** Customers in the segment who can actually be reached on the channel. */
+  private async countAudience(tenantId: string, audience: string, channel?: string): Promise<number> {
+    const reachable =
+      channel === 'EMAIL'
+        ? { email: { not: null } }
+        : channel === 'WHATSAPP'
+          ? { phone: { not: '' }, ...WHATSAPP_MARKETING_WHERE }
+          : {};
     return this.prisma.customer.count({
-      where: { tenantId, ...AUDIENCE_WHERE[audience] },
+      where: { tenantId, ...AUDIENCE_WHERE[audience], ...reachable } as any,
     });
   }
 

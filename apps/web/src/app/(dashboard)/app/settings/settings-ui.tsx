@@ -54,16 +54,19 @@ export function SettingRow({
 }) {
   if (stacked) {
     return (
+      // Help text sits under the control, so fields in a row line up whether
+      // or not each one has a description.
       <div className="py-3">
-        <div className="mb-2">
-          <label htmlFor={htmlFor} className="text-sm font-medium text-[rgb(var(--color-foreground))]">
-            {label}
-          </label>
-          {description ? (
-            <p className="mt-0.5 text-xs text-[rgb(var(--color-muted-foreground))]">{description}</p>
-          ) : null}
-        </div>
+        <label
+          htmlFor={htmlFor}
+          className="mb-2 block text-sm font-medium text-[rgb(var(--color-foreground))]"
+        >
+          {label}
+        </label>
         {children}
+        {description ? (
+          <p className="mt-1.5 text-xs leading-relaxed text-[rgb(var(--color-muted-foreground))]">{description}</p>
+        ) : null}
       </div>
     );
   }

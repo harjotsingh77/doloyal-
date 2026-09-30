@@ -1284,7 +1284,7 @@ export default function InvoicesPage() {
         >
           All Invoices
           {invoices.length > 0 && (
-            <Badge variant="outline" className="ml-1 text-[0.6rem]">{invoices.length}</Badge>
+            <Badge variant="outline" className="ml-1">{invoices.length}</Badge>
           )}
         </button>
         <button
@@ -1384,7 +1384,6 @@ export default function InvoicesPage() {
                       <TableCell>
                         <Badge
                           variant={STATUS_BADGE[inv.status] ?? "outline"}
-                          className="text-[0.65rem]"
                         >
                           {inv.status}
                         </Badge>
@@ -1492,10 +1491,10 @@ export default function InvoicesPage() {
                       <p className="text-xs text-[rgb(var(--color-muted-foreground))] leading-relaxed truncate">{t.description}</p>
                       <div className="flex items-center gap-2 mt-1">
                         {selectedTemplateId === t.id && (
-                          <Badge variant="primary" className="text-[0.6rem]">Active</Badge>
+                          <Badge variant="primary">Active</Badge>
                         )}
                         {t.isWordDoc && (
-                          <Badge variant="outline" className="text-[0.6rem] text-blue-600 border-blue-200 bg-blue-50">Word .docx</Badge>
+                          <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">Word .docx</Badge>
                         )}
                       </div>
                     </div>

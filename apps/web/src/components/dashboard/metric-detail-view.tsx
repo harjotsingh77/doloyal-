@@ -293,7 +293,7 @@ export function MetricDetailView({
                           <TableCell className="font-medium">
                             {row.title}
                             {row.meta?.Status ? (
-                              <Badge variant="accent" className="ml-2 text-[0.6rem]">
+                              <Badge variant="accent" className="ml-2">
                                 {row.meta.Status}
                               </Badge>
                             ) : null}

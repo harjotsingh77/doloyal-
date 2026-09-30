@@ -297,7 +297,7 @@ export default function EditBookingPageEditor() {
               {link.name || link.slug} · {link.status || "PUBLISHED"}
             </p>
           </div>
-          <Badge variant="outline" className="text-[0.55rem] uppercase">
+          <Badge variant="outline">
             {domain.status === "PENDING" ? "Pending DNS" : domain.status || "PENDING"}
           </Badge>
         </div>

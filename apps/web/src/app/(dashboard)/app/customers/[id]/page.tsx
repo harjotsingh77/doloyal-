@@ -47,6 +47,7 @@ import {
   relativeTime,
 } from "@doloyal/shared";
 import type { ClientOrder, CustomerProfile } from "@doloyal/shared";
+import { ChurnRisk } from "@/components/customers/churn-risk";
 import { api } from "@/lib/api";
 import { useCurrency } from "@/lib/currency-context";
 import { toast } from "sonner";
@@ -263,20 +264,7 @@ export default function CustomerProfilePage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-semibold">{customer.name}</h2>
-                  <Badge
-                    variant={
-                      customer.churnRisk === "LOW"
-                        ? "success"
-                        : customer.churnRisk === "MEDIUM"
-                          ? "warning"
-                          : customer.churnRisk === "HIGH"
-                            ? "accent"
-                            : "danger"
-                    }
-                    className="text-[0.65rem]"
-                  >
-                    {customer.churnRisk} risk
-                  </Badge>
+                  <ChurnRisk level={customer.churnRisk} suffix="risk" />
                   <Badge
                     variant={
                       customer.loyaltyBand === "VIP"
@@ -285,7 +273,6 @@ export default function CustomerProfilePage() {
                           ? "success"
                           : "outline"
                     }
-                    className="text-[0.65rem]"
                   >
                     {customer.loyaltyBand}
                   </Badge>
@@ -473,7 +460,6 @@ export default function CustomerProfilePage() {
                                     ? "success"
                                     : "primary"
                             }
-                            className="text-[0.6rem]"
                           >
                             {whatsappStatusLabel(entry.deliveryStatus)}
                           </Badge>
@@ -565,7 +551,6 @@ export default function CustomerProfilePage() {
                                 ? "warning"
                                 : "outline"
                           }
-                          className="text-[0.6rem]"
                         >
                           {entry.type}
                         </Badge>
@@ -703,7 +688,7 @@ export default function CustomerProfilePage() {
                   </div>
                   <div>
                     <p className="text-lg font-semibold">
-                      {customer.churnRisk} Risk
+                      {customer.churnRisk.charAt(0) + customer.churnRisk.slice(1).toLowerCase()} risk
                     </p>
                     <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
                       Loyalty Score: {customer.loyaltyScore}/100
@@ -768,7 +753,7 @@ export default function CustomerProfilePage() {
         <CardContent>
           <div className="mb-4 flex flex-wrap gap-2">
             {customer.tags.map((tag) => (
-              <Badge key={tag} variant="primary" className="text-[0.65rem]">
+              <Badge key={tag} variant="primary">
                 {tag}
               </Badge>
             ))}

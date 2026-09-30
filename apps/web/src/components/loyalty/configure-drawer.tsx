@@ -60,10 +60,10 @@ function ToggleRow({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
+    <div className="flex items-center justify-between rounded-xl border border-[rgb(var(--color-border))] p-3">
       <div>
-        <p className="text-sm font-medium text-slate-800">{label}</p>
-        {hint ? <p className="text-xs text-slate-500">{hint}</p> : null}
+        <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{label}</p>
+        {hint ? <p className="text-xs text-[rgb(var(--color-muted-foreground))]">{hint}</p> : null}
       </div>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>
@@ -167,7 +167,7 @@ export function FeatureConfigureDrawer({ feature, open, onClose, onSave }: Props
         return (
           <div className="space-y-4">
             {tiers.map((t, i) => (
-              <div key={i} className="space-y-2 rounded-xl border border-slate-200 p-3">
+              <div key={i} className="space-y-2 rounded-xl border border-[rgb(var(--color-border))] p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium">Tier {i + 1}</p>
                   <Button
@@ -419,7 +419,7 @@ export function FeatureConfigureDrawer({ feature, open, onClose, onSave }: Props
         const entries = Object.entries(draft);
         if (entries.length === 0) {
           return (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[rgb(var(--color-muted-foreground))]">
               No configuration schema yet. Save defaults from Feature Management after enabling.
             </p>
           );
@@ -476,29 +476,29 @@ export function FeatureConfigureDrawer({ feature, open, onClose, onSave }: Props
           />
           <motion.aside
             className={cn(
-              "fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl",
+              "fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl",
             )}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
-            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+            <div className="flex items-start justify-between border-b border-[rgb(var(--color-border))] px-6 py-5">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-primary))]">
                   Configure
                 </p>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
+                <h2 className="mt-1 text-xl font-semibold tracking-tight text-[rgb(var(--color-foreground))]">
                   {feature.name}
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">{feature.description}</p>
+                <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">{feature.description}</p>
               </div>
               <Button variant="ghost" size="sm" onClick={onClose}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5">{renderForm()}</div>
-            <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+            <div className="flex justify-end gap-2 border-t border-[rgb(var(--color-border))] px-6 py-4">
               <Button variant="secondary" onClick={onClose}>
                 Cancel
               </Button>

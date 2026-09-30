@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { CurrencySelect } from "@/components/currency-select";
+import { NotificationBell } from "@/components/notification-bell";
 import { TenantCurrencySync } from "@/components/tenant-currency-sync";
 import { TenantBrandingSync } from "@/components/tenant-branding";
 import { AskDoloyal } from "@/components/ask-doloyal";
@@ -86,6 +87,7 @@ export default function AppShellLayout({
 
           <div className="flex items-center gap-1">
             <CurrencySelect />
+            <NotificationBell />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

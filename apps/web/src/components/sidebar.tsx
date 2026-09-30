@@ -319,7 +319,7 @@ export const Sidebar = React.memo(function Sidebar({
                         {!collapsed && item.badge && (
                           <Badge
                             variant={item.badge === "new" ? "primary" : "outline"}
-                            className="ml-auto text-[0.62rem] uppercase leading-none py-0.5 px-2 font-semibold"
+                            className="ml-auto text-[0.62rem] leading-none py-0.5 px-2 font-semibold"
                           >
                             {item.badge}
                           </Badge>
@@ -392,7 +392,7 @@ export const Sidebar = React.memo(function Sidebar({
                                   {child.badge ? (
                                     <Badge
                                       variant={child.badge === "new" ? "primary" : "outline"}
-                                      className="ml-auto text-[0.62rem] uppercase leading-none py-0.5 px-2 font-semibold"
+                                      className="ml-auto text-[0.62rem] leading-none py-0.5 px-2 font-semibold"
                                     >
                                       {child.badge}
                                     </Badge>

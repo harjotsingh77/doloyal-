@@ -241,11 +241,11 @@ export default function RewardsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Rewards</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold tracking-tight text-[rgb(var(--color-foreground))] md:text-[1.7rem]">Rewards</h1>
+          <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">
             Create, manage and automate all customer rewards.
           </p>
         </div>
@@ -289,10 +289,10 @@ export default function RewardsPage() {
           : stats.map((s) => (
               <div
                 key={s.label}
-                className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
               >
-                <p className="truncate text-xs text-slate-500">{s.label}</p>
-                <p className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">
+                <p className="truncate text-xs text-[rgb(var(--color-muted-foreground))]">{s.label}</p>
+                <p className="mt-0.5 text-xl font-semibold tracking-tight text-[rgb(var(--color-foreground))]">
                   {s.value}
                 </p>
               </div>
@@ -300,7 +300,7 @@ export default function RewardsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 pb-px">
+      <div className="flex gap-1 overflow-x-auto border-b border-[rgb(var(--color-border))] pb-px">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -309,8 +309,8 @@ export default function RewardsPage() {
             className={cn(
               "shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition",
               tab === t.key
-                ? "border-blue-600 text-blue-700"
-                : "border-transparent text-slate-500 hover:text-slate-800",
+                ? "border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))]"
+                : "border-transparent text-[rgb(var(--color-muted-foreground))] hover:text-[rgb(var(--color-foreground))]",
             )}
           >
             {t.label}
@@ -319,7 +319,7 @@ export default function RewardsPage() {
       </div>
 
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-subtle))]" />
         <Input
           className="max-w-md pl-9"
           placeholder="Search rewards or redemptions…"
@@ -357,9 +357,9 @@ export default function RewardsPage() {
           ))}
         </div>
       ) : rewards.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
-          <p className="text-sm font-medium text-slate-900">No rewards in this category</p>
-          <p className="mt-1 text-sm text-slate-500">Create a reward to get started.</p>
+        <div className="rounded-2xl border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted)/0.6)] px-6 py-14 text-center">
+          <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">No rewards in this category</p>
+          <p className="mt-1 text-sm text-[rgb(var(--color-muted-foreground))]">Create a reward to get started.</p>
           <Button className="mt-4" size="sm" onClick={openCreate}>
             Create Reward
           </Button>
@@ -440,9 +440,9 @@ function ClaimsPanel({ programType }: { programType: string }) {
   }, [load]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+    <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">Pending & recent claims</h3>
+        <h3 className="text-sm font-semibold text-[rgb(var(--color-foreground))]">Pending & recent claims</h3>
         <Button variant="secondary" size="sm" onClick={load}>
           Refresh
         </Button>
@@ -450,17 +450,17 @@ function ClaimsPanel({ programType }: { programType: string }) {
       {loading ? (
         <Skeleton className="h-24 w-full" />
       ) : claims.length === 0 ? (
-        <p className="text-sm text-slate-500">No claims yet.</p>
+        <p className="text-sm text-[rgb(var(--color-muted-foreground))]">No claims yet.</p>
       ) : (
         <div className="space-y-2">
           {claims.map((c) => (
             <div
               key={c.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[rgb(var(--color-border))] px-3 py-2"
             >
               <div>
-                <p className="text-sm font-medium text-slate-900">{c.customerName}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">{c.customerName}</p>
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                   {c.rewardPoints} pts · {c.status} · {c.createdAt?.slice?.(0, 10)}
                 </p>
               </div>
@@ -506,8 +506,8 @@ function CashbackQuickPanel({ onDone }: { onDone: () => void }) {
   const [customers, setCustomers] = React.useState<any[]>([]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-3 text-sm font-semibold text-slate-900">Convert points to cashback</h3>
+    <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
+      <h3 className="mb-3 text-sm font-semibold text-[rgb(var(--color-foreground))]">Convert points to cashback</h3>
       <div className="flex flex-wrap gap-2">
         <Input
           className="max-w-xs"
@@ -561,7 +561,7 @@ function CashbackQuickPanel({ onDone }: { onDone: () => void }) {
               type="button"
               className={cn(
                 "block w-full rounded-lg px-3 py-2 text-left text-sm",
-                customerId === c.id ? "bg-blue-50 text-blue-700" : "hover:bg-slate-50",
+                customerId === c.id ? "bg-[rgb(var(--color-primary)/0.06)] text-[rgb(var(--color-primary))]" : "hover:bg-[rgb(var(--color-muted))]",
               )}
               onClick={() => setCustomerId(c.id)}
             >
@@ -594,40 +594,40 @@ function RewardCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+      className="flex flex-col justify-between rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
     >
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-900">{reward.name}</h3>
+          <h3 className="text-base font-semibold text-[rgb(var(--color-foreground))]">{reward.name}</h3>
           <Badge variant={statusColor(reward.status) as any}>{reward.status}</Badge>
         </div>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-[rgb(var(--color-muted-foreground))]">
           {reward.category} · {reward.rewardType}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">Points</p>
-            <p className="font-medium text-slate-800">{reward.pointsCost}</p>
+            <p className="text-[11px] uppercase tracking-wide text-[rgb(var(--color-subtle))]">Points</p>
+            <p className="font-medium text-[rgb(var(--color-foreground))]">{reward.pointsCost}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">Remaining</p>
-            <p className="font-medium text-slate-800">
+            <p className="text-[11px] uppercase tracking-wide text-[rgb(var(--color-subtle))]">Remaining</p>
+            <p className="font-medium text-[rgb(var(--color-foreground))]">
               {reward.remainingQuantity == null ? "Unlimited" : reward.remainingQuantity}
             </p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">Redeemed</p>
-            <p className="font-medium text-slate-800">{reward.redeemedCount}</p>
+            <p className="text-[11px] uppercase tracking-wide text-[rgb(var(--color-subtle))]">Redeemed</p>
+            <p className="font-medium text-[rgb(var(--color-foreground))]">{reward.redeemedCount}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">Expiry</p>
-            <p className="font-medium text-slate-800">
+            <p className="text-[11px] uppercase tracking-wide text-[rgb(var(--color-subtle))]">Expiry</p>
+            <p className="font-medium text-[rgb(var(--color-foreground))]">
               {reward.expiresAt ? reward.expiresAt.slice(0, 10) : "—"}
             </p>
           </div>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
+      <div className="mt-4 flex flex-wrap gap-1 border-t border-[rgb(var(--color-border))] pt-3">
         <Button variant="ghost" size="sm" onClick={onEdit}>
           <Pencil className="h-3.5 w-3.5" /> Edit
         </Button>
@@ -663,18 +663,18 @@ function ProgramPanel({
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-primary))]">
             Automation
           </p>
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 className="text-lg font-semibold text-[rgb(var(--color-foreground))]">
             {REWARD_CATEGORY_LABELS[programType as RewardCategory] || programType} settings
           </h2>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-[rgb(var(--color-foreground))]">
             <Switch checked={!!draft.enabled} onCheckedChange={(v) => set("enabled", v)} />
             Enabled
           </label>
@@ -823,8 +823,8 @@ function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
-      <span className="text-sm text-slate-700">{label}</span>
+    <div className="flex items-center justify-between rounded-xl border border-[rgb(var(--color-border))] px-3 py-2">
+      <span className="text-sm text-[rgb(var(--color-foreground))]">{label}</span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>
   );
@@ -840,9 +840,9 @@ function RedemptionTable({
   onExport: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-        <p className="text-sm font-medium text-slate-900">Redemption History</p>
+    <div className="overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
+      <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-foreground))]">Redemption History</p>
         <Button variant="secondary" size="sm" onClick={onExport}>
           Export
         </Button>
@@ -852,7 +852,7 @@ function RedemptionTable({
           <Skeleton className="h-40 w-full" />
         </div>
       ) : rows.length === 0 ? (
-        <p className="px-4 py-12 text-center text-sm text-slate-500">No redemptions yet.</p>
+        <p className="px-4 py-12 text-center text-sm text-[rgb(var(--color-muted-foreground))]">No redemptions yet.</p>
       ) : (
         <div className="overflow-x-auto">
           <Table>
@@ -1019,18 +1019,18 @@ function RewardDrawer({
             onClick={onClose}
           />
           <motion.aside
-            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-2xl"
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-5 py-4">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-primary))]">
                   {reward ? "Edit" : "Create"} Reward
                 </p>
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-semibold text-[rgb(var(--color-foreground))]">
                   {reward?.name || "New reward"}
                 </h2>
               </div>
@@ -1097,7 +1097,7 @@ function RewardDrawer({
                   />
                 </Field>
               </div>
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+              <div className="flex items-center justify-between rounded-xl border border-[rgb(var(--color-border))] px-3 py-2">
                 <span className="text-sm">Unlimited Stock</span>
                 <Switch
                   checked={form.unlimitedStock}
@@ -1158,15 +1158,15 @@ function RewardDrawer({
                 <Textarea value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} />
               </Field>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
-                <p className="font-medium text-slate-900">Preview</p>
+              <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-muted))] p-3 text-sm text-[rgb(var(--color-muted-foreground))]">
+                <p className="font-medium text-[rgb(var(--color-foreground))]">Preview</p>
                 <p className="mt-1">{form.name || "Untitled reward"}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                   {form.category} · {form.pointsCost} pts · {form.unlimitedStock ? "Unlimited" : `${form.totalQuantity} stock`}
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+            <div className="flex gap-2 border-t border-[rgb(var(--color-border))] px-5 py-4">
               <Button variant="secondary" className="flex-1" onClick={() => save(false)} disabled={saving}>
                 Save Draft
               </Button>

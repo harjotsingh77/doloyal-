@@ -31,7 +31,7 @@ export function AskDoloyalWidget() {
         onClick={toggle}
         aria-label={isOpen ? "Close Ask Doloyal" : "Open Ask Doloyal"}
         data-ask-doloyal-fab=""
-        className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[rgb(var(--color-primary))] text-white shadow-lg shadow-black/20 transition-[bottom] duration-200 hover:brightness-110 active:brightness-95 lg:bottom-6 lg:right-6"
+        className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white shadow-lg shadow-black/20 transition-[bottom] duration-200 hover:brightness-110 active:brightness-95 lg:bottom-6 lg:right-6"
       >
         {isOpen ? (
           <X className="h-6 w-6" strokeWidth={2.5} />
@@ -41,7 +41,7 @@ export function AskDoloyalWidget() {
             alt="Ask Doloyal"
             width={56}
             height={56}
-            className="h-14 w-14 object-cover select-none pointer-events-none"
+            className="h-14 w-14 rounded-full object-cover select-none pointer-events-none"
           />
         )}
         {!isOpen && unread > 0 && (

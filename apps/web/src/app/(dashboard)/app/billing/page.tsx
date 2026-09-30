@@ -439,7 +439,7 @@ export default function BillingPage() {
                 </div>
                 <CardTitle>Current Plan</CardTitle>
               </div>
-              <Badge variant={statusMeta.variant} className="uppercase tracking-wider">
+              <Badge variant={statusMeta.variant}>
                 {statusMeta.label}
               </Badge>
             </div>
@@ -451,7 +451,7 @@ export default function BillingPage() {
                 <div className="flex items-center gap-2">
                   <h3 className="text-2xl font-bold tracking-tight">{currentPlan?.name ?? normalizePlanName(sub.plan)}</h3>
                   {currentPlan?.highlighted ? (
-                    <Badge variant="primary" className="text-[0.55rem] uppercase tracking-widest">
+                    <Badge variant="primary">
                       Most Popular
                     </Badge>
                   ) : null}
@@ -664,7 +664,7 @@ export default function BillingPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold">Free Trial — {TRIAL_DAYS} days</p>
-                  <Badge variant="primary" className="uppercase">Current Plan</Badge>
+                  <Badge variant="primary">Current Plan</Badge>
                 </div>
                 <p className="mt-0.5 text-sm text-[rgb(var(--color-muted-foreground))]">
                   {isTrial
@@ -861,7 +861,7 @@ function PlanCard({
     >
       {plan.highlighted && !isCurrent ? (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge variant="primary" className="text-[0.55rem] uppercase tracking-widest shadow-sm">
+          <Badge variant="primary" className="shadow-sm">
             Most Popular
           </Badge>
         </div>
@@ -870,7 +870,7 @@ function PlanCard({
         <div className="flex items-center justify-between gap-2">
           <CardTitle>{plan.name}</CardTitle>
           {isCurrent ? (
-            <Badge variant="accent" className="uppercase">
+            <Badge variant="accent">
               Current
             </Badge>
           ) : null}
@@ -1130,7 +1130,7 @@ function BillingHistory({
                         <TableCell className="text-sm capitalize">{e.type === "PAYMENT_SUCCEEDED" ? sub.billingCycle : "—"}</TableCell>
                         <TableCell className="text-right font-medium">{e.amount != null ? formatAmount(e.amount) : "—"}</TableCell>
                         <TableCell>
-                          <Badge variant={meta.variant} className="uppercase">
+                          <Badge variant={meta.variant}>
                             {meta.label}
                           </Badge>
                         </TableCell>
@@ -1159,7 +1159,7 @@ function BillingHistory({
                   <div key={e.id} className="px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold">{eventDescription(e)}</p>
-                      <Badge variant={meta.variant} className="shrink-0 uppercase">
+                      <Badge variant={meta.variant} className="shrink-0">
                         {meta.label}
                       </Badge>
                     </div>
@@ -1310,12 +1310,12 @@ function ChangePlanDialog({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">{plan.name}</span>
                     {plan.highlighted ? (
-                      <Badge variant="primary" className="text-[0.55rem] uppercase tracking-widest">
+                      <Badge variant="primary">
                         Most Popular
                       </Badge>
                     ) : null}
                     {isActive ? (
-                      <Badge variant="accent" className="text-[0.55rem] uppercase tracking-widest">
+                      <Badge variant="accent">
                         Current
                       </Badge>
                     ) : null}
@@ -1690,7 +1690,7 @@ function ReceiptDialog({
               </div>
               <div className="flex items-center justify-between py-2.5">
                 <span className="text-[rgb(var(--color-muted-foreground))]">Status</span>
-                <Badge variant={historyStatusFor(event).variant} className="uppercase">
+                <Badge variant={historyStatusFor(event).variant}>
                   {historyStatusFor(event).label}
                 </Badge>
               </div>

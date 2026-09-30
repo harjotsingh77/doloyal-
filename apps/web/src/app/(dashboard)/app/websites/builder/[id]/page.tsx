@@ -243,7 +243,7 @@ export default function WebsiteBuilderPage() {
               {website.status} · v{website.draftVersion}
             </p>
           </div>
-          <Badge variant="outline" className="ml-2 text-[0.55rem] uppercase">
+          <Badge variant="outline" className="ml-2">
             {website.industry?.replace(/_/g, " ") ?? "General"}
           </Badge>
         </div>
@@ -324,8 +324,8 @@ export default function WebsiteBuilderPage() {
                   >
                     <FileText className="h-4 w-4 shrink-0" />
                     <span className="truncate flex-1">{page.title}</span>
-                    {page.isHome && <Badge variant="outline" className="text-[0.5rem]">Home</Badge>}
-                    <Badge variant={page.status === "PUBLISHED" ? "success" : "outline"} className="text-[0.5rem]">{page.status === "PUBLISHED" ? "Live" : "Draft"}</Badge>
+                    {page.isHome && <Badge variant="outline">Home</Badge>}
+                    <Badge variant={page.status === "PUBLISHED" ? "success" : "outline"}>{page.status === "PUBLISHED" ? "Live" : "Draft"}</Badge>
                   </button>
                 ))}
                 {otherPages.map((page: any) => null)}
@@ -414,7 +414,7 @@ export default function WebsiteBuilderPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-[rgb(var(--color-primary))]" />
                     <span className="text-sm font-semibold">{activePage.title}</span>
-                    {activePage.isHome && <Badge variant="outline" className="text-[0.5rem]">Home</Badge>}
+                    {activePage.isHome && <Badge variant="outline">Home</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon-sm" onClick={() => handleAiEditSection("new")}>

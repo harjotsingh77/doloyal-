@@ -247,13 +247,13 @@ export function ProgramSettingsModule({ feature, onConfigure }: LoyaltyModulePro
               />
             </Field>
           </div>
-          <div className="flex flex-wrap gap-4 border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap gap-4 border-t border-[rgb(var(--color-border))] pt-4">
             {[
               ["autoExpiry", "Auto Expiry"],
               ["weekendBonus", "Weekend Bonus"],
               ["holidayBonus", "Holiday Bonus"],
             ].map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+              <label key={key} className="flex items-center gap-2 text-sm text-[rgb(var(--color-foreground))]">
                 <Switch
                   checked={!!settings[key!]}
                   onCheckedChange={(v) =>
@@ -266,13 +266,13 @@ export function ProgramSettingsModule({ feature, onConfigure }: LoyaltyModulePro
           </div>
         </ModuleCard>
         <ModuleCard>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-primary))]">
             Preview Calculation
           </p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-[rgb(var(--color-foreground))]">
             {previewPoints} pts
           </p>
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-[rgb(var(--color-muted-foreground))]">
             On a {format(1000)} spend with weekend multiplier applied.
           </p>
         </ModuleCard>
@@ -387,7 +387,7 @@ export function LeaderboardModule({ feature, onConfigure }: LoyaltyModuleProps) 
         <div className="space-y-2">
           {rows.map((row, idx) => (
             <ModuleCard key={row.customerId || idx} className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--color-muted))] text-sm font-semibold text-[rgb(var(--color-foreground))]">
                 {cfg.showAvatars !== false && row.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={row.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
@@ -396,10 +396,10 @@ export function LeaderboardModule({ feature, onConfigure }: LoyaltyModuleProps) 
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">
+                <p className="truncate text-sm font-semibold text-[rgb(var(--color-foreground))]">
                   {row.name || "Customer"}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[rgb(var(--color-muted-foreground))]">
                   {row.visits ?? 0} visits · Rank #{row.rank ?? idx + 1}
                   {cfg.showBadges !== false && row.badges?.length
                     ? ` · ${row.badges.slice(0, 2).join(", ")}`
@@ -407,7 +407,7 @@ export function LeaderboardModule({ feature, onConfigure }: LoyaltyModuleProps) 
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-[rgb(var(--color-foreground))]">
                   {metric === "spend"
                     ? row.totalSpent
                     : metric === "visits"
@@ -416,9 +416,9 @@ export function LeaderboardModule({ feature, onConfigure }: LoyaltyModuleProps) 
                         ? row.referrals
                         : row.points}
                 </p>
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">{metric}</p>
+                <p className="text-[11px] uppercase tracking-wide text-[rgb(var(--color-subtle))]">{metric}</p>
               </div>
-              {idx < 3 ? <Trophy className="h-4 w-4 text-amber-500" /> : null}
+              {idx < 3 ? <Trophy className="h-4 w-4 text-[rgb(var(--color-warning))]" /> : null}
             </ModuleCard>
           ))}
         </div>

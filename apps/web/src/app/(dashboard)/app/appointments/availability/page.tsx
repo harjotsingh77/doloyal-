@@ -428,7 +428,7 @@ export default function AvailabilityPage() {
                       <p className="text-sm font-medium">{formatDate(bd.date)}</p>
                       <div className="flex items-center gap-2 text-xs text-[rgb(var(--color-muted-foreground))]">
                         {bd.reason && <span>{bd.reason}</span>}
-                        <Badge variant="outline" className="text-[0.6rem]">
+                        <Badge variant="outline">
                           {bd.isFullDay ? "Full Day" : "Partial"}
                         </Badge>
                       </div>

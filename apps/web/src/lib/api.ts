@@ -2554,6 +2554,12 @@ export const api = {
   createCampaign: (data: { name: string; subject?: string; body: string; channel: "EMAIL" | "SMS" | "WHATSAPP"; audience?: string; scheduleDate?: string }) =>
     request<any>("/campaigns", { method: "POST", body: JSON.stringify(data) }),
 
+  draftCampaignWithAi: (data: { goal: string; channel: "EMAIL" | "WHATSAPP"; audience?: string }) =>
+    request<{ name: string; subject: string; body: string; source: "ai" | "template" }>("/campaigns/ai-draft", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   setCampaignStatus: (id: string, status: string) =>
     request<any>(`/campaigns/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
 
@@ -2732,6 +2738,9 @@ export const api = {
     request<{ ok: boolean }>(`/support/conversations/${conversationId}`, {
       method: "DELETE",
     }),
+
+  getNotificationFeed: () =>
+    request<{ items: import("@doloyal/shared").AppNotificationItem[] }>("/notifications/feed"),
 
   getSupportUnreadBadge: () =>
     // A polled badge: always ask the API (the page cache would answer for 90s).

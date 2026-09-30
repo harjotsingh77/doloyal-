@@ -32,6 +32,7 @@ import { WebsiteConnectionsModule } from './modules/website-connections/website-
 import { ReferralsModule } from './modules/referrals/referrals.module';
 import { WebsiteProjectsModule } from './modules/website-projects/website-projects.module';
 import { SupportModule } from './modules/support/support.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { WorkflowsModule } from './modules/workflows/workflow.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
@@ -72,6 +73,7 @@ import { InternalCronModule } from './modules/internal-cron/internal-cron.module
     WebsiteConnectionsModule,
     WebsiteProjectsModule,
     SupportModule,
+    NotificationsModule,
     AdminModule,
     WorkflowsModule,
     CampaignsModule,

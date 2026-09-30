@@ -354,10 +354,10 @@ export default function StaffPage() {
                             </button>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={roleBadge(m.role)} className="text-[0.65rem]">{ROLE_LABELS[m.role]}</Badge>
+                            <Badge variant={roleBadge(m.role)}>{ROLE_LABELS[m.role]}</Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={statusBadge(m.status)} className="text-[0.65rem]">{STAFF_STATUS_LABELS[m.status]}</Badge>
+                            <Badge variant={statusBadge(m.status)}>{STAFF_STATUS_LABELS[m.status]}</Badge>
                             {m.invitationStatus && m.status === "PENDING" && (
                               <p className="mt-0.5 text-[0.6rem] text-[rgb(var(--color-muted-foreground))]">
                                 {INVITATION_STATUS_LABELS[m.invitationStatus]} · {fmtDate(m.invitationSentAt)}
@@ -366,7 +366,7 @@ export default function StaffPage() {
                           </TableCell>
                           <TableCell>
                             {m.isOnline ? (
-                              <Badge variant="success" className="text-[0.65rem]" dot>Online</Badge>
+                              <Badge variant="success" dot>Online</Badge>
                             ) : (
                               <span className="text-xs text-[rgb(var(--color-muted-foreground))]">
                                 {m.lastSeenAt ? `Seen ${relTime(m.lastSeenAt)}` : "—"}
